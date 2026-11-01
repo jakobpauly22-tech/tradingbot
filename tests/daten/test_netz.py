@@ -31,6 +31,23 @@ def test_us_aktie_in_euro(cache):
     assert kurse["close"].between(150, 250).all()  # Plausibilität: Apple lag im Juni 2024 bei ca. 180–200 €
 
 
+def test_sec_apple_point_in_time(cache, tmp_path):
+    from tradingbot.daten.sec import SecClient, kennzahl_jahreswerte, lade_erstmeldungen, stammdaten
+    from tradingbot.konfiguration import lade_konfiguration
+
+    try:
+        client = SecClient(cache_wurzel=tmp_path / "sec")
+    except KonfigurationsFehler:
+        pytest.skip("SEC_USER_AGENT fehlt in .env")
+    k = lade_konfiguration("fundamental")["kennzahlen"]
+    erst = lade_erstmeldungen(320193, client=client, cache=cache)
+    assert kennzahl_jahreswerte(erst, k["umsatz"], "2019-10-31").index.max() < pd.Timestamp("2019-09-28")   # 10-K vom 31.10.2019 noch nicht bekannt
+    umsatz = kennzahl_jahreswerte(erst, k["umsatz"], "2019-11-01")
+    assert umsatz.loc["2019-09-28", "wert"] == 260_174_000_000
+    assert kennzahl_jahreswerte(erst, k["bilanzsumme"], "2019-11-01").loc["2019-09-28", "wert"] == 338_516_000_000
+    assert stammdaten(320193, client=client)["sic"] == 3571
+
+
 def test_fred_revision_und_marktdaten(cache):
     try:
         geheimnis("FRED_API_KEY")

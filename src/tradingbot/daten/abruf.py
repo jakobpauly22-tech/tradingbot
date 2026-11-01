@@ -43,15 +43,21 @@ def mit_wiederholung(
     versuche: int = 3,
     pause_s: float = 2.0,
     wiederholen_bei: tuple[type[BaseException], ...] = (VoruebergehenderFehler,),
-    schlafen: Callable[[float], None] = time.sleep,
+    schlafen: Callable[[float], None] | None = None,
 ) -> T:
-    """Führt `funktion` aus und wiederholt bei vorübergehenden Fehlern mit wachsender Pause."""
+    """Führt `funktion` aus und wiederholt bei vorübergehenden Fehlern mit wachsender Pause.
+
+    Nach dem letzten Versuch bleibt ein vorübergehender Fehler ein `VoruebergehenderFehler`, damit Aufrufer
+    z.B. auf einen älteren Cache ausweichen können; alle anderen werden zu `DatenFehler`.
+    """
+    schlafen = schlafen or time.sleep  # erst beim Aufruf auflösen (in Tests ersetzbar)
     for versuch in range(1, versuche + 1):
         try:
             return funktion()
         except wiederholen_bei as fehler:
             if versuch == versuche:
-                raise DatenFehler(f"{beschreibung}: nach {versuche} Versuchen gescheitert ({fehler})") from None
+                klasse = VoruebergehenderFehler if isinstance(fehler, VoruebergehenderFehler) else DatenFehler
+                raise klasse(f"{beschreibung}: nach {versuche} Versuchen gescheitert ({fehler})") from None
             warte = pause_s * 2 ** (versuch - 1)
             log.warning("%s: Versuch %d gescheitert (%s), neuer Versuch in %.0f s", beschreibung, versuch, fehler, warte)
             schlafen(warte)
