@@ -1,0 +1,44 @@
+# Backtest: Kapital, Ausführung, Kosten, Steuern, Tresor
+# Entscheidungen von Jakob am 01.11.2026. Änderungen an Regeln und Limits nur mit seiner Zustimmung.
+
+kapital:
+  start: 500.0
+  aufteilung: {core: 0.70, satellite: 0.30}
+
+ausfuehrung:
+  # Signal mit dem Schlusskurs von Tag t, Ausführung zur Eröffnung am nächsten Handelstag (Freigabe morgens)
+  zeitpunkt: eroeffnung_folgetag
+  max_gebuehr_anteil: 0.01    # Order nur, wenn Gebühren höchstens 1 % des Orderwerts ausmachen
+  ganze_stuecke: true         # Bruchteilsaktien gibt es über die IBKR-API nicht
+
+kosten:
+  # Von Jakob gegen die IBKR-Preisliste geprüft (01.11.2026)
+  gebuehren:
+    EUR: {satz: 0.0005, minimum: 1.25, maximum: 29.0}           # EU-Aktien und ETFs
+    USD: {je_stueck: 0.005, minimum: 1.0, max_anteil: 0.01}      # US-Aktien, Beträge in USD
+  spread:                     # halbe Geld-Brief-Spanne je Instrumentklasse
+    etf: 0.0005
+    aktie: 0.0010
+    klein: 0.0025
+  slippage: 0.0005
+  waehrungstausch: {satz: 0.00002, minimum_usd: 2.0}
+
+steuern:                      # wird in Teil 2 umgesetzt
+  abgeltungsteuer: 0.25
+  soli: 0.055
+  kirchensteuer: 0.0          # Jakob zahlt keine Kirchensteuer
+  sparer_pauschbetrag: 1000.0 # steht vollständig dem Bot zu
+  teilfreistellung_aktienfonds: 0.30
+  quellensteuer_usa: 0.15
+  zahlung: jahresende_abfluss # Steuer als eigener Abfluss am Jahresende, kein Zwangsverkauf
+
+risikofreier_zins: ECBDFR     # EZB-Einlagesatz (FRED), für Sharpe Ratio und Jensens Alpha
+
+tresor:
+  # Daten ab diesem Tag sind gesperrt. Regeln (Jakob, 01.11.2026):
+  # 1. Einmal pro Phase öffnen, erst wenn Regeln und Parameter feststehen.
+  # 2. Bei schlechtem Ergebnis nicht nachjustieren und erneut testen. Erkenntnis notieren, zurück auf die
+  #    Entwicklungsdaten; als neue Prüfung dient das Paper Trading.
+  # 3. Das Paper Trading ist der zweite, noch strengere Tresor, weil diese Daten heute noch nicht existieren.
+  gesperrt_ab: 2025-01-01
+  protokoll: docs/TRESOR_PROTOKOLL.md

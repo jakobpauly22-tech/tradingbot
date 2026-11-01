@@ -1,0 +1,104 @@
+"""Tresor: gesperrte Out-of-Sample-Daten (ab `tresor.gesperrt_ab` in config/backtest.yaml).
+
+Regeln (Jakob, 01.11.2026):
+1. Einmal pro Phase öffnen, und zwar erst, wenn Regeln und Parameter feststehen.
+2. Bei einem schlechten Ergebnis nicht nachjustieren und erneut testen, sonst ist der Tresor verbraucht.
+   Dann: Erkenntnis notieren, zurück auf die Entwicklungsdaten; als neue Prüfung dient das Paper Trading.
+3. Das Paper Trading ist der zweite, noch strengere Tresor, weil diese Daten heute noch nicht existieren.
+
+Technik: Jeder Zugriff auf Daten ab dem Sperrdatum braucht eine `TresorFreigabe`. Eine Freigabe entsteht
+nur über `oeffne_tresor`, das sie im Protokoll (docs/TRESOR_PROTOKOLL.md, in Git) einträgt. Eine zweite
+Öffnung für dieselbe Phase wird verweigert.
+"""
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
+
+import pandas as pd
+
+_KOPF = """# Tresor-Protokoll
+
+Jede Öffnung des Tresors (gesperrte Daten ab `tresor.gesperrt_ab` in `config/backtest.yaml`) wird hier
+automatisch eingetragen. Regeln: einmal pro Phase, erst wenn Regeln und Parameter feststehen; bei einem
+schlechten Ergebnis nicht nachjustieren, sondern Erkenntnis notieren und auf die Entwicklungsdaten zurück.
+Einträge nicht löschen.
+
+| Zeitpunkt | Phase | Begründung | Git-Commit |
+| --- | --- | --- | --- |
+"""
+
+
+class TresorGesperrt(RuntimeError):
+    """Zugriff auf gesperrte Daten ohne gültige Freigabe."""
+
+
+@dataclass(frozen=True)
+class TresorFreigabe:
+    phase: str
+    begruendung: str
+
+
+def _einstellungen(konfig: dict | None) -> tuple[date, Path]:
+    from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
+
+    tresor = (konfig or lade_konfiguration("backtest"))["tresor"]
+    protokoll = Path(tresor["protokoll"])
+    if not protokoll.is_absolute():
+        protokoll = PROJEKT_WURZEL / protokoll
+    return pd.Timestamp(str(tresor["gesperrt_ab"])).date(), protokoll
+
+
+def geoeffnete_phasen(protokoll: Path) -> set[str]:
+    if not protokoll.exists():
+        return set()
+    phasen = set()
+    for zeile in protokoll.read_text(encoding="utf-8").splitlines():
+        teile = [t.strip() for t in zeile.strip().strip("|").split("|")]
+        if len(teile) == 4 and teile[0] not in ("Zeitpunkt", "---"):
+            phasen.add(teile[1])
+    return phasen
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unbekannt"
+
+
+def oeffne_tresor(phase: str, begruendung: str, *, konfig: dict | None = None, jetzt: datetime | None = None) -> TresorFreigabe:
+    """Öffnet den Tresor einmalig für eine Phase und trägt das im Protokoll ein."""
+    _, protokoll = _einstellungen(konfig)
+    if not phase.strip() or not begruendung.strip():
+        raise ValueError("Phase und Begründung sind Pflicht")
+    if "|" in phase + begruendung:
+        raise ValueError("Phase und Begründung dürfen kein | enthalten")
+    if phase in geoeffnete_phasen(protokoll):
+        raise TresorGesperrt(
+            f"Der Tresor wurde für „{phase}“ schon geöffnet und ist verbraucht. Erkenntnis notieren, "
+            "auf den Entwicklungsdaten weiterarbeiten; neue Prüfung ist das Paper Trading."
+        )
+    if not protokoll.exists():
+        protokoll.parent.mkdir(parents=True, exist_ok=True)
+        protokoll.write_text(_KOPF, encoding="utf-8")
+    zeitpunkt = (jetzt or datetime.now()).isoformat(timespec="minutes")
+    with protokoll.open("a", encoding="utf-8") as datei:
+        datei.write(f"| {zeitpunkt} | {phase} | {begruendung} | {_git_commit()} |\n")
+    return TresorFreigabe(phase, begruendung)
+
+
+def pruefe_zeitraum(ende, *, freigabe: TresorFreigabe | None = None, konfig: dict | None = None) -> None:
+    """Wirft `TresorGesperrt`, wenn `ende` im gesperrten Bereich liegt und keine gültige Freigabe vorliegt."""
+    gesperrt_ab, protokoll = _einstellungen(konfig)
+    if pd.Timestamp(ende).date() < gesperrt_ab:
+        return
+    if freigabe is None:
+        raise TresorGesperrt(
+            f"Daten ab {gesperrt_ab} sind gesperrt (Tresor). Entwicklung nur bis {gesperrt_ab - pd.Timedelta(days=1):%d.%m.%Y}. "
+            "Öffnen nur einmal pro Phase mit oeffne_tresor(), wenn Regeln und Parameter feststehen."
+        )
+    if freigabe.phase not in geoeffnete_phasen(protokoll):
+        raise TresorGesperrt(f"Freigabe für „{freigabe.phase}“ steht nicht im Tresor-Protokoll")
