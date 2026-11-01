@@ -9,8 +9,9 @@ Ablauf je Handelstag t:
 Regeln der Ausführung (config/backtest.yaml):
 - Nur long, keine Margin: Käufe nur aus vorhandenem Cash, Verkäufe höchstens bis zum Bestand.
 - Ganze Stücke (IBKR-API bietet keine Bruchteile).
-- Eine Order nur, wenn Gebühr plus Währungstausch höchstens `max_gebuehr_anteil` (1 %) des Orderwerts sind;
-  sonst wird sie verworfen und protokolliert.
+- Käufe und Aufstockungen nur, wenn Gebühr plus Währungstausch höchstens `max_gebuehr_anteil` (1 %) des
+  Orderwerts sind; sonst wird die Order verworfen und protokolliert. Verkäufe (Ausstiege, Stops, Zeit-Stops,
+  gebrochene These, Reduzierungen) sind immer erlaubt (Jakob, 01.11.2026).
 
 Bekannte Vereinfachung: Yahoo-Kurse sind rückwirkend splitbereinigt, Stückzahlen vor einem Split sind
 daher „bereinigte Stück“. Das betrifft nur die Rundung auf ganze Stücke und Gebühren je Stück (USA).
@@ -50,6 +51,12 @@ class TeilportfolioDefinition:
     startkapital: float
     strategie: Strategie
     instrumente: list[Instrument]
+    art: str = "echt"             # echt | schatten (virtuelles Kapital, getrennt ausgewiesen)
+    steuergruppe: str = "depot"   # Teilportfolios einer Gruppe teilen Pauschbetrag und Verlusttöpfe
+
+    def __post_init__(self):
+        if self.art not in ("echt", "schatten"):
+            raise ValueError("art muss 'echt' oder 'schatten' sein")
 
 
 @dataclass
@@ -164,11 +171,12 @@ class _Lauf:
         return math.ceil(stueck - 1e-9) if self.regeln.ganze_stuecke else stueck
 
     def _verkaufen(self, tag, ticker, stueck, kurs):
+        # Ausstiege und Reduzierungen sind immer erlaubt, auch wenn die Gebühr über 1 % liegt (Jakob, 01.11.2026)
         preis = self.kosten.ausfuehrungspreis(kurs, -1, self.klassen[ticker])
         kurswert = stueck * preis
         gebuehr, tausch = self._gebuehren(tag, ticker, stueck, kurswert)
-        if not self._gebuehrenregel_ok(gebuehr, tausch, kurswert):
-            self._verwerfen(tag, ticker, -1, stueck, f"Gebühren {gebuehr + tausch:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {kurswert:.2f} €")
+        if gebuehr + tausch > kurswert:
+            self._verwerfen(tag, ticker, -1, stueck, f"Gebühren {gebuehr + tausch:.2f} € übersteigen den Erlös {kurswert:.2f} €")
             return
         ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, gebuehr + tausch)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
@@ -250,6 +258,6 @@ def simuliere(
             verworfen=pd.DataFrame(lauf.verworfen, columns=["datum", "ticker", "richtung", "stueck", "grund"]),
             dividenden=pd.DataFrame(lauf.dividenden, columns=["datum", "ticker", "stueck", "je_stueck", "betrag"]),
             meta={"start": str(tage[0].date()), "ende": str(tage[-1].date()), "startkapital": definition.startkapital,
-                  "kosten": kosten, "regeln": regeln},
+                  "art": definition.art, "steuergruppe": definition.steuergruppe, "kosten": kosten, "regeln": regeln},
         )
     return ergebnisse

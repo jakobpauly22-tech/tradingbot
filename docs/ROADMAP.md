@@ -86,6 +86,13 @@ Vorläufig festgelegt am 31.10.2026: 500 € Startkapital, gilt schon fürs Pape
 
 Folge für die Broker-Wahl: möglichst Bruchteilsaktien und niedrige Mindestgebühren, siehe Broker. Grundregel: eine Order nur, wenn die Gebühr höchstens 1 % des Orderwerts ausmacht. Bei 1 € pro Order kosten Kauf und Verkauf einer 15-€-Position bereits über 13 %.
 
+**Entschieden am 01.11.2026: Satellite im Schattenbetrieb.** Der erste Backtest hat gezeigt, dass der Satellite mit 150 € keinen Trade machen kann: 10 % Position sind 15 €, die Gebührenregel verlangt aber 125 € je Order. Deshalb:
+
+- **Echte Satellite-Trades erst ab 1.250 € Satellite-Kapital,** dann ist eine 10-%-Position 125 € groß.
+- **Bis dahin gehen die echten 150 € in den Core-ETF.** Das Depot besteht also anfangs aus 500 € Core.
+- **Der Satellite läuft als Schattenportfolio mit virtuellen 1.250 €** nach allen Regeln inklusive Kosten und Steuern und wird getrennt ausgewiesen. So entsteht die Erfolgsbilanz für Go-Live-Kriterium 4, ohne echtes Geld in zu kleinen Positionen zu verbrennen.
+- **Ausstiege sind immer erlaubt:** Stops, Zeit-Stops und gebrochene Thesen werden auch dann ausgeführt, wenn die Gebühr über 1 % liegt. Die Gebührenregel gilt nur für Käufe und Aufstockungen.
+
 **Kopplung an den Notgroschen:** Das Kapital im Bot steigt über 500 € nur, wenn der Notgroschen um denselben Betrag mitwächst, bis etwa eine Monatsausgabe erreicht ist. Geld, das im Studium absehbar gebraucht wird, kommt nicht in den Bot. Grundsatz: Es darf nie einen Verkaufszwang geben, nur weil Geld gebraucht wird, während Positionen im Minus liegen.
 
 ### Was Risiko im Bot bedeutet
@@ -153,7 +160,7 @@ Kein Broker erfüllt alle Kriterien perfekt. Empfehlung: Interactive Brokers fü
 
 **Anpassungen für Interactive Brokers:**
 
-1. **Mindestordergröße:** Eine Order nur, wenn die Gebühr höchstens 1 % ausmacht. Bei 1,25 € Mindestgebühr heißt das ab 125 € Orderwert. Mit 500 € sind das wenige, größere Positionen.
+1. **Mindestordergröße:** Ein Kauf nur, wenn die Gebühr höchstens 1 % ausmacht. Bei 1,25 € Mindestgebühr heißt das ab 125 € Orderwert. Mit 500 € sind das wenige, größere Positionen. Ausstiege sind immer erlaubt; der Satellite läuft bis 1.250 € als Schattenportfolio (siehe Startkapital).
 2. **Core über ETFs, Einzelaktien im Schattenportfolio:** Bis das Kapital wächst, bildet der Core die Streuung über breite ETFs ab. Die Fundamental-Engine führt parallel ein virtuelles Einzelaktien-Portfolio, das wie echt bewertet wird. Die 5-%-Grenze gilt für Einzelaktien, nicht für breite ETFs.
 3. **Steuern:** Interactive Brokers führt keine Abgeltungsteuer ab. Der Bot erstellt aus dem Journal die Zahlen für die Anlage KAP.
 
@@ -445,6 +452,8 @@ Neue Ideen landen zuerst hier und wandern bei Bedarf in die Priorisierungstabell
 - [x] Haltedauer und Verlustlimits festgelegt, siehe Risikoprofil und Limits
 - [x] Testphase: mehrere Monate Paper Trading wie im echten Handel
 - [x] Startkapital: 500 € (vorläufig, anpassbar), gilt schon fürs Paper Trading
+- [x] Satellite-Schattenbetrieb bis 1.250 € Satellite-Kapital, Ausstiege immer erlaubt (01.11.2026)
+- [x] Tresor: Daten ab 01.01.2025 gesperrt, einmal pro Phase öffnen, Paper Trading als zweiter Tresor (01.11.2026)
 - [x] Go-Live-Kriterien bestätigen
 - [x] Anlageuniversum: weltweit, Multi-Asset über Aktien, ETFs und ETCs ohne Hebel
 - [x] Datenquellen: kostenlos starten, siehe Datenquellen

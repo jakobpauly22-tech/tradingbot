@@ -4,11 +4,16 @@
 kapital:
   start: 500.0
   aufteilung: {core: 0.70, satellite: 0.30}
+  # Entscheidung 01.11.2026: Echte Satellite-Trades erst ab 1.250 € Satellite-Kapital (10 % Position = 125 €
+  # Mindestorder). Bis dahin fließt der Satellite-Anteil in den Core-ETF, und der Satellite läuft als
+  # Schattenportfolio mit virtuellen 1.250 € nach allen Regeln inklusive Kosten und Steuern, getrennt ausgewiesen.
+  satellite_mindestkapital: 1250.0
+  satellite_schattenkapital: 1250.0
 
 ausfuehrung:
   # Signal mit dem Schlusskurs von Tag t, Ausführung zur Eröffnung am nächsten Handelstag (Freigabe morgens)
   zeitpunkt: eroeffnung_folgetag
-  max_gebuehr_anteil: 0.01    # Order nur, wenn Gebühren höchstens 1 % des Orderwerts ausmachen
+  max_gebuehr_anteil: 0.01    # gilt nur für Käufe und Aufstockungen; Ausstiege sind immer erlaubt
   ganze_stuecke: true         # Bruchteilsaktien gibt es über die IBKR-API nicht
 
 kosten:

@@ -51,6 +51,33 @@ def test_mindestorder_regel_verwirft_kleine_order(konfig, mit_kosten):
     assert e.wert.iloc[-1] == 150.0
 
 
+def test_ausstieg_immer_erlaubt_auch_bei_gebuehr_ueber_einem_prozent(konfig, mit_kosten):
+    # Kauf 30 Stück zu 5 € = 150 € (Gebühr 1,25 € < 1 %), Kurs fällt auf 2 €: Ausstieg zu 60 € kostet 2 %
+    class KaufenDannRaus:
+        name = "Kaufen, dann raus"
+
+        def zielgewichte(self, stichtag, sicht):
+            return pd.Series({"A": 1.0}) if stichtag == pd.Timestamp("2024-01-01") else (
+                pd.Series({"A": 0.0}) if stichtag == pd.Timestamp("2024-01-04") else None)
+
+    m = Marktdaten({"A": kerzen([5.0, 5.0, 2.0, 2.0, 2.0, 2.0])})
+    e = simuliere([_definition(KaufenDannRaus(), kapital=152.0)], m, "2024-01-01", "2024-01-08",
+                  kosten=mit_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["core"]
+    assert list(e.trades.richtung) == [1, -1] and e.verworfen.empty
+    verkauf = e.trades.iloc[1]
+    assert verkauf.gebuehr / verkauf.kurswert > 0.01
+    assert e.bestaende.iloc[-1].sum() == 0
+
+
+def test_kapitalplan_schattenbetrieb(konfig):
+    k = {"kapital": {"aufteilung": {"core": 0.7, "satellite": 0.3}, "satellite_mindestkapital": 1250.0, "satellite_schattenkapital": 1250.0}}
+    from tradingbot.backtest.kapital import kapitalplan
+
+    assert kapitalplan(500.0, k) == {"core": 500.0, "satellite": 0.0, "satellite_schatten": 1250.0}
+    assert kapitalplan(4166.0, k)["satellite"] == 0.0                      # 1.249,80 € < 1.250 €
+    assert kapitalplan(5000.0, k) == {"core": 3500.0, "satellite": 1500.0, "satellite_schatten": 0.0}
+
+
 def test_rebalancing_verkauft_zuerst_und_bleibt_long(konfig, ohne_kosten):
     # A verdoppelt sich im Januar; zum Quartalswechsel wird zurück auf 50/50 gebracht
     tage = pd.bdate_range("2024-01-01", "2024-04-30")
