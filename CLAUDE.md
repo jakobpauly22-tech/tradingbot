@@ -82,6 +82,7 @@ Eine Phase ist fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
 - **Ein Feature pro Sitzung:** erst einen kurzen Plan zeigen, nach Jakobs Okay umsetzen, dann testen.
 - **Formeln:** Jede Finanzformel bekommt einen Docstring mit Formel, Annahmen und Quelle (Datei und Abschnitt in `wissen/`). Gibt es die Formel in `tests/musterloesungen/referenz.py`, denselben Funktionsnamen und dieselbe Signatur verwenden oder darauf aufbauen.
 - **Tests:** `pytest` muss vor jedem Commit grün sein, inklusive `tests/musterloesungen/test_uebungen.py`. Neue Logik bekommt eigene Tests.
+- **Befehle:** Installation `.venv\Scripts\python -m pip install -e ".[dev]"`; Tests offline `.venv\Scripts\python -m pytest`; Tests gegen echte Quellen `... -m pytest -m netz`. Für Python 3.15 gibt es kein PyYAML, deshalb `ruamel.yaml`.
 - **Backtests:** Walk-forward, kein Look-ahead- und kein Survivorship-Bias. Kosten realistisch: IBKR-Gebühren, Spread, Slippage, Währungskosten bei US-Werten, Abgeltungsteuer mit Sparer-Pauschbetrag. Ergebnisse immer gegen die Benchmark und nach Kosten. Neue Features: Backtest, dann Paper, dann live.
 - **Git:** kleine Commits mit deutscher Nachricht. Vor Push und vor Änderungen an Regeln oder Limits Jakob fragen.
 - **Verständlichkeit:** Code lesbar halten, Namen sprechend wählen, Fachbegriffe wie in den Vorlesungen verwenden.

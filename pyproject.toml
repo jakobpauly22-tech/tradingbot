@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradingbot"
+version = "0.1.0"
+description = "Regelbasierter Trading-Bot: Core/Satellite, vier Signal-Engines, Risk-Manager mit Veto"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=3.0",
+    "pyarrow>=20",
+    "yfinance>=1.0",
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+    # ruamel.yaml statt PyYAML: reines Python, für Python 3.15 gibt es noch kein PyYAML-Paket
+    "ruamel.yaml>=0.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests mit Internetzugriff laufen nur auf Wunsch: pytest -m netz
+addopts = "-m 'not netz'"
+markers = [
+    "netz: braucht Internet (yfinance, FRED) und ggf. Schlüssel aus .env",
+]

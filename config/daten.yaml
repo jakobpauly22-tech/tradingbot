@@ -1,0 +1,49 @@
+# Datenbasis: Quellen, Cache, Benchmarks, Makroserien
+# Änderungen an Benchmarks oder Serien mit Jakob abstimmen.
+
+cache:
+  pfad: daten/cache            # relativ zum Projektordner, nicht in Git
+  makro_max_alter_stunden: 24  # danach werden FRED-Serien neu geladen (Revisionen)
+
+kurse:
+  quelle: yfinance
+  basiswaehrung: EUR
+  # Wechselkurs je Fremdwährung: Einheiten Fremdwährung je 1 EUR (Yahoo-Symbol)
+  wechselkurse:
+    USD: EURUSD=X
+    GBP: EURGBP=X
+    CHF: EURCHF=X
+    JPY: EURJPY=X
+
+# Benchmarks über handelbare UCITS-ETFs auf Xetra (Indexreihen selbst sind nicht frei verfügbar).
+# Abweichung ETF vs. Index (TER, Tracking Difference) ist bewusst Teil des Maßstabs:
+# Das ist die Alternative, die Jakob tatsächlich kaufen könnte.
+benchmarks:
+  core:
+    haupt:
+      name: MSCI ACWI IMI
+      ticker: SPYI.DE          # SPDR MSCI ACWI IMI, IE00B3YLTY66, Historie ab 05/2011
+    vergleich:
+      - name: MSCI ACWI
+        ticker: IUSQ.DE        # iShares MSCI ACWI, IE00B6R52259, ab 10/2011
+      - name: FTSE All-World GDP-Adjusted
+        ticker: WGDP.DE        # Amundi, IE000KCKFHE8, erst ab 05/2026
+      - name: MSCI ACWI IMI Value Weighted
+        ticker: null           # kein ETF gefunden; Indexstand nur über MSCI
+      - name: MSCI World ex USA
+        ticker: EXUS.DE        # Xtrackers, IE0006WW1TQ4, ab 03/2024
+      - name: MSCI World
+        ticker: EUNL.DE        # iShares Core MSCI World, IE00B4L5Y983, ab 09/2009
+
+fred:
+  # revidiert: true  -> historische Datenstände über ALFRED (Look-ahead-Schutz bei Revisionen)
+  # revidiert: false -> Marktdaten ohne Revision; verfügbar ab Datum + verzoegerung_tage
+  serien:
+    DGS10:    {revidiert: false, verzoegerung_tage: 1, beschreibung: "Rendite 10-jährige US-Staatsanleihen"}
+    DGS3MO:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Rendite 3-monatige US-Staatsanleihen"}
+    T10Y2Y:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Zinsstruktur 10 Jahre minus 2 Jahre"}
+    VIXCLS:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "CBOE-Volatilitätsindex VIX"}
+    ECBDFR:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "EZB-Einlagesatz"}
+    CPIAUCSL: {revidiert: true, beschreibung: "US-Verbraucherpreisindex, saisonbereinigt"}
+    UNRATE:   {revidiert: true, beschreibung: "US-Arbeitslosenquote"}
+    GDP:      {revidiert: true, beschreibung: "US-Bruttoinlandsprodukt, nominal"}
