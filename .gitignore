@@ -1,0 +1,23 @@
+# Geheimnisse
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# Lokale Daten, Caches und Logs
+daten/
+logs/
+*.sqlite
+*.parquet
+
+# Editor und Betriebssystem
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
