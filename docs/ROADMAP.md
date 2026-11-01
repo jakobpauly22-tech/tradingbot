@@ -58,7 +58,7 @@ Die Limits richten sich nach der Risikotragfähigkeit, weil sie niedriger ist al
 
 - **Risikobereitschaft eher hoch:** Belastung im Satellite erst ab ca. 30 % Verlust, im Crash halten, beim Satellite zählt maximale Rendite.
 - **Reaktion auf Verluste rational:** bei minus 20 % im Monat pausieren und prüfen.
-- **Risikotragfähigkeit eingeschränkt:** noch kein Notgroschen, Geld eventuell teilweise in den nächsten 5 Jahren benötigt, bisher nur ETF-Sparplan ohne erlebten Crash.
+- **Risikotragfähigkeit eingeschränkt:** noch kein Notgroschen, Geld eventuell teilweise in den nächsten 5 Jahren benötigt, noch keinen Börsencrash mit eigenem Geld erlebt, kein laufender ETF-Sparplan.
 - **Zeit:** Freigaben mehrmals täglich möglich.
 
 | Regel | Core (70 %) | Satellite (30 %) |
