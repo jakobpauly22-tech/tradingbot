@@ -38,19 +38,21 @@ steuern:
   quellensteuer: {USD: 0.15}  # US-Dividenden mit W-8BEN
   zahlung: jahresende_abfluss # Steuer als eigener Abfluss am Jahresende, kein Zwangsverkauf
   # Steuergruppen teilen Pauschbetrag und Verlusttöpfe. Das echte Depot (Core plus ggf. echter Satellite) ist
-  # eine Gruppe. Der Schatten-Satellite bekommt vorsichtshalber keinen Pauschbetrag (den nutzt im echten Depot
-  # der Core), damit er nicht besser aussieht, als er wäre. Bitte von Jakob bestätigen.
+  # eine Gruppe und bekommt den vollen Pauschbetrag (Jakob hat keine anderen nennenswerten Kapitalerträge).
+  # Der Schatten-Satellite bekommt keinen Pauschbetrag (den nutzt im echten Depot der Core), damit er nicht
+  # besser aussieht, als er wäre (bestätigt 01.11.2026). Unbekannte Gruppen (z.B. Benchmark) bekommen 1.0.
   pauschbetrag_anteil: {depot: 1.0, schatten: 0.0}
-  # Basiszins für die Vorabpauschale in Prozent. 2018–2025: BMF-Schreiben zur Vorabpauschale.
-  # 2012–2017: Basiszins nach § 203 Abs. 2 BewG (die Vorabpauschale gab es erst ab 2018; Ansatz, weil der
-  # Backtest heutiges Recht auf alle Jahre anwendet). Werte bitte gegen die BMF-Veröffentlichungen prüfen.
+  # Basiszins für die Vorabpauschale in Prozent (von Jakob geprüft, 01.11.2026).
+  # 2018–2026: BMF-Schreiben zur Vorabpauschale. 2012–2016: Basiszins nach § 203 Abs. 2 BewG a.F. (die
+  # Vorabpauschale gab es erst ab 2018; Ansatz, weil der Backtest heutiges Recht auf alle Jahre anwendet).
+  # 2017: NÄHERUNG, kein amtlicher Wert (§ 203 BewG hat seit 2016 einen festen Kapitalisierungsfaktor).
   basiszins_prozent:
     2012: 2.44
     2013: 2.04
     2014: 2.59
     2015: 0.99
     2016: 1.10
-    2017: 0.59
+    2017: 0.59   # Näherung, nicht amtlich
     2018: 0.87
     2019: 0.52
     2020: 0.07
@@ -59,6 +61,7 @@ steuern:
     2023: 2.55
     2024: 2.29
     2025: 2.53
+    2026: 3.20
 
 risikofreier_zins: ECBDFR     # EZB-Einlagesatz (FRED), für Sharpe Ratio und Jensens Alpha
 

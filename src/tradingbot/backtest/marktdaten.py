@@ -20,8 +20,8 @@ class LookAheadFehler(RuntimeError):
 class Instrument:
     ticker: str
     klasse: str = "etf"  # Spread-Klasse: etf | aktie | klein (config/backtest.yaml)
-    # Steuerart: aktie | aktienfonds | mischfonds | sonstiger_fonds (backtest/steuern.py).
-    # Ohne Angabe: ETF = Aktienfonds, sonst Aktie. Anleihe-ETFs ausdrücklich als sonstiger_fonds angeben.
+    # Steuerart: aktie | aktienfonds | mischfonds | sonstiger_fonds | etc (backtest/steuern.py).
+    # Ohne Angabe: ETF = Aktienfonds, sonst Aktie. Anleihe-ETFs als sonstiger_fonds, ETCs als etc angeben.
     steuerart: str | None = None
 
     def __post_init__(self):
@@ -30,8 +30,10 @@ class Instrument:
 
 
 class Marktdaten:
-    def __init__(self, kurse: dict[str, pd.DataFrame], waehrungen: dict[str, str] | None = None, fx: dict[str, pd.Series] | None = None):
+    def __init__(self, kurse: dict[str, pd.DataFrame], waehrungen: dict[str, str] | None = None, fx: dict[str, pd.Series] | None = None,
+                 datenstand: dict[str, str | None] | None = None):
         self.kurse = {t: k.sort_index() for t, k in kurse.items()}
+        self.datenstand = datenstand or {t: k.attrs.get("abgerufen_um") for t, k in kurse.items()}  # Abrufzeit je Ticker
         self.waehrungen = {t: (waehrungen or {}).get(t, "EUR") for t in kurse}
         self.fx = fx or {}
         kalender = pd.DatetimeIndex([])

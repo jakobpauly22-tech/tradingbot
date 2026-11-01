@@ -156,7 +156,9 @@ def lade_kurse(
         von, bis = min(start, von), max(ende, bis)
 
     daten = daten[daten.index < pd.Timestamp(heute)]
+    abgerufen_um = meta.get("abgerufen_um")
     if geaendert:
+        abgerufen_um = datetime.now(timezone.utc).isoformat(timespec="seconds")
         for befund in pruefe_kurse(daten, heute=heute):
             log.warning("%s: %s", ticker, befund)
         cache.schreiben(
@@ -168,11 +170,13 @@ def lade_kurse(
                 "von": von.isoformat(),
                 "bis": bis.isoformat(),
                 "waehrung": waehrung,
-                "abgerufen_um": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "abgerufen_um": abgerufen_um,
             },
         )
     auswahl = daten.loc[pd.Timestamp(start) : pd.Timestamp(ende)].copy()
-    return _mit_attrs(auswahl, ticker, waehrung)
+    auswahl = _mit_attrs(auswahl, ticker, waehrung)
+    auswahl.attrs["abgerufen_um"] = abgerufen_um  # Datenstand, für die Ablage je Backtest-Lauf
+    return auswahl
 
 
 def _vollabruf(ticker: str, start: date, ende: date, abrufer: Abrufer) -> tuple[pd.DataFrame, str | None]:

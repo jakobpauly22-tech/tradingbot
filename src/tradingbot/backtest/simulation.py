@@ -28,6 +28,7 @@ from tradingbot.backtest.kosten import Kostenmodell
 from tradingbot.backtest.marktdaten import Instrument, Marktdaten, Sicht
 from tradingbot.backtest.portfolio import TOLERANZ, Teilportfolio
 from tradingbot.backtest.steuern import (
+    FONDS,
     Steuerereignis,
     Steuerregeln,
     berechne_jahressteuer,
@@ -62,10 +63,13 @@ class TeilportfolioDefinition:
     instrumente: list[Instrument]
     art: str = "echt"             # echt | schatten (virtuelles Kapital, getrennt ausgewiesen)
     steuergruppe: str = "depot"   # Teilportfolios einer Gruppe teilen Pauschbetrag und Verlusttöpfe
+    rolle: str = "core"           # core | satellite: bestimmt, welche Limits der Bericht prüft
 
     def __post_init__(self):
         if self.art not in ("echt", "schatten"):
             raise ValueError("art muss 'echt' oder 'schatten' sein")
+        if self.rolle not in ("core", "satellite"):
+            raise ValueError("rolle muss 'core' oder 'satellite' sein")
 
 
 @dataclass
@@ -152,7 +156,7 @@ class _Lauf:
         if not self.steuerregeln.aktiv:
             return
         for ticker, posten in self.portfolio.posten.items():
-            if self.steuerarten[ticker] == "aktie" or not posten:
+            if self.steuerarten[ticker] not in FONDS or not posten:
                 continue
             kurse = self.m.kurse[ticker]
             vorher = kurse.loc[kurse.index < pd.Timestamp(jahr, 1, 1), "close"]
@@ -390,7 +394,7 @@ def simuliere(
             steuern=pd.Series(zuordnung[n], name="steuer", dtype=float).rename_axis("jahr").to_frame(),
             steuern_gruppe=gruppen_tabellen[definition.steuergruppe],
             meta={"start": str(tage[0].date()), "ende": str(tage[-1].date()), "startkapital": definition.startkapital,
-                  "art": definition.art, "steuergruppe": definition.steuergruppe, "kosten": kosten, "regeln": regeln,
+                  "art": definition.art, "steuergruppe": definition.steuergruppe, "rolle": definition.rolle, "kosten": kosten, "regeln": regeln,
                   "steuern_gezahlt": steuern_gezahlt,
                   "liquidationswert": liquidation[n]["liquidationswert"],
                   "liquidationssteuer": liquidation[n]["liquidationssteuer"],

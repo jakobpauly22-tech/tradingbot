@@ -59,6 +59,30 @@ def test_quellensteuer_wird_angerechnet():
     assert t.loc[2023, "steuer"] == pytest.approx((250.0 - 150.0) * 1.055)
 
 
+def test_quellensteuer_nicht_anrechenbar_soweit_pauschbetrag_greift():
+    us_div = _e("2023-08-15", "dividende", "aktie", 1000.0, quellensteuer=150.0)
+    etf = _e("2023-09-01", "veraeusserung", "aktienfonds", 2000.0)   # 1.400 € nach Teilfreistellung
+    # Pauschbetrag 1.000 € deckt die Dividende vollständig → keine Anrechnung, obwohl Steuer auf den ETF anfällt
+    t = berechne_jahressteuer([us_div, etf], R)
+    assert t.loc[2023, "quellensteuer_angerechnet"] == 0.0
+    assert t.loc[2023, "steuer"] == pytest.approx(1400.0 * SATZ)
+    # Pauschbetrag 600 €: 400 € der Dividende bleiben steuerpflichtig → höchstens 25 % davon = 100 € anrechenbar
+    t = berechne_jahressteuer([us_div, etf], R, pauschbetrag=600.0)
+    assert t.loc[2023, "quellensteuer_angerechnet"] == pytest.approx(100.0)
+    assert t.loc[2023, "steuer"] == pytest.approx((1800.0 * 0.25 - 100.0) * 1.055)
+    # Nur Dividende, ganz im Pauschbetrag: keine Steuer, keine Anrechnung
+    t = berechne_jahressteuer([us_div], R)
+    assert t.loc[2023, "steuer"] == 0.0 and t.loc[2023, "quellensteuer_angerechnet"] == 0.0
+
+
+def test_etc_vorsichtig_voll_steuerpflichtig():
+    t = berechne_jahressteuer([_e("2023-05-02", "veraeusserung", "etc", 2000.0),
+                               _e("2024-05-02", "veraeusserung", "etc", -500.0),
+                               _e("2024-06-02", "veraeusserung", "aktie", 800.0)], R, pauschbetrag=0.0)
+    assert t.loc[2023, "steuerpflichtig"] == pytest.approx(2000.0)   # keine Teilfreistellung
+    assert t.loc[2024, "steuerpflichtig"] == pytest.approx(300.0)    # ETC-Verlust im allgemeinen Topf
+
+
 def test_vorabpauschale_formel():
     # Basisertrag = 100 · 2,55 % · 0,7 = 1,785
     assert vorabpauschale_je_anteil(100, 110, 0.0, 0.0255) == pytest.approx(1.785)

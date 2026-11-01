@@ -25,7 +25,7 @@ KONFIG_TEST = {
         "teilfreistellung": {"aktienfonds": 0.30, "mischfonds": 0.15, "sonstiger_fonds": 0.0},
         "quellensteuer": {"USD": 0.15},
         "pauschbetrag_anteil": {"depot": 1.0, "schatten": 0.0},
-        "basiszins_prozent": {2023: 2.55, 2024: 2.29},
+        "basiszins_prozent": {2020: 0.07, 2021: -0.45, 2022: -0.05, 2023: 2.55, 2024: 2.29},
     },
 }
 

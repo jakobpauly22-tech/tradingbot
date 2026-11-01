@@ -18,12 +18,17 @@ Quellen sind Gesetze, nicht wissen/ (dort gibt es noch keine Steuerdatei):
   Mehrbetrag (Preis Jahresende − Preis Jahresanfang + Ausschüttungen); abzüglich Ausschüttungen, nicht negativ.
   Im Erwerbsjahr minus 1/12 je vollem Monat vor dem Erwerbsmonat. Zufluss am ersten Werktag des Folgejahres.
   Beim Verkauf mindern die angesetzten Vorabpauschalen den Gewinn (§ 19 Abs. 1 S. 3 InvStG).
-- Ausländische Quellensteuer (USA 15 % mit W-8BEN) wird auf die Abgeltungsteuer angerechnet (§ 32d Abs. 5 EStG).
+- Ausländische Quellensteuer (USA 15 % mit W-8BEN) wird auf die Abgeltungsteuer angerechnet (§ 32d Abs. 5 EStG),
+  höchstens 25 % des ausländischen Ertrags. Nicht anrechenbar, soweit die Erträge durch den Pauschbetrag
+  steuerfrei sind (Jakob, 01.11.2026). Vorsichtig wird der Pauschbetrag zuerst den ausländischen Erträgen
+  zugerechnet, damit möglichst wenig Quellensteuer angerechnet wird.
 
-Vereinfachungen (bewusst, dokumentiert):
-- Quellensteuer: Anrechnung höchstens bis zur Abgeltungsteuer des Jahres, nicht je einzelnem Ertrag.
+Vereinfachungen (bewusst, von Jakob am 01.11.2026 akzeptiert):
+- Quellensteuer: Anrechnung je Jahr über alle ausländischen Erträge, nicht je einzelnem Ertrag.
 - Die Vorabpauschale des letzten simulierten Jahres fließt erst nach Simulationsende zu und wird nicht erfasst.
-- ETCs (z.B. Gold) sind steuerlich Sonderfälle und noch nicht modelliert.
+- ETCs (z.B. Gold) sind steuerlich Sonderfälle (physisch besichert teils nach einem Jahr steuerfrei). Bis zur
+  sauberen Modellierung vorsichtig wie sonstige Kapitalerträge: Abgeltungsteuer auf den vollen Gewinn, keine
+  Teilfreistellung, keine Vorabpauschale, Verluste im allgemeinen Topf (Steuerart „etc“).
 """
 from __future__ import annotations
 
@@ -33,7 +38,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-STEUERARTEN = ("aktie", "aktienfonds", "mischfonds", "sonstiger_fonds")
+STEUERARTEN = ("aktie", "aktienfonds", "mischfonds", "sonstiger_fonds", "etc")
+FONDS = ("aktienfonds", "mischfonds", "sonstiger_fonds")   # nur Investmentfonds haben eine Vorabpauschale
 ERTRAGSARTEN = ("veraeusserung", "dividende", "ausschuettung", "vorabpauschale")
 
 
@@ -72,7 +78,7 @@ class Steuerregeln:
     def teilfreistellung_fuer(self, steuerart: str) -> float:
         if steuerart not in STEUERARTEN:
             raise ValueError(f"Unbekannte Steuerart {steuerart!r}, erlaubt: {STEUERARTEN}")
-        return 0.0 if steuerart == "aktie" else self.teilfreistellung.get(steuerart, 0.0)
+        return self.teilfreistellung.get(steuerart, 0.0) if steuerart in FONDS else 0.0
 
     def basiszins_fuer(self, jahr: int) -> float:
         if jahr not in self.basiszins:
@@ -126,7 +132,9 @@ def berechne_jahressteuer(ereignisse: list[Steuerereignis], regeln: Steuerregeln
     2. Allgemein: übrige Erträge nach Teilfreistellung − Vortrag allgemein; ist das negativ, wird es mit dem
        Aktien-Saldo verrechnet, der Rest vorgetragen.
     3. Summe − Pauschbetrag (höchstens bis 0) = steuerpflichtig.
-    4. Abgeltungsteuer 25 %, Quellensteuer anrechnen (höchstens bis 0), Soli 5,5 % auf den Rest.
+    4. Abgeltungsteuer 25 %, Quellensteuer anrechnen, Soli 5,5 % auf den Rest. Anrechenbar ist höchstens
+       25 % des ausländischen Ertrags, der nach dem Pauschbetrag steuerpflichtig bleibt; der Pauschbetrag
+       wird vorsichtig zuerst den ausländischen Erträgen zugerechnet.
     """
     pauschbetrag = regeln.sparer_pauschbetrag if pauschbetrag is None else pauschbetrag
     zeilen = []
@@ -139,6 +147,7 @@ def berechne_jahressteuer(ereignisse: list[Steuerereignis], regeln: Steuerregeln
         allgemein = sum(e.betrag * (1 - regeln.teilfreistellung_fuer(e.steuerart))
                         for e in im_jahr if not (e.art == "veraeusserung" and e.steuerart == "aktie"))
         quellensteuer = sum(e.quellensteuer for e in im_jahr)
+        auslaendisch = sum(e.betrag for e in im_jahr if e.quellensteuer > 0)
 
         aktie_saldo = aktien_gewinne - aktien_verluste - vortrag_aktie
         vortrag_aktie = max(-aktie_saldo, 0.0)
@@ -155,7 +164,8 @@ def berechne_jahressteuer(ereignisse: list[Steuerereignis], regeln: Steuerregeln
         pausch = min(pauschbetrag, summe) if regeln.aktiv else 0.0
         steuerpflichtig = summe - pausch if regeln.aktiv else 0.0
         abgeltung = steuerpflichtig * regeln.abgeltungsteuer
-        angerechnet = min(quellensteuer, abgeltung)
+        auslaendisch_steuerpflichtig = min(max(auslaendisch - pausch, 0.0), steuerpflichtig)
+        angerechnet = min(quellensteuer, auslaendisch_steuerpflichtig * regeln.abgeltungsteuer, abgeltung)
         abgeltung -= angerechnet
         soli = abgeltung * regeln.soli
         zeilen.append({
