@@ -33,7 +33,7 @@ Bei Widersprüchen gilt die neueste Entscheidung von Jakob. Weicht der Code von 
 - **Kapital:** 500 € (350 € Core, 150 € Satellite), Prozentregeln skalieren mit. Bis das Kapital wächst, bildet der Core die Streuung über breite ETFs ab; die Fundamental-Engine führt parallel ein bewertetes Schattenportfolio aus Einzelaktien.
 - **Human in the loop:** Der Bot schlägt vor, Jakob gibt frei. Kein automatisches Senden von Orders ohne Freigabe.
 - **Technik-Startparameter, vor jedem Backtest festgelegt, nicht nachträglich optimieren:** Two MA Crossover 50/200; Momentum 12 minus 1 Monat; Price Channel Einstieg 55-Tage-Hoch, Ausstieg 20-Tage-Tief, Stop 2 × ATR(20); RSI(2) < 10 nur über SMA200, Ausstieg bei Schluss über SMA5; ADX(14) als Regime-Schalter (> 25 starker, < 20 schwacher Trend). Tageskerzen.
-- **Benchmarks:** Hauptmaßstab MSCI ACWI IMI; Vergleich mit MSCI ACWI, FTSE All-World GDP-Adjusted, MSCI ACWI IMI Value Weighted, MSCI World ex USA, MSCI World. Mischbenchmark für den Multi-Asset-Teil ist noch offen.
+- **Benchmarks:** Hauptmaßstab MSCI ACWI IMI; Vergleich mit MSCI ACWI, FTSE All-World GDP-Adjusted, MSCI ACWI IMI Value Weighted, MSCI World ex USA, MSCI World. Mischbenchmark für den Multi-Asset-Teil ist noch offen. Abgebildet über Xetra-ETFs (`config/daten.yaml`), Historie ab 01.01.2012, weil die Yahoo-Kurse von SPYI.DE 2011 fehlerhaft sind.
 
 ## Architektur
 

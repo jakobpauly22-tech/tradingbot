@@ -19,6 +19,9 @@ kurse:
 # Abweichung ETF vs. Index (TER, Tracking Difference) ist bewusst Teil des Maßstabs:
 # Das ist die Alternative, die Jakob tatsächlich kaufen könnte.
 benchmarks:
+  # Entschieden am 01.11.2026: Benchmark-Historie erst ab 01.01.2012. Yahoo-Kurse von SPYI.DE
+  # springen 05–12/2011 fast täglich um ±30–45 % (Datenfehler aus der Auflagephase).
+  historie_ab: 2012-01-01
   core:
     haupt:
       name: MSCI ACWI IMI
