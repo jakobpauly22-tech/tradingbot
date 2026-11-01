@@ -17,6 +17,16 @@ KONFIG_TEST = {
         "waehrungstausch": {"satz": 0.00002, "minimum_usd": 2.0},
     },
     "ausfuehrung": {"max_gebuehr_anteil": 0.01, "ganze_stuecke": True},
+    "steuern": {
+        "abgeltungsteuer": 0.25,
+        "soli": 0.055,
+        "kirchensteuer": 0.0,
+        "sparer_pauschbetrag": 1000.0,
+        "teilfreistellung": {"aktienfonds": 0.30, "mischfonds": 0.15, "sonstiger_fonds": 0.0},
+        "quellensteuer": {"USD": 0.15},
+        "pauschbetrag_anteil": {"depot": 1.0, "schatten": 0.0},
+        "basiszins_prozent": {2023: 2.55, 2024: 2.29},
+    },
 }
 
 

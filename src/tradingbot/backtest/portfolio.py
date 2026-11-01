@@ -17,6 +17,7 @@ class Kaufposten:
     datum: pd.Timestamp
     stueck: float
     einstand_je_stueck: float  # EUR inklusive Nebenkosten
+    vorabpauschale_je_stueck: float = 0.0  # schon versteuerte Vorabpauschalen, mindern den Veräußerungsgewinn
 
 
 @dataclass
@@ -61,7 +62,7 @@ class Teilportfolio:
             posten = liste[0]
             menge = min(rest, posten.stueck)
             einstand += menge * posten.einstand_je_stueck
-            verbraucht.append(Kaufposten(posten.datum, menge, posten.einstand_je_stueck))
+            verbraucht.append(Kaufposten(posten.datum, menge, posten.einstand_je_stueck, posten.vorabpauschale_je_stueck))
             posten.stueck -= menge
             rest -= menge
             if posten.stueck <= TOLERANZ:

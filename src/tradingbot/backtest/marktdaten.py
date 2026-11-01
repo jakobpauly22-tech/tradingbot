@@ -20,6 +20,13 @@ class LookAheadFehler(RuntimeError):
 class Instrument:
     ticker: str
     klasse: str = "etf"  # Spread-Klasse: etf | aktie | klein (config/backtest.yaml)
+    # Steuerart: aktie | aktienfonds | mischfonds | sonstiger_fonds (backtest/steuern.py).
+    # Ohne Angabe: ETF = Aktienfonds, sonst Aktie. Anleihe-ETFs ausdrücklich als sonstiger_fonds angeben.
+    steuerart: str | None = None
+
+    def __post_init__(self):
+        if self.steuerart is None:
+            object.__setattr__(self, "steuerart", "aktienfonds" if self.klasse == "etf" else "aktie")
 
 
 class Marktdaten:

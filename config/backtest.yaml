@@ -28,14 +28,37 @@ kosten:
   slippage: 0.0005
   waehrungstausch: {satz: 0.00002, minimum_usd: 2.0}
 
-steuern:                      # wird in Teil 2 umgesetzt
+steuern:
+  # Heutiges Recht gilt für alle simulierten Jahre (Details und Paragrafen in src/tradingbot/backtest/steuern.py)
   abgeltungsteuer: 0.25
   soli: 0.055
   kirchensteuer: 0.0          # Jakob zahlt keine Kirchensteuer
   sparer_pauschbetrag: 1000.0 # steht vollständig dem Bot zu
-  teilfreistellung_aktienfonds: 0.30
-  quellensteuer_usa: 0.15
+  teilfreistellung: {aktienfonds: 0.30, mischfonds: 0.15, sonstiger_fonds: 0.0}
+  quellensteuer: {USD: 0.15}  # US-Dividenden mit W-8BEN
   zahlung: jahresende_abfluss # Steuer als eigener Abfluss am Jahresende, kein Zwangsverkauf
+  # Steuergruppen teilen Pauschbetrag und Verlusttöpfe. Das echte Depot (Core plus ggf. echter Satellite) ist
+  # eine Gruppe. Der Schatten-Satellite bekommt vorsichtshalber keinen Pauschbetrag (den nutzt im echten Depot
+  # der Core), damit er nicht besser aussieht, als er wäre. Bitte von Jakob bestätigen.
+  pauschbetrag_anteil: {depot: 1.0, schatten: 0.0}
+  # Basiszins für die Vorabpauschale in Prozent. 2018–2025: BMF-Schreiben zur Vorabpauschale.
+  # 2012–2017: Basiszins nach § 203 Abs. 2 BewG (die Vorabpauschale gab es erst ab 2018; Ansatz, weil der
+  # Backtest heutiges Recht auf alle Jahre anwendet). Werte bitte gegen die BMF-Veröffentlichungen prüfen.
+  basiszins_prozent:
+    2012: 2.44
+    2013: 2.04
+    2014: 2.59
+    2015: 0.99
+    2016: 1.10
+    2017: 0.59
+    2018: 0.87
+    2019: 0.52
+    2020: 0.07
+    2021: -0.45
+    2022: -0.05
+    2023: 2.55
+    2024: 2.29
+    2025: 2.53
 
 risikofreier_zins: ECBDFR     # EZB-Einlagesatz (FRED), für Sharpe Ratio und Jensens Alpha
 
