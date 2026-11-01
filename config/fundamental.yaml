@@ -1,0 +1,147 @@
+# Fundamental-Engine: Entscheidungen von Jakob am 02.11.2026.
+# Parameter vor dem ersten Backtest festgelegt, nicht nachträglich optimieren. Änderungen nur mit Jakob.
+
+sec:
+  max_anfragen_pro_sekunde: 8          # SEC-Grenze 10/s, mit Puffer
+  cache_max_alter_tage: 7              # danach werden companyfacts/submissions neu geladen
+  verfuegbar_ab: handelstag_nach_filed # Point-in-Time: Werte erst ab dem Handelstag nach dem Einreichungsdatum
+  restatements: erstmeldung            # bei Restatements gilt der zuerst gemeldete Wert
+  jahresdauer_tage: [350, 380]         # Länge einer Geschäftsjahresperiode (52/53-Wochen-Jahre)
+
+universum:
+  index: SP500_historisch              # Zusammensetzung je Stichtag, nicht die heutigen Mitglieder
+  ohne_branchen: [banken, versicherungen]  # für Altman und Beneish; SIC-Bereiche siehe unten
+  sic_banken: [[6000, 6199]]
+  sic_versicherungen: [[6300, 6411]]
+  delisting:                           # Rückfall-Regel, wenn keine Kurse nach dem Delisting vorliegen
+    uebernahme_fusion: letzter_kurs
+    pleite_performance_unbekannt: letzter_kurs_minus_30_prozent   # Shumway (1997)
+    im_bericht_markieren: true
+
+schattenportfolio:
+  kapital: 10000.0
+  titel: 20
+  gewichtung: gleich                   # höchstens 5 % je Aktie (Core-Regel)
+  rebalancing: Q
+  max_branchenanteil: 0.25
+  steuergruppe: schatten
+  benchmarks: [SPYI.DE, SXR8.DE]       # MSCI ACWI IMI (Haupt) und S&P 500 in Euro (Universum)
+
+filter:
+  piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
+  altman:
+    industrie: original_1968           # Z < 1,81 Gefahrenzone (wissen/04, Abschnitt 8)
+    uebrige: z_zwei_strich             # Z'' für Nicht-Industrieunternehmen
+  beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
+
+score:
+  erster_lauf: [qualitaet, multiples]  # Piotroski und Accruals; E/P und EBIT/EV gegen den Branchenmedian
+  dcf_erst_nach_erstem_lauf: true
+
+dcf:                                   # für später, Annahmen schon festgelegt
+  marktrisikopraemie: 0.05
+  langfristiges_wachstum: 0.02         # muss immer kleiner als die Kapitalkosten sein
+  wachstum_jahre: 5
+  wachstum_quelle: historisches_umsatzwachstum
+  wachstum_deckel: 0.10
+  risikofreier_zins: DGS10             # FRED, point-in-time
+  beta: regression
+
+# Zuordnung Kennzahl -> XBRL-Konzepte (us-gaap/dei). Je Periode gilt der erste Kandidat mit Wert.
+# art: dauer = Jahreswert (Gewinn- und Verlustrechnung, Cashflow), stichtag = Bilanzwert am Geschäftsjahresende,
+#      letzter = jüngster bekannter Wert (z.B. ausstehende Aktien vom Deckblatt)
+kennzahlen:
+  umsatz:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:Revenues, us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax,
+               us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax, us-gaap:SalesRevenueNet,
+               us-gaap:SalesRevenueGoodsNet, us-gaap:SalesRevenueServicesNet]
+  umsatzkosten:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:CostOfRevenue, us-gaap:CostOfGoodsAndServicesSold, us-gaap:CostOfGoodsSold, us-gaap:CostOfServices]
+  bruttoergebnis:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:GrossProfit]
+  operatives_ergebnis:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:OperatingIncomeLoss]
+  jahresueberschuss:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:NetIncomeLoss, us-gaap:ProfitLoss, us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic]
+  operativer_cashflow:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:NetCashProvidedByUsedInOperatingActivities,
+               us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations]
+  abschreibungen:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:DepreciationDepletionAndAmortization, us-gaap:DepreciationAmortizationAndAccretionNet,
+               us-gaap:DepreciationAndAmortization, us-gaap:Depreciation]
+  vertriebs_verwaltungskosten:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:SellingGeneralAndAdministrativeExpense]
+  zinsaufwand:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:InterestExpense, us-gaap:InterestExpenseNonoperating]
+  gewichtete_aktien:
+    art: dauer
+    einheit: shares
+    konzepte: [us-gaap:WeightedAverageNumberOfSharesOutstandingBasic, us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding]
+  bilanzsumme:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:Assets]
+  umlaufvermoegen:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:AssetsCurrent]
+  kurzfristige_verbindlichkeiten:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:LiabilitiesCurrent]
+  verbindlichkeiten:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:Liabilities]
+  langfristige_finanzschulden:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:LongTermDebtNoncurrent, us-gaap:LongTermDebt]
+  eigenkapital:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:StockholdersEquity, us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest]
+  gewinnruecklagen:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:RetainedEarningsAccumulatedDeficit]
+  forderungen:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:AccountsReceivableNetCurrent]
+  sachanlagen_netto:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:PropertyPlantAndEquipmentNet]
+  zahlungsmittel:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:CashAndCashEquivalentsAtCarryingValue,
+               us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents]
+  wertpapiere_kurzfristig:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:MarketableSecuritiesCurrent, us-gaap:AvailableForSaleSecuritiesDebtSecuritiesCurrent,
+               us-gaap:ShortTermInvestments]
+  aktien_ausstehend:
+    art: letzter
+    einheit: shares
+    konzepte: [dei:EntityCommonStockSharesOutstanding, us-gaap:CommonStockSharesOutstanding]

@@ -97,6 +97,17 @@ Eine Phase ist fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
 - **Datenquellen kostenlos:** yfinance (inoffiziell, Werte plausibilisieren), FRED (Schlüssel in `.env`), SEC EDGAR (User-Agent mit Name und E-Mail aus `.env`, Abruflimits einhalten), EZB, Eurostat, BaFin. Abrufe lokal cachen.
 - **Urheberrecht:** keine Vorlesungs-PDFs oder Newsletter-Texte ins Repository; nur eigene Zusammenfassungen.
 
+## Fundamental-Engine (Entscheidungen 02.11.2026)
+
+Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nicht nachträglich optimieren. Details in `docs/ROADMAP.md`, Abschnitt Fundamental-Engine.
+
+- **Point-in-Time:** SEC-Werte erst ab dem Handelstag nach `filed`; bei Restatements gilt der zuerst gemeldete Wert. SEC-Abrufe höchstens 10 pro Sekunde, alles lokal cachen.
+- **Universum:** S&P 500 mit historischer Zusammensetzung je Stichtag. Kurse nicht mehr gelisteter Titel über Tiingo (Schlüssel `TIINGO_API_KEY` in `.env`); Rückfall: Übernahme/Fusion zum letzten Kurs, Pleite/Performance/unbekannt letzter Kurs minus 30 % (Shumway 1997), beides markiert und gezählt im Bericht.
+- **Schattenportfolio:** 20 Titel, gleich gewichtet, quartalsweise, virtuell 10.000 €, getrennt vom echten Core; gemessen gegen MSCI ACWI IMI und S&P 500 in Euro.
+- **Filter:** Piotroski ≤ 3 raus; Altman 1968 für Industrie, Z'' für übrige; Beneish > −1,78 raus; Banken und Versicherungen ohne Altman und Beneish.
+- **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
+- **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
+
 ## Briefing-Archiv (Eingang der News-Engine)
 
 Eine geplante Aufgabe in Claude speichert täglich um 22:40 den Bot-Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv` (Schema 1.1, siehe `docs/BOT_ANHANG.md`, Prüfung mit `tools/pruefe_bot_anhang.py`). Lokal gehören die Dateien nach `daten/briefings/`. Nachrichten erst ab `erstellt_um` verwenden. Bekannte Einschränkung: In den Dateien vom 28. bis 30.10.2026 ist `quelle` bei Einträgen aus Sammelmeldungen (item_key mit `-b`) teils falsch; ab 31.10.2026 korrigiert.

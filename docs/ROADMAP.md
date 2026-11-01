@@ -191,6 +191,22 @@ Kern des Bots: Bewertung und Bilanzqualität aus dem Studium entscheiden, welche
 - **Faktormodelle:** CAPM, Fama-French (Value, Size, Profitability, Investment) plus Momentum nach Carhart. Zeigt, ob der Bot echtes Alpha erzeugt oder nur Faktorprämien einsammelt.
 - **Portfolio:** Markowitz oder Risk Parity für die Gewichtung, Sharpe Ratio und Beta als Steuerungsgrößen.
 
+**Entschieden am 02.11.2026: Aufbau der Fundamental-Engine** (Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nicht nachträglich optimieren).
+
+| Thema | Entscheidung |
+| --- | --- |
+| Datenquelle | SEC EDGAR (XBRL-Fakten), höchstens 10 Anfragen pro Sekunde, alles lokal gecacht |
+| Point-in-Time | Werte erst ab dem Handelstag nach dem Einreichungsdatum (`filed`); bei Restatements gilt der zuerst gemeldete Wert |
+| Universum | S&P 500 mit historischer Zusammensetzung je Stichtag, nicht die heutigen Mitglieder |
+| Kurse nicht mehr gelisteter Titel | Tiingo prüfen. Rückfall-Regel: Übernahme oder Fusion → zum letzten Kurs schließen; Pleite, Performance oder unbekannt → letzter Kurs minus 30 % (Shumway 1997). Beide Fälle markieren und ihre Zahl im Bericht ausweisen |
+| Schattenportfolio | 20 Titel, gleich gewichtet (max. 5 %), quartalsweises Rebalancing, virtuell 10.000 €, mit Kosten und Steuern, getrennt vom echten Core ausgewiesen |
+| Messung | gegen MSCI ACWI IMI (Hauptmaßstab) und S&P 500 in Euro (Benchmark des Universums); Tresor ab 2025 bleibt zu |
+| Ausschlussfilter | Piotroski F-Score ≤ 3; Altman: Original 1968 für Industrieunternehmen, Z'' für übrige; Beneish M-Score > −1,78 (Original). Banken und Versicherungen bekommen weder Altman noch Beneish |
+| Erster Lauf | Qualität (Piotroski, Accruals) und Multiples (E/P, EBIT/EV gegen den Branchenmedian) |
+| DCF | erst nach dem ersten Lauf. Annahmen: Marktrisikoprämie 5 %, g = 2 % (immer kleiner als die Kapitalkosten), 5-Jahres-Wachstum aus dem historischen Umsatzwachstum mit Deckel 10 %, risikofreier Zins = 10-jährige US-Rendite point-in-time aus FRED, Beta per Regression |
+| DAX | vorerst nur US-Werte; DAX später über ESEF-Berichte (filings.xbrl.org, ab Geschäftsjahr 2020), getrennt ausgewiesen |
+| Tests | Bewertungsformeln bauen auf `referenz.py` auf; Piotroski, Altman und Beneish bekommen eigene Tests mit Lehrbuchbeispielen |
+
 ### Wissen aus dem Studium
 
 - **Unterlagen:** Vorlesungsskripte, Formelsammlungen und Übungsblätter bleiben als PDF im Ordner `Wissen` auf dem Rechner. Ins Repository kommen nur die eigenen Zusammenfassungen (`wissen/`) und die Tests aus den Musterlösungen.
@@ -392,8 +408,8 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 
 | Feature | Engine | Phase | Priorität | Status |
 | --- | --- | --- | --- | --- |
-| Datenbasis (Kurse, Bilanzdaten) | Basis | 1 | Hoch | Idee |
-| Backtest-Framework | Qualität | 1 | Hoch | Idee |
+| Datenbasis (Kurse, Bilanzdaten) | Basis | 1 | Hoch | In Arbeit (Kurse und Makro fertig, SEC-Bilanzdaten in Arbeit) |
+| Backtest-Framework | Qualität | 1 | Hoch | Fertig (Simulation, Kosten, Steuern, Walk-forward, Bericht, Tresor) |
 | Bewertung: DCF und Multiples | Fundamental | 1 | Hoch | Idee |
 | Bilanz-Scores (Piotroski, Altman, Beneish) | Fundamental | 1 | Hoch | Idee |
 | Strategie-Bibliothek | Basis | 1 | Mittel | Idee |
