@@ -10,7 +10,12 @@ sec:
 
 universum:
   index: SP500_historisch              # Zusammensetzung je Stichtag, nicht die heutigen Mitglieder
-  ohne_branchen: [banken, versicherungen]  # für Altman und Beneish; SIC-Bereiche siehe unten
+  # Entscheidung 02.11.2026: Finanzwerte (SIC 6000–6999, inklusive REITs) fallen im ersten Lauf ganz aus dem
+  # Universum. Der SIC-Code gilt point-in-time: maßgeblich ist der Code im Kopf der jeweiligen SEC-Einreichung,
+  # nicht der heutige Code aus den Stammdaten.
+  ohne_finanzwerte_sic: [6000, 6999]
+  sic_point_in_time: true
+  ohne_branchen: [banken, versicherungen]  # für spätere Läufe mit Finanzwerten: weder Altman noch Beneish
   sic_banken: [[6000, 6199]]
   sic_versicherungen: [[6300, 6411]]
   delisting:                           # Rückfall-Regel, wenn keine Kurse nach dem Delisting vorliegen
@@ -25,7 +30,9 @@ schattenportfolio:
   rebalancing: Q
   max_branchenanteil: 0.25
   steuergruppe: schatten
-  benchmarks: [SPYI.DE, SXR8.DE]       # MSCI ACWI IMI (Haupt) und S&P 500 in Euro (Universum)
+  # MSCI ACWI IMI (Haupt), S&P 500 in Euro (Universum) und S&P 500 ohne Finanzwerte (macht den Sektoreffekt
+  # des Ausschlusses sichtbar; Quelle wird in Sitzung 2 festgelegt)
+  benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]
 
 filter:
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen

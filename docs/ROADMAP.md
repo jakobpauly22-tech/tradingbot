@@ -201,6 +201,7 @@ Kern des Bots: Bewertung und Bilanzqualität aus dem Studium entscheiden, welche
 | Kurse nicht mehr gelisteter Titel | Tiingo prüfen. Rückfall-Regel: Übernahme oder Fusion → zum letzten Kurs schließen; Pleite, Performance oder unbekannt → letzter Kurs minus 30 % (Shumway 1997). Beide Fälle markieren und ihre Zahl im Bericht ausweisen |
 | Schattenportfolio | 20 Titel, gleich gewichtet (max. 5 %), quartalsweises Rebalancing, virtuell 10.000 €, mit Kosten und Steuern, getrennt vom echten Core ausgewiesen |
 | Messung | gegen MSCI ACWI IMI (Hauptmaßstab) und S&P 500 in Euro (Benchmark des Universums); Tresor ab 2025 bleibt zu |
+| Finanzwerte | fallen im ersten Lauf ganz aus dem Universum: SIC 6000–6999 inklusive REITs, point-in-time (SIC aus der jeweiligen SEC-Einreichung). Zusätzlicher Vergleich mit dem S&P 500 ohne Finanzwerte, damit der Sektoreffekt sichtbar bleibt |
 | Ausschlussfilter | Piotroski F-Score ≤ 3; Altman: Original 1968 für Industrieunternehmen, Z'' für übrige; Beneish M-Score > −1,78 (Original). Banken und Versicherungen bekommen weder Altman noch Beneish |
 | Erster Lauf | Qualität (Piotroski, Accruals) und Multiples (E/P, EBIT/EV gegen den Branchenmedian) |
 | DCF | erst nach dem ersten Lauf. Annahmen: Marktrisikoprämie 5 %, g = 2 % (immer kleiner als die Kapitalkosten), 5-Jahres-Wachstum aus dem historischen Umsatzwachstum mit Deckel 10 %, risikofreier Zins = 10-jährige US-Rendite point-in-time aus FRED, Beta per Regression |

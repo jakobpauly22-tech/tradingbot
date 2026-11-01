@@ -104,6 +104,7 @@ Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nich
 - **Point-in-Time:** SEC-Werte erst ab dem Handelstag nach `filed`; bei Restatements gilt der zuerst gemeldete Wert. SEC-Abrufe höchstens 10 pro Sekunde, alles lokal cachen.
 - **Universum:** S&P 500 mit historischer Zusammensetzung je Stichtag. Kurse nicht mehr gelisteter Titel über Tiingo (Schlüssel `TIINGO_API_KEY` in `.env`); Rückfall: Übernahme/Fusion zum letzten Kurs, Pleite/Performance/unbekannt letzter Kurs minus 30 % (Shumway 1997), beides markiert und gezählt im Bericht.
 - **Schattenportfolio:** 20 Titel, gleich gewichtet, quartalsweise, virtuell 10.000 €, getrennt vom echten Core; gemessen gegen MSCI ACWI IMI und S&P 500 in Euro.
+- **Finanzwerte (02.11.2026):** SIC 6000–6999 (inklusive REITs) fallen im ersten Lauf ganz aus dem Universum; SIC point-in-time aus dem Kopf der jeweiligen SEC-Einreichung. Der Bericht vergleicht zusätzlich mit dem S&P 500 ohne Finanzwerte, damit der Sektoreffekt sichtbar bleibt.
 - **Filter:** Piotroski ≤ 3 raus; Altman 1968 für Industrie, Z'' für übrige; Beneish > −1,78 raus; Banken und Versicherungen ohne Altman und Beneish.
 - **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
 - **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
