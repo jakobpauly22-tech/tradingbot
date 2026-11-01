@@ -116,6 +116,18 @@ class SecClient:
         return self.json_mit_cache(f"{SEC_DATA}/submissions/CIK{cik10(cik)}.json",
                                    self.cache_wurzel / "submissions" / f"CIK{cik10(cik)}.json.gz")
 
+    def submissions_seite(self, name: str) -> tuple[dict, datetime]:
+        """Zusatzseite älterer Einreichungen (Name aus submissions['filings']['files'])."""
+        return self.json_mit_cache(f"{SEC_DATA}/submissions/{name}", self.cache_wurzel / "submissions" / f"{name}.gz")
+
+    def entity_suche(self, text: str) -> list[tuple[int, str]]:
+        """SEC-Firmensuche (wie das Suchfeld auf sec.gov): Liste (CIK, Name), beste Treffer zuerst."""
+        import hashlib
+
+        datei = self.cache_wurzel / "suche" / f"{hashlib.sha1(text.lower().encode()).hexdigest()}.json.gz"
+        daten, _ = self.json_mit_cache(f"https://efts.sec.gov/LATEST/search-index?keysTyped={requests.utils.quote(text)}", datei)
+        return [(int(h["_id"]), h["_source"].get("entity", "")) for h in daten.get("hits", {}).get("hits", [])]
+
     def ticker_tabelle(self) -> pd.DataFrame:
         """Heutige Ticker → CIK. Enthält nur aktive Titel; für historische Mitglieder nicht ausreichend."""
         daten, _ = self.json_mit_cache(f"{SEC_WWW}/files/company_tickers.json", self.cache_wurzel / "company_tickers.json.gz")

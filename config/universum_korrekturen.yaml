@@ -1,0 +1,75 @@
+# Korrekturen der S&P-500-Rekonstruktion aus Wikipedia (src/tradingbot/daten/universum.py).
+# Nur Fälle, die die Änderungstabelle nicht oder falsch abbildet. Jeder Eintrag mit Quelle; Jakob prüft.
+# Aktionen: beenden (offene Mitgliedschaft schließen), ergaenzen (fehlende Mitgliedschaft), von_setzen (Zugang korrigieren).
+# Abgleich: fja05680/sp500 (GitHub, MIT-Lizenz), tägliche Zusammensetzung 1996 bis 11.01.2019.
+
+korrekturen:
+  - aktion: beenden
+    ticker: BUD
+    name: Anheuser Busch
+    bis: 2008-11-18
+    quelle: "InBev-Übernahme; letzter Tag im Index laut fja05680: 17.11.2008"
+  - aktion: beenden
+    ticker: FSR
+    name: Firstar
+    bis: 2001-02-27
+    quelle: "Firstar übernahm 2001 U.S. Bancorp und führte Namen und Ticker USB weiter; für den Backtest ab 2012 unerheblich"
+  - aktion: beenden
+    ticker: FOX
+    name: Twenty-First Century Fox Class B
+    bis: 2019-03-19
+    quelle: "Wikipedia-Änderungstabelle 19.03.2019 (Abgang ohne Ticker, Disney-Übernahme von 21st Century Fox)"
+  - aktion: ergaenzen
+    ticker: MWV
+    name: MeadWestvaco
+    von: null
+    bis: 2015-07-02
+    grund_abgang: "Fusion mit RockTenn zu WestRock"
+    quelle: "fja05680: MWV bis 01.07.2015; fehlt in der Wikipedia-Änderungstabelle"
+  - aktion: ergaenzen
+    ticker: WRK
+    name: WestRock
+    von: 2015-07-02
+    bis: 2024-07-08
+    grund_abgang: "Smurfit Kappa übernahm WestRock (Smurfit Westrock, Ticker SW)"
+    quelle: "fja05680: WRK ab 02.07.2015; Ende = Aufnahme von Smurfit Westrock laut heutiger Wikipedia-Liste"
+  - aktion: von_setzen
+    ticker: SW
+    name: Smurfit Westrock
+    von: 2024-07-08
+    quelle: "Aufnahmedatum der heutigen Wikipedia-Liste; Nachfolger von WestRock (WRK)"
+
+# CIK-Korrekturen: die automatische Zuordnung (Name → CIK, geprüft an den 10-K im Zeitraum) lag falsch oder fand nichts.
+# `erwartet` muss im heutigen oder einem früheren SEC-Namen der CIK vorkommen; das prüft der Code bei jedem Lauf.
+# Alle Werte am 02.11.2026 gegen SEC-Submissions geprüft (Name und 10-K-Zeitraum).
+cik:
+  - {ticker: CA,   name: CA Technologies,           cik: 356028,  erwartet: "CA, INC",       quelle: "automatisch: Cavitation Technologies"}
+  - {ticker: DNB,  name: Dun & Bradstreet,          cik: 1115222, erwartet: "DUN & BRADSTREET", quelle: "automatisch: Moody's (hieß bis 2000 Dun & Bradstreet)"}
+  - {ticker: Q,    name: Qwest Communications,      cik: 1037949, erwartet: "QWEST COMMUNICATIONS", quelle: "automatisch: Tochter Qwest Corp"}
+  - {ticker: VIAB, name: Viacom,                    cik: 1339947, erwartet: "VIACOM",        quelle: "automatisch: CBS/Paramount; Viacom Inc. 2006–2019"}
+  - {ticker: KRFT, name: Kraft Foods,               cik: 1545158, erwartet: "KRAFT FOODS GROUP", quelle: "automatisch: Mondelez; Kraft Foods Group 2012–2015"}
+  - {ticker: CVC,  name: Cablevision Systems,       cik: 1053112, erwartet: "CABLEVISION",   quelle: "automatisch: Tochter CSC Holdings"}
+  - {ticker: ADT,  name: ADT,                       cik: 1546640, erwartet: "ADT CORP",      quelle: "automatisch: Tyco/Johnson Controls"}
+  - {ticker: AAL,  name: American Airlines Group,   cik: 6201,    erwartet: "AMERICAN AIRLINES GROUP", quelle: "automatisch: Tochter American Airlines Inc."}
+  - {ticker: BEAM, name: Suntory Global Spirits,    cik: 789073,  erwartet: "BEAM",          quelle: "nicht gefunden (heutiger Name)"}
+  - {ticker: HOT,  name: Starwood Hotels and Resorts, cik: 316206, erwartet: "STARWOOD",     quelle: "nicht gefunden"}
+  - {ticker: TSS,  name: TSYS,                      cik: 721683,  erwartet: "TOTAL SYSTEM",  quelle: "nicht gefunden"}
+  - {ticker: VFC,  name: VF Corporation,            cik: 103379,  erwartet: "V F CORP",      quelle: "nicht gefunden"}
+  - {ticker: BCR,  name: CR Bard,                   cik: 9892,    erwartet: "BARD",          quelle: "nicht gefunden"}
+  - {ticker: LO,   name: Lorillard Tobacco Company, cik: 1424847, erwartet: "LORILLARD",     quelle: "nicht gefunden"}
+  - {ticker: PCS,  name: MetroPCS,                  cik: 1283699, erwartet: "METROPCS",      quelle: "nicht gefunden; heute T-Mobile US unter derselben CIK"}
+  - {ticker: CDAY, name: Ceridian,                  cik: 1725057, erwartet: "CERIDIAN",      quelle: "nicht gefunden; heute Dayforce"}
+
+# Vorgänger-CIKs (Umgründung in eine neue Holding, Fusion unter neuem Namen). Die Fakten aller CIKs werden zusammengelegt;
+# die Erstmeldungs-Regel nimmt dann den früheren Bericht. Ersetzt den automatischen Vorschlag.
+vorgaenger:
+  - {ticker: GOOG,  name: Alphabet Inc. (Class C), ciks: [1288776], erwartet: [GOOGLE], quelle: "automatisch: Alphabet Holding Company (falsch)"}
+  - {ticker: GOOGL, name: Alphabet Inc. (Class A), ciks: [1288776], erwartet: [GOOGLE], quelle: "automatisch: Alphabet Holding Company (falsch)"}
+  - {ticker: AVGO,  name: Broadcom,                ciks: [1649338, 1441634], erwartet: [BROADCOM, AVAGO], quelle: "Kette Avago → Broadcom Ltd → Broadcom Inc"}
+  - {ticker: APA,   name: APA Corporation,         ciks: [6769],    erwartet: [APACHE],   quelle: "nicht gefunden"}
+  - {ticker: VTRS,  name: Viatris,                 ciks: [1623613, 69499], erwartet: [MYLAN, MYLAN], quelle: "nicht gefunden; Kette Mylan Inc → Mylan N.V. → Viatris"}
+  - {ticker: WBA,   name: Walgreens Boots Alliance, ciks: [104207], erwartet: [WALGREEN], quelle: "nicht gefunden"}
+  - {ticker: SKYD,  name: Skydance,                ciks: [813828],  erwartet: [PARAMOUNT], quelle: "nicht gefunden; CBS/ViacomCBS/Paramount Global"}
+  - {ticker: FTI,   name: TechnipFMC,              ciks: [1135152], erwartet: [FMC TECH], quelle: "nicht gefunden; FMC Technologies"}
+  - {ticker: XOM,   name: ExxonMobil,              ciks: [34088],   erwartet: [EXXON],    quelle: "neue Holding-CIK 2026 ohne 10-K; Exxon Mobil Corp"}
+  - {ticker: AGN,   name: Allergan,  cik_aktuell: 1578845, ciks: [884629],  erwartet: [WATSON],   quelle: "automatisch mehrdeutig; Watson → Actavis Inc. → Actavis plc/Allergan plc (2013)"}
