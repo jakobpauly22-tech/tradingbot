@@ -97,3 +97,75 @@ def test_plausibel_boersenwert_und_abdeckung():
     assert not plausibel(kurse, aktien * 1e-3, None, "2013-01-01")["ok"]            # 50 Mio. USD: falsche Aktie?
     luecke = kurse.iloc[::3]
     assert "Werktage" in plausibel(luecke, aktien, None, "2013-01-01")["grund"]
+
+
+# --- Wiederverwendete Ticker (Rückmeldung Jakob 03.11.2026) ---------------------------------------------------
+# Kurszeitraum und Name: echte Tiingo-Werte vom 02./03.11.2026 (kursstatus.csv, Metadaten-Abruf); Mitgliedschaft aus
+# dem Universum; die Kursreihen selbst sind künstlich (gleichbleibender Kurs an jedem Werktag).
+SIEBEN_FAELLE = [
+    # ticker, Mitglied bis, Tiingo erster/letzter Kurs, Tiingo-Name, bekannte Namen (Index, SEC heute und früher)
+    ("CA", "2018-11-06", "2023-12-14", "2026-10-30", "XTRACKERS CALIFORNIA MUNICIPAL BOND ETF",
+     ["CA Technologies", "CA, INC.", "COMPUTER ASSOCIATES INTERNATIONAL INC"]),
+    ("CEG", "2012-03-13", "2022-02-02", "2026-10-30", "Constellation Energy Corporation", ["Constellation Energy Group"]),
+    ("BEAM", "2014-05-01", "2020-02-06", "2026-10-30", "Beam Therapeutics Inc",
+     ["Suntory Global Spirits", "Beam Suntory Inc.", "BEAM INC", "FORTUNE BRANDS INC"]),
+    ("BRCM", "2016-02-01", "2016-01-04", "2016-01-29", "Broadcom Corp", ["Broadcom Corporation", "BROADCOM CORP"]),
+    ("APC", "2019-08-09", "2026-02-12", "2026-10-30", "ARKO Petroleum Corp - Class A", ["Anadarko Petroleum"]),
+    ("DISCA", "2022-04-11", "2022-04-08", "2022-09-16", None, ["Discovery, Inc."]),
+    ("POM", "2016-03-30", "2026-10-21", "2026-10-30", "Pomdoctor Ltd - Class A", ["Pepco Holdings"]),
+]
+
+
+def _reihe(von, bis):
+    return pd.DataFrame({"close": 10.0}, index=pd.bdate_range(von, bis))
+
+
+@pytest.mark.parametrize("ticker, bis, kurs_von, kurs_bis, meta_name, namen", SIEBEN_FAELLE, ids=[f[0] for f in SIEBEN_FAELLE])
+def test_sieben_faelle_wiederverwendeter_ticker_werden_abgelehnt(ticker, bis, kurs_von, kurs_bis, meta_name, namen):
+    from tradingbot.daten.kursquellen import pruefe_kursreihe
+
+    ergebnis = pruefe_kursreihe(_reihe(kurs_von, kurs_bis), meta_name, namen, pd.NaT, pd.Timestamp(bis))
+    assert not ergebnis["ok"]
+    assert "Kurse erst ab" in ergebnis["grund"]                 # alle sieben scheitern schon an der Abdeckung ab 2012
+
+
+@pytest.mark.parametrize("meta_name, namen, erwartet", [
+    ("XTRACKERS CALIFORNIA MUNICIPAL BOND ETF", ["CA Technologies", "CA, INC."], False),
+    ("Beam Therapeutics Inc", ["Suntory Global Spirits", "BEAM INC"], False),      # nur 50 % Wortüberdeckung
+    ("ARKO Petroleum Corp - Class A", ["Anadarko Petroleum"], False),
+    ("Pomdoctor Ltd - Class A", ["Pepco Holdings"], False),
+    (None, ["Discovery, Inc."], False),
+    ("Constellation Energy Corporation", ["Constellation Energy Group"], True),     # Name ähnlich → Abdeckung nötig
+    ("Broadcom Corp", ["Broadcom Corporation"], True),
+    ("Howmet Aerospace Inc.", ["Alcoa", "Howmet Aerospace Inc.", "ARCONIC INC", "ALCOA INC"], True),
+])
+def test_namenspruefung_allein(meta_name, namen, erwartet):
+    from tradingbot.daten.kursquellen import name_passt
+
+    assert name_passt(meta_name, namen) is erwartet
+
+
+def test_volle_abdeckung_aber_falscher_name_wird_abgelehnt_und_gegenproben():
+    from tradingbot.daten.kursquellen import pruefe_kursreihe
+
+    voll = _reihe("2011-01-03", "2018-11-05")
+    falsch = pruefe_kursreihe(voll, "XTRACKERS CALIFORNIA MUNICIPAL BOND ETF", ["CA Technologies", "CA, INC."], pd.NaT, pd.Timestamp("2018-11-06"))
+    assert not falsch["ok"] and falsch["name_ok"] is False and "passt nicht" in falsch["grund"]
+    # Gegenprobe Tiingo: Twitter, ganze Mitgliedszeit (2013-11 bis 2022-06) mit passendem Namen
+    twitter = pruefe_kursreihe(_reihe("2013-11-07", "2022-06-03"), "Twitter Inc", ["Twitter", "TWITTER, INC."],
+                               pd.Timestamp("2018-06-07"), pd.Timestamp("2022-06-08"))
+    assert twitter["ok"], twitter["grund"]
+    # Gegenprobe yfinance: heutige Constellation Energy (seit 2022 Mitglied), Datenende vorgegeben
+    ceg = pruefe_kursreihe(_reihe("2022-01-19", "2026-10-30"), "Constellation Energy Corporation", ["Constellation Energy"],
+                           pd.Timestamp("2022-02-02"), pd.NaT, datenende="2026-10-30")
+    assert ceg["ok"], ceg["grund"]
+
+
+def test_luecken_und_fehlendes_ende():
+    from tradingbot.daten.kursquellen import pruefe_abdeckung
+
+    zu_frueh_zu_ende = pruefe_abdeckung(_reihe("2011-06-01", "2015-06-30"), pd.NaT, pd.NaT, datenende="2026-10-30")
+    assert not zu_frueh_zu_ende["ok"] and "nur bis" in zu_frueh_zu_ende["grund"]
+    luecken = _reihe("2011-06-01", "2016-12-30").iloc[::2]
+    assert "Werktage" in pruefe_abdeckung(luecken, pd.NaT, pd.Timestamp("2017-01-03"))["grund"]
+    assert pruefe_abdeckung(None, pd.NaT, pd.Timestamp("2017-01-03"))["grund"] == "keine Kurse"

@@ -33,6 +33,11 @@ WIKI_AKTUELL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 WIKI_HISTORIE = "https://en.wikipedia.org/wiki/Historical_components_of_the_S%26P_500"
 SEC_NAMEN = "https://www.sec.gov/Archives/edgar/cik-lookup-data.txt"
 
+# Die rekonstruierte Zusammensetzung gilt erst ab 2012 als geprüft (Jakob, 03.11.2026): ab hier 500–506 Mitglieder je
+# Quartal, Abgleich mit fja05680 bis 2019 und Korrekturen in config/universum_korrekturen.yaml. Für frühere Stichtage
+# ist die Wikipedia-Änderungstabelle lückenhaft; Abfragen davor nur mit ausdrücklichem Schalter.
+GEPRUEFT_AB = pd.Timestamp("2012-01-01")
+
 _ZUSAETZE = r"\b(the|inc|incorporated|corp|corporation|co|company|ltd|limited|plc|llc|lp|l p|sa|nv|n v|ag|se|holdings?|group|cos)\b"
 
 
@@ -244,16 +249,23 @@ def _aehnlich(a, b) -> bool:
     return na == nb or na.startswith(nb) or nb.startswith(na) or na.split()[0] == nb.split()[0]
 
 
-def mitglieder_am(intervalle: pd.DataFrame, stichtag) -> pd.DataFrame:
-    """Mitglieder am Stichtag (von <= Stichtag < bis; unbekanntes von gilt als „schon vorher Mitglied“)."""
+def mitglieder_am(intervalle: pd.DataFrame, stichtag, *, vor_pruefzeitraum_erlaubt: bool = False) -> pd.DataFrame:
+    """Mitglieder am Stichtag (von <= Stichtag < bis; unbekanntes von gilt als „schon vorher Mitglied“).
+
+    Stichtage vor `GEPRUEFT_AB` (2012) sind nicht geprüft und werden ohne `vor_pruefzeitraum_erlaubt=True` abgelehnt.
+    """
     tag = pd.Timestamp(stichtag)
+    if tag < GEPRUEFT_AB and not vor_pruefzeitraum_erlaubt:
+        raise ValueError(f"Zusammensetzung vor {GEPRUEFT_AB.date()} ist nicht geprüft (Stichtag {tag.date()}); "
+                         "nur mit vor_pruefzeitraum_erlaubt=True abfragen")
     von_ok = intervalle["von"].isna() | (intervalle["von"] <= tag)
     bis_ok = intervalle["bis"].isna() | (intervalle["bis"] > tag)
     return intervalle[von_ok & bis_ok]
 
 
-def anzahl_je_stichtag(intervalle: pd.DataFrame, stichtage) -> pd.Series:
-    return pd.Series({pd.Timestamp(s): len(mitglieder_am(intervalle, s)) for s in stichtage}, name="mitglieder")
+def anzahl_je_stichtag(intervalle: pd.DataFrame, stichtage, *, vor_pruefzeitraum_erlaubt: bool = False) -> pd.Series:
+    return pd.Series({pd.Timestamp(s): len(mitglieder_am(intervalle, s, vor_pruefzeitraum_erlaubt=vor_pruefzeitraum_erlaubt))
+                      for s in stichtage}, name="mitglieder")
 
 
 # --- CIK-Zuordnung -----------------------------------------------------------------------------
@@ -409,13 +421,14 @@ def ueberdeckung_tage(zehn_k: pd.DatetimeIndex, von, bis, ab=pd.Timestamp("2011-
     return max((b - a).days, 0)
 
 
-def _sec_namen_einer_cik(cik: int, client) -> list[str]:
+def sec_namen_einer_cik(cik: int, client) -> list[str]:
+    """Heutiger und alle früheren SEC-Namen einer CIK."""
     s, _ = client.submissions(cik)
     return [s.get("name") or ""] + [f.get("name") or "" for f in s.get("formerNames", [])]
 
 
 def _namen_pruefen(cik: int, erwartet: str, client, wo: str) -> None:
-    namen = _sec_namen_einer_cik(cik, client)
+    namen = sec_namen_einer_cik(cik, client)
     if not any(erwartet.upper() in n.upper() for n in namen):
         raise ValueError(f"{wo}: CIK {cik} heißt bei der SEC {namen}, erwartet war „{erwartet}“")
 

@@ -100,6 +100,19 @@ class TiingoClient:
         return normalisieren(roh)
 
 
+    def metadaten(self, ticker: str, *, max_alter: timedelta = timedelta(days=30)) -> dict:
+        """Name, Börse und Zeitraum des Tickers laut Tiingo (zählt gegen das Stundenlimit; gecacht)."""
+        datei = self.cache_wurzel / "meta" / f"{ticker.lower().replace('/', '_')}.json"
+        if datei.exists():
+            alter = datetime.now(timezone.utc) - datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc)
+            if alter < max_alter:
+                return json.loads(datei.read_text(encoding="utf-8"))
+        meta = self._holen(f"{TIINGO_API}/{ticker.lower()}", {})
+        datei.parent.mkdir(parents=True, exist_ok=True)
+        datei.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return meta
+
+
 def normalisieren(roh: list[dict]) -> pd.DataFrame:
     """Tiingo-Rohdaten → Bot-Format (splitbereinigt wie Yahoo, Dividende je splitbereinigter Aktie).
 

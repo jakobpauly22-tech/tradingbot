@@ -164,3 +164,14 @@ def test_sic_historie_findet_wechsel_mit_wenigen_abrufen():
     assert sic_am(historie, "2015-12-31") == 4899 and sic_am(historie, "2016-03-01") == 6798
     assert sic_am(historie, "2005-01-01") == 4899                           # vor dem ersten 10-K: erster Code
     assert ist_finanzwert(6798) and not ist_finanzwert(4899) and ist_finanzwert(None) is None
+
+
+def test_zusammensetzung_erst_ab_2012_geprueft():
+    from tradingbot.daten.universum import GEPRUEFT_AB
+
+    iv = mitgliedschaften(_aktuell([("X", "X Corp", "IT", "2005-01-03", 1)]), _aenderungen([("2005-01-03", "X", "X Corp", None, None, None)]))
+    assert GEPRUEFT_AB == pd.Timestamp("2012-01-01")
+    with pytest.raises(ValueError, match="nicht geprüft"):
+        mitglieder_am(iv, "2011-12-30")
+    assert len(mitglieder_am(iv, "2011-12-30", vor_pruefzeitraum_erlaubt=True)) == 1
+    assert len(mitglieder_am(iv, "2012-01-02")) == 1
