@@ -59,6 +59,7 @@ cik:
   - {ticker: LO,   name: Lorillard Tobacco Company, cik: 1424847, erwartet: "LORILLARD",     quelle: "nicht gefunden"}
   - {ticker: PCS,  name: MetroPCS,                  cik: 1283699, erwartet: "METROPCS",      quelle: "nicht gefunden; heute T-Mobile US unter derselben CIK"}
   - {ticker: CDAY, name: Ceridian,                  cik: 1725057, erwartet: "CERIDIAN",      quelle: "nicht gefunden; heute Dayforce"}
+  - {ticker: DWDP, name: DuPont,                    cik: 1666700, erwartet: "DOWDUPONT",     quelle: "automatisch: E. I. du Pont (30554); DowDuPont 2017–2019, heute DuPont de Nemours"}
 
 # Vorgänger-CIKs (Umgründung in eine neue Holding, Fusion unter neuem Namen). Die Fakten aller CIKs werden zusammengelegt;
 # die Erstmeldungs-Regel nimmt dann den früheren Bericht. Ersetzt den automatischen Vorschlag.

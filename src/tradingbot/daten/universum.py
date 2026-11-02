@@ -471,6 +471,101 @@ def lade_universum(neu_berechnen: bool = False) -> tuple[pd.DataFrame, dict]:
     return t, meta
 
 
+# --- SIC point-in-time (Entscheidung 02.11.2026: Finanzwerte SIC 6000–6999 nach dem damaligen Code) -----------
+_SIC_MUSTER = re.compile(r"STANDARD INDUSTRIAL CLASSIFICATION:[^\[\n]*\[(\d{4})\]|<ASSIGNED-SIC>\s*(\d{4})")
+
+
+def sic_aus_kopf(kopf: str) -> int | None:
+    """SIC-Code aus dem Kopf einer Einreichung (Text- oder SGML-Format; erster Treffer = Hauptanmelder)."""
+    treffer = _SIC_MUSTER.search(kopf)
+    return int(treffer.group(1) or treffer.group(2)) if treffer else None
+
+
+def zehn_k_liste(cik: int, client, ab=pd.Timestamp("2010-01-01")) -> pd.DataFrame:
+    """10-K-Einreichungen (datum, accn) einer CIK ab `ab`, inklusive Zusatzseiten, aufsteigend sortiert."""
+    subs, _ = client.submissions(cik)
+    seiten = [subs.get("filings", {}).get("recent", {})]
+    for seite in subs.get("filings", {}).get("files", []):
+        if seite.get("filingTo") and pd.Timestamp(seite["filingTo"]) < ab:
+            continue
+        seiten.append(client.submissions_seite(seite["name"])[0])
+    zeilen = [(d, a) for s in seiten for d, a, f in zip(s.get("filingDate", []), s.get("accessionNumber", []), s.get("form", []))
+              if f in ("10-K", "10-K405", "10-KT")]
+    t = pd.DataFrame(zeilen, columns=["datum", "accn"]).assign(datum=lambda d: pd.to_datetime(d["datum"]))
+    return t[t["datum"] >= ab].drop_duplicates("accn").sort_values("datum").reset_index(drop=True)
+
+
+def sic_historie(cik: int, client, ab=pd.Timestamp("2010-01-01")) -> list[tuple[pd.Timestamp, int]]:
+    """Wechselpunkte (gültig ab Einreichungsdatum, SIC) aus den Köpfen der 10-K.
+
+    Liest erstes und letztes 10-K; nur wenn die Codes abweichen, wird per Halbierung der Wechsel gesucht. So reichen
+    meist zwei Abrufe je Unternehmen. Annahme: höchstens wenige Wechsel, zwischen gleichen Codes kein Hin und Zurück.
+    """
+    liste = zehn_k_liste(cik, client, ab)
+    if liste.empty:
+        return []
+    cache: dict[int, int | None] = {}
+
+    def sic(i):
+        if i not in cache:
+            cache[i] = sic_aus_kopf(client.einreichungskopf(cik, liste.loc[i, "accn"]))
+        return cache[i]
+
+    punkte = [(liste.loc[0, "datum"], sic(0))]
+
+    def suche(links, rechts):
+        if sic(links) == sic(rechts):
+            return
+        if rechts - links == 1:
+            punkte.append((liste.loc[rechts, "datum"], sic(rechts)))
+            return
+        mitte = (links + rechts) // 2
+        suche(links, mitte)
+        suche(mitte, rechts)
+
+    suche(0, len(liste) - 1)
+    return sorted(punkte)
+
+
+def sic_am(historie: list[tuple[pd.Timestamp, int]], stichtag) -> int | None:
+    """SIC am Stichtag: letzter Wechselpunkt bis zum Stichtag; vor dem ersten 10-K gilt der erste bekannte Code."""
+    if not historie:
+        return None
+    tag = pd.Timestamp(stichtag)
+    gueltig = [s for d, s in historie if d <= tag]
+    return gueltig[-1] if gueltig else historie[0][1]
+
+
+def ist_finanzwert(sic: int | None, bereich=(6000, 6999)) -> bool | None:
+    return None if sic is None else bereich[0] <= sic <= bereich[1]
+
+
+def lade_sic_historien(universum: pd.DataFrame, client=None) -> dict[int, list]:
+    """SIC-Historie für alle CIKs (inklusive Vorgänger) der ab 2012 relevanten Mitgliedschaften; im Cache."""
+    from tradingbot.daten.cache import standard_cache
+    from tradingbot.daten.sec import SecClient
+
+    client = client or SecClient()
+    cache = standard_cache()
+    relevant = universum[universum["bis"].isna() | (universum["bis"] >= "2012-01-01")]
+    ciks = {int(c) for c in relevant["cik"].dropna()} | {int(c) for liste in relevant["vorgaenger_ciks"] if liste is not None for c in list(liste)}
+    tabelle, _ = cache.lesen("universum", "sic_historie")
+    bekannt = {} if tabelle is None else {int(c): [(d, int(s)) for d, s in zip(g["gueltig_ab"], g["sic"])] for c, g in tabelle.groupby("cik")}
+    neu = False
+    for cik in sorted(ciks - set(bekannt)):
+        try:
+            bekannt[cik] = [(d, s) for d, s in sic_historie(cik, client) if s is not None]
+        except DatenFehler as fehler:
+            log.warning("SIC-Historie für CIK %s fehlt: %s", cik, fehler)
+            bekannt[cik] = []
+        neu = True
+    if neu:
+        zeilen = [{"cik": c, "gueltig_ab": d, "sic": s} for c, h in bekannt.items() for d, s in h]
+        cache.schreiben("universum", "sic_historie", pd.DataFrame(zeilen, columns=["cik", "gueltig_ab", "sic"]),
+                        {"quelle": "SEC-Einreichungsköpfe (10-K)", "ciks": len(bekannt)})
+    return bekannt
+
+
 def passt_zum_intervall(zehn_k: pd.DatetimeIndex, von, bis, ab=pd.Timestamp("2011-01-01")) -> bool:
     """Hat die CIK im (relevanten Teil des) Mitgliedszeitraums 10-K eingereicht?"""
     start = max(pd.Timestamp(von) if pd.notna(von) else ab, ab)

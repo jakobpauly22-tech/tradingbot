@@ -120,6 +120,38 @@ class SecClient:
         """Zusatzseite älterer Einreichungen (Name aus submissions['filings']['files'])."""
         return self.json_mit_cache(f"{SEC_DATA}/submissions/{name}", self.cache_wurzel / "submissions" / f"{name}.gz")
 
+    def einreichungskopf(self, cik, accn: str) -> str:
+        """Kopf (Header) einer Einreichung als Text; ändert sich nie, daher dauerhaft gecacht."""
+        datei = self.cache_wurzel / "koepfe" / f"{accn}.txt.gz"
+        if datei.exists():
+            with gzip.open(datei, "rt", encoding="utf-8") as f:
+                return f.read()
+        ordner = f"{SEC_WWW}/Archives/edgar/data/{int(cik)}/{accn.replace('-', '')}/{accn}"
+
+        def einmal(url):
+            self.drossel.warten()
+            try:
+                antwort = self.sitzung.get(url, headers={"User-Agent": self.user_agent}, timeout=60)
+            except requests.RequestException as fehler:
+                raise VoruebergehenderFehler(f"SEC nicht erreichbar ({type(fehler).__name__})") from None
+            if antwort.status_code == 200:
+                return antwort.text
+            if antwort.status_code in (429, 500, 502, 503, 504):
+                raise VoruebergehenderFehler(f"SEC HTTP {antwort.status_code} für {url}")
+            raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
+
+        # .hdr.sgml gibt es für alle Jahrgänge (klein); -index-headers.html nur für neuere Einreichungen
+        try:
+            text = mit_wiederholung(lambda: einmal(ordner + ".hdr.sgml"), beschreibung=f"SEC Kopf {accn}")
+        except DatenFehler as fehler:
+            if isinstance(fehler, VoruebergehenderFehler):
+                raise
+            text = mit_wiederholung(lambda: einmal(ordner + "-index-headers.html"), beschreibung=f"SEC Kopf {accn}")
+        datei.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(datei, "wt", encoding="utf-8") as f:
+            f.write(text)
+        return text
+
     def entity_suche(self, text: str) -> list[tuple[int, str]]:
         """SEC-Firmensuche (wie das Suchfeld auf sec.gov): Liste (CIK, Name), beste Treffer zuerst."""
         import hashlib

@@ -128,3 +128,39 @@ def test_cik_korrekturen_mit_namenspruefung():
     falsch = {"cik": [{"ticker": "CA", "name": "CA Technologies", "cik": 34088, "erwartet": "CA, INC"}]}
     with pytest.raises(ValueError, match="erwartet war"):
         cik_korrekturen_anwenden(t, falsch, client)
+
+
+def test_sic_aus_kopf_beide_formate():
+    from tradingbot.daten.universum import sic_aus_kopf
+
+    assert sic_aus_kopf("STANDARD INDUSTRIAL CLASSIFICATION:\tELECTRONIC COMPUTERS [3571]\n") == 3571
+    assert sic_aus_kopf("<COMPANY-DATA>\n<CONFORMED-NAME>X\n<ASSIGNED-SIC>2834\n") == 2834
+    assert sic_aus_kopf("kein Code") is None
+
+
+class _KopfClient:
+    """10-K von 2010 bis 2019; SIC wechselt mit dem 10-K von 2016 (z.B. REIT-Umwandlung)."""
+
+    def __init__(self):
+        self.abrufe = 0
+        jahre = range(2010, 2020)
+        self.recent = {"filingDate": [f"{j}-02-20" for j in jahre], "accessionNumber": [f"a{j}" for j in jahre], "form": ["10-K"] * 10}
+
+    def submissions(self, cik):
+        return {"filings": {"recent": self.recent, "files": []}}, None
+
+    def einreichungskopf(self, cik, accn):
+        self.abrufe += 1
+        return f"<ASSIGNED-SIC>{4899 if int(accn[1:]) < 2016 else 6798}"
+
+
+def test_sic_historie_findet_wechsel_mit_wenigen_abrufen():
+    from tradingbot.daten.universum import ist_finanzwert, sic_am, sic_historie
+
+    client = _KopfClient()
+    historie = sic_historie(1, client)
+    assert historie == [(pd.Timestamp("2010-02-20"), 4899), (pd.Timestamp("2016-02-20"), 6798)]
+    assert client.abrufe <= 6                                               # Halbierung statt zehn Abrufe
+    assert sic_am(historie, "2015-12-31") == 4899 and sic_am(historie, "2016-03-01") == 6798
+    assert sic_am(historie, "2005-01-01") == 4899                           # vor dem ersten 10-K: erster Code
+    assert ist_finanzwert(6798) and not ist_finanzwert(4899) and ist_finanzwert(None) is None

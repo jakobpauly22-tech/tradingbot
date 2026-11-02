@@ -8,6 +8,9 @@ sec:
   restatements: erstmeldung            # bei Restatements gilt der zuerst gemeldete Wert
   jahresdauer_tage: [350, 380]         # Länge einer Geschäftsjahresperiode (52/53-Wochen-Jahre)
 
+tiingo:
+  anfragen_pro_stunde: 50              # kostenloser Zugang; bei höherem Plan anpassen
+
 universum:
   index: SP500_historisch              # Zusammensetzung je Stichtag, nicht die heutigen Mitglieder
   # Entscheidung 02.11.2026: Finanzwerte (SIC 6000–6999, inklusive REITs) fallen im ersten Lauf ganz aus dem
