@@ -123,3 +123,36 @@ Zeitraum 01.10.2016 bis 31.12.2024 (gewerteter Backtest), Tresor bleibt zu.
 - Änderungen nur bei einem Fehler oder mit theoretischer Begründung, nie weil eine Variante besser abschneidet. Jede
   getestete Variante wird im Bericht gezählt (`daten/fundamental/varianten.csv`).
 - Aussagekraft: 33 Quartale; Vorsprünge unter etwa 5 Prozentpunkten p.a. sind statistisch nicht von Zufall zu unterscheiden.
+
+## Ergebnis erster Lauf (Variante 1, 03.11.2026): beide Kriterien verfehlt
+
+Lauf `daten/backtests/20261102T172824_fundamental_schatten/` (Bericht `fundamental_bericht.md`, Kopie
+`daten/fundamental/backtest_bericht.md`), Git 1be7141. Getestete Varianten: 1. Ein erster Versuch brach vor der Auswertung
+mit einem Fehler ab (Ausführungstag 4. Juli ohne US-Handel; Ordner `…_ABGEBROCHEN_fehler_4juli`), wurde behoben und
+nicht als Variante gezählt.
+
+| Reihe (01.10.2016–31.12.2024) | Rendite p.a. | Volatilität | Sharpe | max. Drawdown |
+| --- | --- | --- | --- | --- |
+| Schattenportfolio nach Kosten, vor Steuern | 10,24 % | 21,2 % | 0,44 | −41,9 % |
+| Schattenportfolio nach laufenden Steuern | 8,39 % | 22,5 % | 0,34 | −44,9 % |
+| Kontrollportfolio (gefiltertes Universum gleich gewichtet, ohne Kosten) | 13,03 % | 19,3 % | 0,63 | −37,3 % |
+| S&P 500 ohne Finanzwerte (EUR) | 16,39 % | 19,4 % | 0,79 | −31,6 % |
+| S&P 500 (SXR8) | 15,59 % | 16,1 % | 0,91 | −33,8 % |
+| MSCI ACWI IMI (SPYI) | 11,23 % | 17,3 % | 0,60 | −34,6 % |
+| S&P 500 Value (IVE, EUR) | 12,38 % | 18,5 % | 0,62 | −36,2 % |
+
+- (a) verfehlt: 10,24 % < 13,03 %. (b) verfehlt: Sharpe 0,44 < 0,79; Drawdown −41,9 % schlechter als die Grenze −36,6 %.
+- **Kein Simulationsfehler gefunden.** Gegenrechnung mit denselben Titeln je Quartal, gleich gewichtet und ohne Kosten
+  (unabhängige Rechnung über die Kontrollportfolio-Funktion): 11,80 % p.a. Die Differenz zum Simulator (1,56 Pp.)
+  entspricht den Kosten (1,51 % des Startkapitals p.a.).
+- **Die Auswahl selbst liegt auch ohne Kosten 1,2 Pp. p.a. unter dem Kontrollportfolio** (11,80 % gegenüber 13,03 %).
+  Schwache Jahre 2020 (−5,0 % gegenüber +6,5 %) und 2023 (+3,7 % gegenüber +11,0 %), also Wachstumsphasen; der Verlauf
+  ähnelt dem Value-Index IVE (2020 −7,8 %). Das passt zu einer Value-Neigung durch E/P und EBIT/EV.
+- Kosten: 340 Trades, 1.249 € (Gebühren 302 €, Währungstausch 604 €, Spread und Slippage 343 €), Umschlag 88 % p.a.
+  Der Währungstausch je Order (mindestens 2 USD) ist der größte Posten.
+- Branchen: Verarbeitendes Gewerbe (D) 38 % gegenüber 47 % im Universum, Handel (G) 17 % gegenüber 9 %.
+- Delistings: 43 Kursreihen enden im Zeitraum (42 Übernahmen, 1 Pleite); im Portfolio betroffen nur Raytheon (Fusion 2020).
+- Aussagekraft: Der Abstand zum Kontrollportfolio (2,8 Pp.) liegt unter der Schwelle von etwa 5 Pp., die man von Zufall
+  unterscheiden könnte; der Abstand beim Sharpe ist deutlich.
+
+Nächster Schritt laut Regel: mit Jakob besprechen. Keine Änderung ohne Fehler oder theoretische Begründung.

@@ -185,7 +185,7 @@ def main() -> int:
     text = [f"# Fundamental-Schattenportfolio – erster gewerteter Backtest", "",
             f"Zeitraum {tage[0].date()} bis {tage[-1].date()} ({len(ranglisten)} Rebalancing-Stichtage), virtuell "
             f"{sp['kapital']:,.0f} €, {sp['titel']} Titel. {VARIANTE}. Getestete Varianten bisher: {anzahl_varianten}.", "",
-            f"Ablage: `{lauf.pfad.relative_to(PROJEKT_WURZEL) if lauf.pfad else '–'}`; Scores-Cache: {scores_meta.get('erstellt_am', scores_meta.get('gespeichert_um', '?'))}.", "",
+            f"Ablage: `{lauf.pfad.relative_to(PROJEKT_WURZEL) if lauf.pfad else '–'}`; Scores-Cache: {scores_meta.get('stichtage', '?')} Stichtage, Zeitraum {scores_meta.get('zeitraum', '?')}.", "",
             "## Erfolgskriterien (vor dem Lauf festgeschrieben)", "",
             "| Kriterium | Schattenportfolio | Vergleich | Ergebnis |", "| --- | --- | --- | --- |",
             f"| (a) Rendite p.a. nach Kosten, vor Steuern ≥ Kontrollportfolio | {pz(s_vor['cagr'])} | {pz(s_kon['cagr'])} | {ok(krit_a)} |",
