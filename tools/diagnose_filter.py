@@ -1,4 +1,4 @@
-r"""Diagnose der Ausschlussfilter (Variante 2, Entscheidung Jakob 03.11.2026).
+r"""Diagnose der Ausschlussfilter (Variante 2, Entscheidung Jakob 02.11.2026).
 
 Frage: Taugen die Filter (Piotroski, Altman, Beneish) als Veto im Risk-Manager?
 Vergleich, quartalsweise, gleich gewichtet, ohne Kosten und vor Steuern, 01.10.2016 bis 31.12.2024:

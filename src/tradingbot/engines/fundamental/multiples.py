@@ -1,4 +1,4 @@
-"""Multiples als Perzentil-Rang innerhalb der Vergleichsgruppe (Entscheidung Jakob 03.11.2026, config/fundamental.yaml).
+"""Multiples als Perzentil-Rang innerhalb der Vergleichsgruppe (Entscheidung Jakob 02.11.2026, config/fundamental.yaml).
 
 - Marktwert EK am Stichtag = Schlusskurs (letzter bis zum Stichtag) × ausstehende Aktien (SEC-Deckblatt, bekannt bis zum
   Stichtag, splitbereinigt). Plausibilisiert gegen den geprüften Streubesitz, fortgeschrieben mit dem Kurs: Streubesitz

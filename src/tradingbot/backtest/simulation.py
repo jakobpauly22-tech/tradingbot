@@ -12,7 +12,7 @@ nächsten Handelstag zum letzten Schluss · (1 + Delisting-Rendite) ohne Gebühr
 Regeln der Ausführung (config/backtest.yaml):
 - Nur long, keine Margin: Käufe nur aus vorhandenem Cash, Verkäufe höchstens bis zum Bestand.
 - Ganze Stücke (IBKR-API bietet keine Bruchteile).
-- Währungen (Jakob, 03.11.2026): Fremdwährungswerte werden über eine Fremdwährungskasse abgerechnet; Dividenden und
+- Währungen (Jakob, 02.11.2026): Fremdwährungswerte werden über eine Fremdwährungskasse abgerechnet; Dividenden und
   Verkaufserlöse bleiben dort. Getauscht wird am Ausführungstag nur der Netto-Fehlbetrag je Währung (eine Tauschorder,
   Kosten `Kostenmodell.tauschkosten_eur`) und beim fiktiven Verkauf am Ende (Auszahlung). Die Tauschkosten mindern
   vereinfachend nicht den Veräußerungsgewinn (vorsichtig); Kursgewinne der Fremdwährungskasse sind steuerlich nicht

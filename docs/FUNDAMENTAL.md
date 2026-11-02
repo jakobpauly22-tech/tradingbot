@@ -1,6 +1,6 @@
 # Fundamental-Engine: Ergebnisse und offene Entscheidungen
 
-Stand Sitzung 3 (03.11.2026). Code: `src/tradingbot/engines/fundamental/`; Parameter: `config/fundamental.yaml`;
+Stand Sitzung 3 (02.11.2026). Code: `src/tradingbot/engines/fundamental/`; Parameter: `config/fundamental.yaml`;
 Rechenwege an echten 10-K zum Nachrechnen: `docs/rechenwege/`.
 
 ## Umsetzung
@@ -39,7 +39,7 @@ Rund 390–400 investierbare Firmen je Stichtag (Mitglied, kein Finanzwert, gül
 Häufigste Lücke: Bruttoergebnis (viele Dienstleister, Versorger und Energieunternehmen melden keine Umsatzkosten), danach
 Vertriebs- und Verwaltungskosten. Beide fehlen Piotroski (ΔMARGIN) bzw. Beneish (GMI, SGAI).
 
-## Entscheidungen (Jakob, 03.11.2026)
+## Entscheidungen (Jakob, 02.11.2026)
 
 1. **Altman.** Kein Marktwert in Z'' (die Z''-Grenzen sind auf Buchwerten geschätzt). Stattdessen:
    - SIC 2000–3999: Altman Z (1968) in der Gefahrenzone bleibt harter Ausschluss.
@@ -51,7 +51,7 @@ Vertriebs- und Verwaltungskosten. Beide fehlen Piotroski (ΔMARGIN) bzw. Beneish
    Der hochgerechnete Wert wird kaufmännisch auf ganze Punkte gerundet, dann gilt „≤ 3 = Ausschluss“ wie im Original
    (3 von 8 → 3,375 → 3 → raus; 3 von 7 → 3,857 → 4 → bleibt). Begründung: Die Hochrechnung schätzt den
    wahrscheinlichsten ganzzahligen Wert auf der 9-Punkte-Skala; so werden Firmen mit und ohne fehlendes Signal gleich
-   behandelt (Entscheidung 03.11.2026, zweiter Teil).
+   behandelt (Entscheidung 02.11.2026, zweiter Teil).
 3. **Für Sitzung 4:** Ein fehlender Score zählt im Gesamtscore neutral (Median der Vergleichsgruppe), nie als gut.
 
 Code: `engines/fundamental/filter.py`, Parameter: `config/fundamental.yaml` (`filter`, `score.fehlender_score`).
@@ -79,7 +79,7 @@ Bericht mit Tabellen je Division: `daten/fundamental/auswertung_scores.md` (`too
 Rundung: 43 Firmen-Stichtage (3 von 7 Signalen → 4) bleiben gegenüber der ungerundeten Grenze „unter 4“ im Universum;
 keiner fällt zusätzlich heraus (1.342 statt 1.385 Ausschlüsse von 13.011 bewertbaren Firmen-Stichtagen).
 
-## Sitzung 4: Entscheidungen (Jakob, 03.11.2026)
+## Sitzung 4: Entscheidungen (Jakob, 02.11.2026)
 
 Parameter in `config/fundamental.yaml` (`score`, `schattenportfolio`, `erfolgskriterien`), vor dem ersten Lauf festgelegt.
 
@@ -108,7 +108,7 @@ mindestens 5 Firmen, sonst Division). *Vor Steuern* heißt auch ohne US-Quellens
 anrechenbar); dafür wird das Schattenportfolio ein zweites Mal mit Kosten, aber ohne Steuern simuliert. Der Lauf mit
 Steuern wird auf allen drei Ebenen berichtet.
 
-## Erfolgskriterien des ersten Laufs (vor dem Lauf festgeschrieben, 03.11.2026)
+## Erfolgskriterien des ersten Laufs (vor dem Lauf festgeschrieben, 02.11.2026)
 
 Zeitraum 01.10.2016 bis 31.12.2024 (gewerteter Backtest), Tresor bleibt zu.
 
@@ -124,7 +124,7 @@ Zeitraum 01.10.2016 bis 31.12.2024 (gewerteter Backtest), Tresor bleibt zu.
   getestete Variante wird im Bericht gezählt (`daten/fundamental/varianten.csv`).
 - Aussagekraft: 33 Quartale; Vorsprünge unter etwa 5 Prozentpunkten p.a. sind statistisch nicht von Zufall zu unterscheiden.
 
-## Ergebnis erster Lauf (Variante 1, 03.11.2026): beide Kriterien verfehlt
+## Ergebnis erster Lauf (Variante 1, 02.11.2026): beide Kriterien verfehlt
 
 Lauf `daten/backtests/20261102T172824_fundamental_schatten/` (Bericht `fundamental_bericht.md`, Kopie
 `daten/fundamental/backtest_bericht.md`), Git 1be7141. Getestete Varianten: 1. Ein erster Versuch brach vor der Auswertung
@@ -157,7 +157,7 @@ nicht als Variante gezählt.
 
 Nächster Schritt laut Regel: mit Jakob besprechen. Keine Änderung ohne Fehler oder theoretische Begründung.
 
-## Entscheidungen nach dem ersten Lauf (Jakob, 03.11.2026)
+## Entscheidungen nach dem ersten Lauf (Jakob, 02.11.2026)
 
 1. **Erkenntnis, keine Anpassung:** Der kombinierte Score geht nicht als Stockpicker ins Paper Trading. Gewichte und Score
    bleiben unverändert.
@@ -175,7 +175,7 @@ Nächster Schritt laut Regel: mit Jakob besprechen. Keine Änderung ohne Fehler 
 4. **Diagnose der Filter als Variante 2** (siehe unten): Taugen Piotroski, Altman und Beneish als Veto im Risk-Manager?
 5. **DCF zurückgestellt.** Danach weiter mit der nächsten Engine laut Roadmap.
 
-## Neuberechnung Variante 1 mit korrigiertem Kostenmodell (03.11.2026, keine neue Variante)
+## Neuberechnung Variante 1 mit korrigiertem Kostenmodell (02.11.2026, keine neue Variante)
 
 Lauf `daten/backtests/20261102T174450_fundamental_schatten/`, Git 4c967a7. Strategie unverändert.
 
@@ -190,7 +190,7 @@ Lauf `daten/backtests/20261102T174450_fundamental_schatten/`, Git 4c967a7. Strat
 Beide Kriterien bleiben verfehlt: (a) 11,17 % < 13,03 % (Kontrollportfolio); (b) Sharpe 0,48 < 0,79, Drawdown
 −41,8 % schlechter als die Grenze −36,6 %. Die Entscheidung oben (keine Anpassung) bleibt.
 
-## Diagnose der Filter (Variante 2, 03.11.2026)
+## Diagnose der Filter (Variante 2, 02.11.2026)
 
 `tools/diagnose_filter.py`, Bericht `daten/fundamental/diagnose_filter.md`. Gleich gewichtet, quartalsweise, ohne Kosten,
 vor Steuern, 01.10.2016 bis 31.12.2024.

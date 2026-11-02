@@ -27,7 +27,7 @@ universum:
     im_bericht_markieren: true
 
 schattenportfolio:
-  # Entscheidungen Sitzung 4 (Jakob, 03.11.2026); Code: engines/fundamental/schatten.py
+  # Entscheidungen Sitzung 4 (Jakob, 02.11.2026); Code: engines/fundamental/schatten.py
   kapital: 10000.0
   titel: 20                            # höchstens 20 Positionen
   gewichtung: gleich                   # Ziel 5 % je Titel (Core-Regel: höchstens 5 % je Einzelaktie beim Kauf)
@@ -50,17 +50,17 @@ schattenportfolio:
   kontrollportfolio: alle Titel des gefilterten Universums gleich gewichtet, quartalsweise, ohne Kosten, vor Steuern
   risikofreier_zins: ECBDFR            # Sharpe mit EUR-Geldmarktzins (FRED)
 
-erfolgskriterien:                      # vor dem ersten Lauf festgeschrieben (03.11.2026), docs/FUNDAMENTAL.md
+erfolgskriterien:                      # vor dem ersten Lauf festgeschrieben (02.11.2026), docs/FUNDAMENTAL.md
   auswahl: Rendite p.a. nach Kosten und vor Steuern >= Kontrollportfolio
   risiko_sharpe: Sharpe nach Kosten >= Sharpe S&P 500 ohne Finanzwerte (EUR)
   risiko_max_drawdown_pp: 5.0          # maximaler Drawdown höchstens 5 Prozentpunkte schlechter als S&P 500 ohne Finanzwerte (EUR)
   nur_berichtet: [SXR8.DE, SPYI.DE, IVE]
 filter:                                # Code: engines/fundamental/filter.py
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
-  # Entscheidung 03.11.2026: bei 7 oder 8 von 9 Signalen auf 9 Punkte hochrechnen und markieren; darunter Filter überspringen
-  piotroski_mindestsignale: 7          # 7–8 Signale: auf 9 Punkte hochrechnen, kaufmännisch runden (03.11.2026)
+  # Entscheidung 02.11.2026: bei 7 oder 8 von 9 Signalen auf 9 Punkte hochrechnen und markieren; darunter Filter überspringen
+  piotroski_mindestsignale: 7          # 7–8 Signale: auf 9 Punkte hochrechnen, kaufmännisch runden (02.11.2026)
   altman:
-    # Entscheidungen 03.11.2026:
+    # Entscheidungen 02.11.2026:
     # - verarbeitendes Gewerbe (SIC 2000–3999): Altman Z (1968), X4 mit Marktwert point-in-time; Gefahrenzone = harter Ausschluss
     # - Versorger (SIC 4900–4999): kein Altman
     # - übrige: Z'' (Buchwert; Grenzen auf Buchwerten geschätzt, daher kein Marktwert); Gefahrenzone allein nur Warnhinweis,
@@ -72,31 +72,31 @@ filter:                                # Code: engines/fundamental/filter.py
     uebrige: z_zwei_strich             # Gefahrenzone Z'' < 1,10, sicher Z'' > 2,60 (Altman 2000)
     uebrige_ausschluss: gefahrenzone_und_zweites_signal   # Piotroski ≤ 3 oder operativer Cashflow_t < 0
   beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
-  beneish_fehlend: ueberspringen       # nicht berechenbar → Filter überspringen und markieren (03.11.2026)
+  beneish_fehlend: ueberspringen       # nicht berechenbar → Filter überspringen und markieren (02.11.2026)
 
 kennzahlen_regeln:
   aktualitaet_monate: 15               # letztes Geschäftsjahr höchstens 15 Monate vor dem Stichtag, sonst nicht bewertbar
 
 multiples:
-  # Entscheidung 03.11.2026: Vergleichsgruppe zweistellige SIC (Major Group) mit mindestens 5 Firmen, sonst SIC-Division.
+  # Entscheidung 02.11.2026: Vergleichsgruppe zweistellige SIC (Major Group) mit mindestens 5 Firmen, sonst SIC-Division.
   # Multiples als Perzentil-Rang innerhalb der Gruppe; Ausreißer vorher auf 1./99. Perzentil gekappt; negativer EV markiert.
   gruppe_min_firmen: 5
   kappung_perzentile: [0.01, 0.99]
 
 backtest:
-  # Regel (Jakob 03.11.2026): Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden
+  # Regel (Jakob 02.11.2026): Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden
   # Stichtage unter 2 % nicht kaufbarem Gewicht im investierbaren Universum liegen (Quartalsbeginn des Stichtags).
   # Berechnet von tools/auswertung_abdeckung.py (abdeckung.gewerteter_beginn); weicht das Ergebnis bei neuen Daten von
   # `gewertet_ab` ab, meldet das Werkzeug das laut – das Datum wird nie still verschoben, Jakob entscheidet.
   # Davor läuft ab `vorlauf_ab` ein nicht gewerteter Vorlauf für Indikatoren. WRDS/CRSP entfällt (nur akademische Nutzung).
   vorlauf_ab: 2012-01-01
   gewertet_ab_regel: erster_stichtag_ab_dem_alle_unter_2_prozent
-  gewertet_ab: 2016-10-01               # Ergebnis der Regel am 03.11.2026 (erster Handelstag des Quartals: 03.10.2016)
+  gewertet_ab: 2016-10-01               # Ergebnis der Regel am 02.11.2026 (erster Handelstag des Quartals: 03.10.2016)
   gewertet_bis: 2024-12-31              # Tresor ab 2025 bleibt zu
 
 score:
   erster_lauf: [qualitaet, multiples]  # Piotroski und Accruals; E/P und EBIT/EV gegen den Branchenmedian
-  # Entscheidungen Sitzung 4 (03.11.2026): Qualität 50 %, Bewertung 50 %, je Hälfte beide Ränge gleich.
+  # Entscheidungen Sitzung 4 (02.11.2026): Qualität 50 %, Bewertung 50 %, je Hälfte beide Ränge gleich.
   # Der DCF kommt später in die Bewertungshälfte. Code: engines/fundamental/gesamtscore.py
   gewichte:
     qualitaet: 0.5

@@ -1,4 +1,4 @@
-"""Auswertung der Kursabdeckung im Universum (Rückmeldung Jakob 03.11.2026).
+"""Auswertung der Kursabdeckung im Universum (Rückmeldung Jakob 02.11.2026).
 
 Zwei Fälle werden getrennt:
 1. Nicht kaufbar: Eine Firma hat am Auswahltag (Rebalancing-Stichtag) keine gültige Kursreihe
@@ -53,7 +53,7 @@ def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, fin
     gueltig: bool je Mitgliedschafts-Nr. (fehlend = nicht gültig)
     gewicht_fn(nr, stichtag) → Streubesitz der Firma in USD oder None; finanzwert_fn(nr, stichtag) → True/False/None
     firma_fn(nr) → Firmenschlüssel (CIK). Gattungen derselben Firma (GOOG/GOOGL, FOX/FOXA …) zählen beim Gewicht
-    einmal; die Firma gilt als kaufbar, wenn mindestens eine Gattung eine gültige Reihe hat (Jakob, 03.11.2026).
+    einmal; die Firma gilt als kaufbar, wenn mindestens eine Gattung eine gültige Reihe hat (Jakob, 02.11.2026).
     """
     firma_fn = firma_fn or (lambda nr: nr)
     zeilen = []
@@ -77,7 +77,7 @@ def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, fin
 
 
 def gewerteter_beginn(tabelle: pd.DataFrame, schwelle: float = SCHWELLE_GEWICHT) -> pd.Timestamp | None:
-    """Regel (Jakob 03.11.2026): erster Rebalancing-Stichtag, ab dem alle folgenden Stichtage unter `schwelle` nicht
+    """Regel (Jakob 02.11.2026): erster Rebalancing-Stichtag, ab dem alle folgenden Stichtage unter `schwelle` nicht
     kaufbarem Gewicht im investierbaren Universum liegen. Ergebnis ist der Quartalsbeginn dieses Stichtags.
 
     `tabelle`: Ergebnis von nicht_kaufbar_je_stichtag (Spalten stichtag, gewicht_investierbar_ohne_kurse).

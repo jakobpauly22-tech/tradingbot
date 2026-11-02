@@ -46,7 +46,7 @@ class Kostenmodell:
 
         EUR-Börsen: max(Minimum, Satz · Orderwert), höchstens Maximum.
         USD-Börsen: max(Minimum, je Stück · Stückzahl), höchstens max_anteil · Orderwert, umgerechnet mit `eur_kurs`
-        (USD je 1 EUR). Der Währungstausch ist seit 03.11.2026 keine Orderkost mehr (siehe `tauschkosten_eur`).
+        (USD je 1 EUR). Der Währungstausch ist seit 02.11.2026 keine Orderkost mehr (siehe `tauschkosten_eur`).
         """
         if self.ohne_gebuehren:
             return 0.0
@@ -61,7 +61,7 @@ class Kostenmodell:
     def tauschkosten_eur(self, waehrung: str, betrag_fw: float, eur_kurs: float) -> float:
         """Kosten eines Währungstauschs in EUR: max(Minimum, Satz · Betrag) in USD (IBKR), umgerechnet mit `eur_kurs`.
 
-        Entscheidung Jakob 03.11.2026: Die Fremdwährungskasse wird gehalten; getauscht wird nur bei Ein- und Auszahlungen
+        Entscheidung Jakob 02.11.2026: Die Fremdwährungskasse wird gehalten; getauscht wird nur bei Ein- und Auszahlungen
         bzw. für den Netto-Saldo am Ausführungstag, nicht je Order.
         """
         if self.ohne_gebuehren or betrag_fw <= 0:

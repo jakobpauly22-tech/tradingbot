@@ -1,4 +1,4 @@
-r"""Börsenwert-Prüfung aller gültigen Kursreihen (Rückmeldung Jakob 03.11.2026).
+r"""Börsenwert-Prüfung aller gültigen Kursreihen (Rückmeldung Jakob 02.11.2026).
 
 Aufruf:  .venv\Scripts\python tools\pruefe_boersenwerte.py
 Ergebnis: daten/universum/boersenwert_pruefung.csv und .md

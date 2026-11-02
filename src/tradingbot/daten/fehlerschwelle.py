@@ -1,4 +1,4 @@
-"""Fehlerschwelle für Datenwerkzeuge (Entscheidung Jakob 03.11.2026).
+"""Fehlerschwelle für Datenwerkzeuge (Entscheidung Jakob 02.11.2026).
 
 Liegt der Anteil an Lade- oder Prüffehlern über 5 %, bricht das Werkzeug ab und meldet das laut, statt eine
 Statusdatei zu schreiben. Ein Fehler ist eine Ausnahme beim Laden oder Prüfen; ein reguläres Prüfergebnis wie

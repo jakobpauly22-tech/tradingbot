@@ -99,8 +99,8 @@ def test_plausibel_boersenwert_und_abdeckung():
     assert "Werktage" in plausibel(luecke, aktien, None, "2013-01-01")["grund"]
 
 
-# --- Wiederverwendete Ticker (Rückmeldung Jakob 03.11.2026) ---------------------------------------------------
-# Kurszeitraum und Name: echte Tiingo-Werte vom 02./03.11.2026 (kursstatus.csv, Metadaten-Abruf); Mitgliedschaft aus
+# --- Wiederverwendete Ticker (Rückmeldung Jakob 02.11.2026) ---------------------------------------------------
+# Kurszeitraum und Name: echte Tiingo-Werte vom 02.11.2026 (kursstatus.csv, Metadaten-Abruf); Mitgliedschaft aus
 # dem Universum; die Kursreihen selbst sind künstlich (gleichbleibender Kurs an jedem Werktag).
 SIEBEN_FAELLE = [
     # ticker, Mitglied bis, Tiingo erster/letzter Kurs, Tiingo-Name, bekannte Namen (Index, SEC heute und früher)

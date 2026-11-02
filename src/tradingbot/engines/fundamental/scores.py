@@ -43,7 +43,7 @@ PIOTROSKI_SIGNALE = {
     "delta_margin": [("bruttoergebnis", 0), ("umsatz", 0), ("bruttoergebnis", 1), ("umsatz", 1)],
     "delta_turn": [("umsatz", 0), ("bilanzsumme", 1), ("umsatz", 1), ("bilanzsumme", 2)],
 }
-PIOTROSKI_MINDESTSIGNALE = 7      # Entscheidung Jakob 03.11.2026 (config/fundamental.yaml)
+PIOTROSKI_MINDESTSIGNALE = 7      # Entscheidung Jakob 02.11.2026 (config/fundamental.yaml)
 
 
 def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -> dict:
@@ -60,7 +60,7 @@ def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -
                    EQ_OFFER: keine neuen Aktien – Näherung über die gewichtete Aktienzahl (t ≤ t−1), da die SEC-Daten
                    die Ausgabe von Stammaktien nicht einheitlich melden
     Effizienz:     ΔMARGIN: Bruttomarge gestiegen;  ΔTURN: Kapitalumschlag Umsatz_t/BS_{t−1} gestiegen
-    Fehlende Signale (Entscheidung Jakob 03.11.2026): alle 9 → `wert`; 7 oder 8 → auf 9 Punkte hochgerechnet
+    Fehlende Signale (Entscheidung Jakob 02.11.2026): alle 9 → `wert`; 7 oder 8 → auf 9 Punkte hochgerechnet
     (`wert_hochgerechnet` = Punkte · 9 / Anzahl, `hochgerechnet` = True); weniger → kein Wert, der Filter wird übersprungen.
     """
     signale, zwischen, fehlend = {}, {}, []

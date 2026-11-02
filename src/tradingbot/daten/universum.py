@@ -33,7 +33,7 @@ WIKI_AKTUELL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 WIKI_HISTORIE = "https://en.wikipedia.org/wiki/Historical_components_of_the_S%26P_500"
 SEC_NAMEN = "https://www.sec.gov/Archives/edgar/cik-lookup-data.txt"
 
-# Die rekonstruierte Zusammensetzung gilt erst ab 2012 als geprüft (Jakob, 03.11.2026): ab hier 500–506 Mitglieder je
+# Die rekonstruierte Zusammensetzung gilt erst ab 2012 als geprüft (Jakob, 02.11.2026): ab hier 500–506 Mitglieder je
 # Quartal, Abgleich mit fja05680 bis 2019 und Korrekturen in config/universum_korrekturen.yaml. Für frühere Stichtage
 # ist die Wikipedia-Änderungstabelle lückenhaft; Abfragen davor nur mit ausdrücklichem Schalter.
 GEPRUEFT_AB = pd.Timestamp("2012-01-01")

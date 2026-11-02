@@ -1,4 +1,4 @@
-"""Fundamental-Schattenportfolio und Kontrollportfolio (Entscheidungen Jakob 03.11.2026, config/fundamental.yaml
+"""Fundamental-Schattenportfolio und Kontrollportfolio (Entscheidungen Jakob 02.11.2026, config/fundamental.yaml
 `schattenportfolio`, docs/FUNDAMENTAL.md).
 
 Auswahl am Rebalancing-Stichtag (ausgeführt zur Eröffnung des nächsten Handelstags):

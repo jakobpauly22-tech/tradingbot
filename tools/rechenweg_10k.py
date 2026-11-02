@@ -1,4 +1,4 @@
-r"""Rechenwege der Fundamental-Scores an echten 10-K, zum Nachrechnen von Hand (Wunsch Jakob 03.11.2026).
+r"""Rechenwege der Fundamental-Scores an echten 10-K, zum Nachrechnen von Hand (Wunsch Jakob 02.11.2026).
 
 Aufruf:  .venv\Scripts\python tools\rechenweg_10k.py
 Ergebnis: docs/rechenwege/<fall>.md – je Eingangswert XBRL-Begriff, Teil des Abschlusses, Geschäftsjahr und Fundstelle

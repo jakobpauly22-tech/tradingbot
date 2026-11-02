@@ -92,7 +92,7 @@ def test_marktwert_aus_streubesitz_fortgeschrieben():
     assert mw.loc["2019-07-05"] == pytest.approx(5e10 * 132 / 100)               # 3·10¹⁹ verworfen, alter Wert läuft weiter
 
 
-# --- Korrekturen nach dem ersten Gegenprobe-Lauf (Jakob 03.11.2026) -------------------------------------------------
+# --- Korrekturen nach dem ersten Gegenprobe-Lauf (Jakob 02.11.2026) -------------------------------------------------
 def test_fehler_feiertag_26_12_2018_und_korrektur():
     from tradingbot.daten.index_nachbau import handelstage
 
@@ -135,7 +135,7 @@ def _reihe(werte):
 
 
 def test_streubesitz_garmin_echte_werte():
-    """Echte SEC-Werte (Cache, 03.11.2026): 2015, 2017, 2018 das 1.000-Fache; 2015 und 2017 auch die Aktienzahl falsch."""
+    """Echte SEC-Werte (Cache, 02.11.2026): 2015, 2017, 2018 das 1.000-Fache; 2015 und 2017 auch die Aktienzahl falsch."""
     from tradingbot.daten.index_nachbau import streubesitz_pruefen
 
     reihe = _reihe([("2014-06-28", 7.5512e9, "2015-02-18"), ("2015-06-27", 5.63443e12, "2016-02-17"),
@@ -152,7 +152,7 @@ def test_streubesitz_garmin_echte_werte():
 
 
 def test_streubesitz_nvidia_echter_wachstumsfall_bleibt_gueltig():
-    """Echte SEC- und Kurswerte (Cache, 03.11.2026); Kurse splitbereinigt, Aktienzahl daher mal 40 (Splits 2021, 2024)."""
+    """Echte SEC- und Kurswerte (Cache, 02.11.2026); Kurse splitbereinigt, Aktienzahl daher mal 40 (Splits 2021, 2024)."""
     from tradingbot.daten.index_nachbau import streubesitz_pruefen
 
     reihe = _reihe([("2015-07-24", 9.91835e9, "2016-03-17"), ("2016-07-29", 2.8978e10, "2017-03-01"),

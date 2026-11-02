@@ -60,7 +60,7 @@ cik:
   - {ticker: PCS,  name: MetroPCS,                  cik: 1283699, erwartet: "METROPCS",      quelle: "nicht gefunden; heute T-Mobile US unter derselben CIK"}
   - {ticker: CDAY, name: Ceridian,                  cik: 1725057, erwartet: "CERIDIAN",      quelle: "nicht gefunden; heute Dayforce"}
   - {ticker: DWDP, name: DuPont,                    cik: 1666700, erwartet: "DOWDUPONT",     quelle: "automatisch: E. I. du Pont (30554); DowDuPont 2017–2019, heute DuPont de Nemours"}
-  - {ticker: TFCF,  name: 21st Century Fox,         cik: 1308161, erwartet: "TWENTY-FIRST CENTURY FOX", quelle: "automatisch: FedNat Holding (früher 21st Century Holding Co, Versicherer); aufgedeckt durch die Namensprüfung der Kurse, 03.11.2026"}
+  - {ticker: TFCF,  name: 21st Century Fox,         cik: 1308161, erwartet: "TWENTY-FIRST CENTURY FOX", quelle: "automatisch: FedNat Holding (früher 21st Century Holding Co, Versicherer); aufgedeckt durch die Namensprüfung der Kurse, 02.11.2026"}
   - {ticker: TFCFA, name: 21st Century Fox,         cik: 1308161, erwartet: "TWENTY-FIRST CENTURY FOX", quelle: "wie TFCF"}
   - {ticker: PCG,  name: Pacific Gas & Electric Company, cik: 1004980, erwartet: "PG&E CORP", quelle: "automatisch: Tochter Pacific Gas & Electric Co (75488); im Index war die Holding PG&E Corp"}
 

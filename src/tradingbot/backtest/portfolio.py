@@ -3,7 +3,7 @@
 Die Kaufposten sind die Grundlage für das Steuermodul (in Deutschland gilt FIFO, § 20 Abs. 4 S. 7 EStG).
 Einstand und Erlös enthalten die Ordergebühr; Spread und Slippage stecken im Preis.
 
-Währungen (Entscheidung Jakob 03.11.2026): Neben der EUR-Kasse (`cash`) führt das Teilportfolio eine Kasse je
+Währungen (Entscheidung Jakob 02.11.2026): Neben der EUR-Kasse (`cash`) führt das Teilportfolio eine Kasse je
 Fremdwährung (`fremdkasse`, Beträge in Fremdwährung). Käufe und Verkäufe von Fremdwährungswerten werden über diese Kasse
 abgerechnet; getauscht wird nur über `tauschen` (Netto-Saldo am Ausführungstag, Ein- und Auszahlung), nicht je Order.
 Einstand und Erlös bleiben in EUR zum Kurs des Handelstags (Grundlage der Abgeltungsteuer).

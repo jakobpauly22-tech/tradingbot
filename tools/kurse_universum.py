@@ -4,7 +4,7 @@ Aufruf:  .venv\Scripts\python tools\kurse_universum.py
 Dauert wegen des Tiingo-Stundenlimits mehrere Stunden; kann jederzeit abgebrochen und neu gestartet werden,
 bereits geladene Kurse und Namen kommen aus dem Cache. Status je Mitgliedschaft: daten/universum/kursstatus.csv
 
-Prüfregel (Jakob 03.11.2026, kursquellen.pruefe_kursreihe): Eine Kursreihe zählt nur, wenn sie den Mitgliedszeitraum
+Prüfregel (Jakob 02.11.2026, kursquellen.pruefe_kursreihe): Eine Kursreihe zählt nur, wenn sie den Mitgliedszeitraum
 ab 2012 abdeckt und der Firmenname aus den Metadaten passt. Sonst `gueltig = False`; im Backtest greift dann die
 Rückfall-Regel, und der Fall wird markiert. Tiingo-Metadaten werden nur abgefragt, wenn die Abdeckung passt.
 Fehlerschwelle (fehlerschwelle.py): über 5 % Lade- oder Prüffehler → Abbruch mit Exit-Code 1, keine Statusdatei.

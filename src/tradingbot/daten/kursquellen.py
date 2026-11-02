@@ -134,7 +134,7 @@ def pruefe_abdeckung(kurse: pd.DataFrame, von, bis, *, datenende=None, toleranz_
 
 
 def pruefe_kursreihe(kurse: pd.DataFrame, meta_name: str | None, kandidaten_namen: list[str], von, bis, **optionen) -> dict:
-    """Regel (Jakob 03.11.2026): Eine Kursreihe zählt nur, wenn sie den Mitgliedszeitraum abdeckt und der Firmenname aus
+    """Regel (Jakob 02.11.2026): Eine Kursreihe zählt nur, wenn sie den Mitgliedszeitraum abdeckt und der Firmenname aus
     den Metadaten passt. Sonst keine Kurse; im Backtest greift dann die Rückfall-Regel, und der Fall wird markiert.
 
     Gilt für Tiingo und yfinance gleichermaßen (wiederverwendete Ticker liefern sonst Kurse einer anderen Firma).

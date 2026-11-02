@@ -1,4 +1,4 @@
-"""Gesamtscore der Fundamental-Engine (Entscheidungen Jakob 03.11.2026, config/fundamental.yaml `score`).
+"""Gesamtscore der Fundamental-Engine (Entscheidungen Jakob 02.11.2026, config/fundamental.yaml `score`).
 
     Gesamt   = w_Q · Qualität + w_B · Bewertung                    (w_Q = w_B = 0,5)
     Qualität = ½ · Rang(Piotroski) + ½ · Rang(−Accruals)

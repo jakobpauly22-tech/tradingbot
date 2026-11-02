@@ -30,7 +30,7 @@ Bei Widersprüchen gilt die neueste Entscheidung von Jakob. Weicht der Code von 
 | Freigaben | beim Rebalancing | feste Fenster morgens und abends |
 
 - **Nur long, ohne Hebel.** Keine Leerverkäufe, Futures, CFDs, Optionen oder Margin. Short-Signale bedeuten „nicht investiert“.
-- **Währungstausch (03.11.2026):** Fremdwährungskasse wird gehalten, getauscht wird nur der Netto-Saldo am Ausführungstag und bei Ein- und Auszahlungen, nicht je Order. Offener Steuerpunkt: § 23 EStG beim Rücktausch.
+- **Währungstausch (02.11.2026):** Fremdwährungskasse wird gehalten, getauscht wird nur der Netto-Saldo am Ausführungstag und bei Ein- und Auszahlungen, nicht je Order. Offener Steuerpunkt: § 23 EStG beim Rücktausch.
 - **Kosten:** Käufe und Aufstockungen nur, wenn die Gebühr höchstens 1 % des Orderwerts ausmacht (IBKR mindestens 1,25 € je Order, also ab 125 € Orderwert). Ausstiege (Stops, Zeit-Stops, These gebrochen) sind immer erlaubt, auch bei Gebühr über 1 % (Entscheidung 01.11.2026). Bruchteilsaktien gibt es über die IBKR-API nicht.
 - **Kapital:** 500 €, Aufteilung 70/30, Prozentregeln skalieren mit. Bis das Kapital wächst, bildet der Core die Streuung über breite ETFs ab; die Fundamental-Engine führt parallel ein bewertetes Schattenportfolio aus Einzelaktien.
 - **Satellite-Schattenbetrieb (Entscheidung 01.11.2026):** Echte Satellite-Trades erst ab 1.250 € Satellite-Kapital (10 % Position = 125 € Mindestorder). Bis dahin gehen die echten 150 € in den Core-ETF, und der Satellite läuft als Schattenportfolio mit virtuellen 1.250 € nach allen Regeln inklusive Kosten und Steuern, getrennt ausgewiesen (`config/backtest.yaml`, `kapital`).
@@ -82,6 +82,7 @@ Eine Phase ist fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
 
 ## Arbeitsweise
 
+- **Datum:** immer per `date` vom System holen, nie aus dem Arbeitsverlauf schätzen (Fehler vom 02.11.2026: über Mitternacht und lange Downloads wurde ein „03.11.“ angenommen und in 83 Zeilen weitergetragen).
 - **Ein Feature pro Sitzung:** erst einen kurzen Plan zeigen, nach Jakobs Okay umsetzen, dann testen.
 - **Formeln:** Jede Finanzformel bekommt einen Docstring mit Formel, Annahmen und Quelle (Datei und Abschnitt in `wissen/`). Gibt es die Formel in `tests/musterloesungen/referenz.py`, denselben Funktionsnamen und dieselbe Signatur verwenden oder darauf aufbauen.
 - **Tests:** `pytest` muss vor jedem Commit grün sein, inklusive `tests/musterloesungen/test_uebungen.py`. Neue Logik bekommt eigene Tests.
@@ -106,12 +107,12 @@ Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nich
 - **Point-in-Time:** SEC-Werte erst ab dem Handelstag nach `filed`; bei Restatements gilt der zuerst gemeldete Wert. SEC-Abrufe höchstens 10 pro Sekunde, alles lokal cachen.
 - **Universum:** S&P 500 mit historischer Zusammensetzung je Stichtag. Kurse nicht mehr gelisteter Titel über Tiingo (Schlüssel `TIINGO_API_KEY` in `.env`); Rückfall: Übernahme/Fusion zum letzten Kurs, Pleite/Performance/unbekannt letzter Kurs minus 30 % (Shumway 1997), beides markiert und gezählt im Bericht.
 - **Schattenportfolio:** 20 Titel, gleich gewichtet, quartalsweise, virtuell 10.000 €, getrennt vom echten Core; gemessen gegen MSCI ACWI IMI und S&P 500 in Euro.
-- **Backtest-Zeitraum (Regel, 03.11.2026):** Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden Stichtage unter 2 % nicht kaufbarem Gewicht im investierbaren Universum liegen; heute 01.10.2016 bis 31.12.2024. Davor ab 2012 nur nicht gewerteter Vorlauf für Indikatoren. Die Regel steht in `config/fundamental.yaml` (`backtest`) und wird von `tools/auswertung_abdeckung.py` geprüft; ein anderes Ergebnis wird laut gemeldet, nie still übernommen. WRDS/CRSP entfällt (nur akademische Nutzung erlaubt). Die Gegenprobe des Index-Nachbaus gilt für denselben Zeitraum, Kriterien unverändert (`docs/DATENQUALITAET.md`).
+- **Backtest-Zeitraum (Regel, 02.11.2026):** Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden Stichtage unter 2 % nicht kaufbarem Gewicht im investierbaren Universum liegen; heute 01.10.2016 bis 31.12.2024. Davor ab 2012 nur nicht gewerteter Vorlauf für Indikatoren. Die Regel steht in `config/fundamental.yaml` (`backtest`) und wird von `tools/auswertung_abdeckung.py` geprüft; ein anderes Ergebnis wird laut gemeldet, nie still übernommen. WRDS/CRSP entfällt (nur akademische Nutzung erlaubt). Die Gegenprobe des Index-Nachbaus gilt für denselben Zeitraum, Kriterien unverändert (`docs/DATENQUALITAET.md`).
 - **Finanzwerte (02.11.2026):** SIC 6000–6999 (inklusive REITs) fallen im ersten Lauf ganz aus dem Universum; SIC point-in-time aus dem Kopf der jeweiligen SEC-Einreichung. Der Bericht vergleicht zusätzlich mit dem S&P 500 ohne Finanzwerte, damit der Sektoreffekt sichtbar bleibt.
 - **Filter:** Piotroski ≤ 3 raus; Altman 1968 für Industrie, Z'' für übrige; Beneish > −1,78 raus; Banken und Versicherungen ohne Altman und Beneish.
 - **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
 - **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
-- **Erster Lauf (03.11.2026):** beide Erfolgskriterien verfehlt (Ergebnis und Diagnose in `docs/FUNDAMENTAL.md`). Der kombinierte Score geht nicht als Stockpicker ins Paper Trading; Score und Gewichte bleiben unverändert. Im Paper Trading laufen zwei Schattenportfolios vorwärts mit: (A) Originalscore, (B) nur Qualitätshälfte. DCF zurückgestellt. Gezählte Varianten: `daten/fundamental/varianten.csv`.
+- **Erster Lauf (02.11.2026):** beide Erfolgskriterien verfehlt (Ergebnis und Diagnose in `docs/FUNDAMENTAL.md`). Der kombinierte Score geht nicht als Stockpicker ins Paper Trading; Score und Gewichte bleiben unverändert. Im Paper Trading laufen zwei Schattenportfolios vorwärts mit: (A) Originalscore, (B) nur Qualitätshälfte. DCF zurückgestellt. Gezählte Varianten: `daten/fundamental/varianten.csv`.
 
 ## Technik-Engine und Risk-Manager (Entscheidungen 02.11.2026)
 

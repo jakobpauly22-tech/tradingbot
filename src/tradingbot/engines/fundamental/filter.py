@@ -1,7 +1,7 @@
-"""Ausschlussfilter der Fundamental-Engine (Entscheidungen Jakob 03.11.2026, config/fundamental.yaml `filter`).
+"""Ausschlussfilter der Fundamental-Engine (Entscheidungen Jakob 02.11.2026, config/fundamental.yaml `filter`).
 
 - Piotroski: F ≤ 3 → raus. Bei 7 oder 8 von 9 Signalen gilt der auf 9 Punkte hochgerechnete Wert, kaufmännisch auf
-  ganze Punkte gerundet (Entscheidung Jakob 03.11.2026: die Hochrechnung schätzt den wahrscheinlichsten ganzzahligen
+  ganze Punkte gerundet (Entscheidung Jakob 02.11.2026: die Hochrechnung schätzt den wahrscheinlichsten ganzzahligen
   Wert der 9-Punkte-Skala, so werden Firmen mit und ohne fehlendes Signal gleich behandelt; 3 von 8 → 3,375 → 3 → raus,
   3 von 7 → 3,857 → 4 → bleibt). Bei weniger Signalen wird der Filter übersprungen (markiert).
 - Altman:

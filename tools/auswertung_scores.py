@@ -118,7 +118,7 @@ def main() -> int:
         text.append(f"| {jahr} | {n:.0f} | {anteil(g['veraltet'], g)} | {anteil(gb['piotroski'].notna(), g)} | {anteil(gb['altman'].notna(), g)} | "
                     f"{anteil(gb['beneish'].notna(), g)} | {anteil(gb['marktwert'].notna(), g)} | {anteil(gb['rang_ep'].notna(), g)} | "
                     f"{anteil(gb['rang_ebit_ev'].notna(), g)} | {anteil(gb['abgeleitet'] > 0, g)} |")
-    text += ["", "## Ausschlussquoten mit der Regel vom 03.11.2026 (an allen bewertbaren Firmen je Jahr)", "",
+    text += ["", "## Ausschlussquoten mit der Regel vom 02.11.2026 (an allen bewertbaren Firmen je Jahr)", "",
              "Piotroski: exakter Wert bei 9 Signalen, hochgerechnet bei 7–8, sonst übersprungen. Altman: Z hart im verarbeitenden Gewerbe "
              "(SIC 2000–3999), Versorger (SIC 49) ohne Altman, übrige Z'' nur mit zweitem Signal (Piotroski ≤ 3 oder CFO < 0). "
              "Beneish > −1,78 raus, fehlend übersprungen.", "",

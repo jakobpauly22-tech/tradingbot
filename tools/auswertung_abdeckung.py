@@ -1,4 +1,4 @@
-r"""Auswertung „Kursabdeckung je Stichtag“ (Rückmeldung Jakob 03.11.2026) auf Basis von daten/universum/kursstatus.csv.
+r"""Auswertung „Kursabdeckung je Stichtag“ (Rückmeldung Jakob 02.11.2026) auf Basis von daten/universum/kursstatus.csv.
 
 Aufruf:  .venv\Scripts\python tools\auswertung_abdeckung.py [--stichtage N]
 Ergebnis: daten/universum/auswertung_abdeckung.md und .csv

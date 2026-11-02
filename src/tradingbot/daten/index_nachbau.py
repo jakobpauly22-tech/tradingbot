@@ -9,7 +9,7 @@ Formel (Laspeyres-Kettenindex, wie bei Indexanbietern):
     r_i,t   = (C_i,t + D_i,t − C_i,t−1) / C_i,t−1   Gesamtrendite inklusive Dividende (simple_return)
     I_t     = I_t−1 · (1 + Σ_i w_i,t · r_i,t)
 Marktwert MW = Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs (marktwerte_aus_streubesitz), je Firma
-(nicht je Aktiengattung). Umgestellt am 03.11.2026 vor der ersten Gegenprobe, weil die Aktienzahl auf dem Deckblatt
+(nicht je Aktiengattung). Umgestellt am 02.11.2026 vor der ersten Gegenprobe, weil die Aktienzahl auf dem Deckblatt
 bei Mehrgattungsfirmen fehlt oder nur eine Gattung zählt. Abweichung zum Original: S&P nutzt tagesaktuelle
 Streubesitzfaktoren, wir den jährlichen Wert vom Deckblatt.
 Quelle Formel Gesamtrendite: wissen/02_Kapitalmarkttheorie_Portfolio_Anleihen.md, Abschnitt 2; referenz.simple_return.
@@ -21,11 +21,11 @@ import pandas as pd
 from tradingbot.kennzahlen.rendite import simple_return
 
 
-# --- Plausibilität des Streubesitzes gegen den Börsenwert (Entscheidung Jakob 03.11.2026) ------------------------
+# --- Plausibilität des Streubesitzes gegen den Börsenwert (Entscheidung Jakob 02.11.2026) ------------------------
 # Ein fester Bereich reicht nicht (Garmin meldet in drei Jahren das 1.000-Fache, noch unter 10 Bio. USD), und ein
 # Abgleich mit dem Median der Firma würde echte Wachstumsfälle verwerfen (Nvidia seit 2016 mehr als verhundertfacht).
 STREUBESITZ_ANTEIL_MIN = 0.30        # Streubesitz mindestens 30 % von Kurs × Aktienzahl am Messtag
-STREUBESITZ_ANTEIL_MAX = 1.30        # höchstens 130 % (03.11.2026, vorher 105 %): Streubesitz (Messtag Ende Q2) und
+STREUBESITZ_ANTEIL_MAX = 1.30        # höchstens 130 % (02.11.2026, vorher 105 %): Streubesitz (Messtag Ende Q2) und
                                      # Aktienzahl (Deckblattdatum) haben verschiedene Stichtage; dazwischen Rückkäufe und Kursbewegungen
 STREUBESITZ_VERAENDERUNG_FAKTOR = 3.0  # ohne Aktienzahl: Veränderung zum Vorjahr höchstens Faktor 3 neben der Kursveränderung
 AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag entfernt
@@ -94,7 +94,7 @@ def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.D
     """Marktwert je Firma und Tag aus dem Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs.
 
     Formel:  MW_i,t = F_i · C_i,t / C_i,e    (F = jüngster bis t bekannte plausible Streubesitz, gemessen am Tag e)
-    Begründung (03.11.2026): Die Aktienzahl auf dem Deckblatt fehlt oder ist eine Teilmenge bei Firmen mit mehreren
+    Begründung (02.11.2026): Die Aktienzahl auf dem Deckblatt fehlt oder ist eine Teilmenge bei Firmen mit mehreren
     Aktiengattungen (z.B. Berkshire, Alphabet, Fox); der Streubesitz wird je Firma über alle Gattungen gemeldet und
     entspricht der Streubesitz-Gewichtung des S&P 500. Point-in-time: F gilt ab dem Tag nach der Einreichung.
     `schluss`: Tage × Firmen (splitbereinigte Schlusskurse); `streubesitz`: Firma → DataFrame(wert, filed; Index = e).
@@ -147,13 +147,13 @@ def marktwert_index(renditen: pd.DataFrame, marktwerte: pd.DataFrame, mitglied: 
     return pd.DataFrame({"index": basis * (1 + r_index).cumprod(), "abdeckung": abdeckung})
 
 
-# --- Abnahme der Gegenprobe (Entscheidung Jakob 03.11.2026, docs/DATENQUALITAET.md) ----------------------------
+# --- Abnahme der Gegenprobe (Entscheidung Jakob 02.11.2026, docs/DATENQUALITAET.md) ----------------------------
 # Nachbau ohne Ausschluss gegen den offiziellen S&P 500 Total Return (^SP500TR), beide in USD, gemeinsame Handelstage.
 # Wird ein Kriterium verfehlt: erst Ursachen suchen und mit Jakob besprechen, NICHT nachjustieren.
 ABNAHME_KORRELATION_MIN = 0.99          # Korrelation der Tagesrenditen
 ABNAHME_JAHRESABWEICHUNG_MAX = 0.01     # Abweichung der Jahresrenditen je Kalenderjahr (1 Prozentpunkt)
 ABNAHME_ANNUALISIERT_MAX = 0.005        # Abweichung der annualisierten Rendite im Abnahmezeitraum (0,5 Prozentpunkte)
-# Zeitraum = gewerteter Backtest (Entscheidung Jakob 03.11.2026); die Kriterien selbst sind unverändert.
+# Zeitraum = gewerteter Backtest (Entscheidung Jakob 02.11.2026); die Kriterien selbst sind unverändert.
 def _gewerteter_zeitraum() -> tuple[str, str]:
     """Zeitraum aus config/fundamental.yaml (backtest.gewertet_ab/-bis), Ergebnis der 2-%-Regel."""
     from tradingbot.konfiguration import lade_konfiguration

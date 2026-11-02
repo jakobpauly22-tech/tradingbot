@@ -1,4 +1,4 @@
-r"""Erster gewerteter Backtest des Fundamental-Schattenportfolios (Sitzung 4, Regeln vom 03.11.2026).
+r"""Erster gewerteter Backtest des Fundamental-Schattenportfolios (Sitzung 4, Regeln vom 02.11.2026).
 
 Aufruf:  .venv\Scripts\python tools\backtest_fundamental.py
 Voraussetzung: Cache „fundamental/scores“ (tools/auswertung_scores.py).
@@ -42,9 +42,9 @@ from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
 warnings.simplefilter("ignore")
 NAME = "fundamental_schatten"
-# Neuberechnung derselben Variante (zählt nicht als neue Variante, Jakob 03.11.2026)
+# Neuberechnung derselben Variante (zählt nicht als neue Variante, Jakob 02.11.2026)
 ANLASS = "Kostenmodell Währungstausch: USD-Kasse, Netto-Tausch statt je Order"
-VARIANTE = "Variante 1: Regeln vom 03.11.2026 (Gesamtscore 50/50, Puffer 30, Drift 2,5–7,5 %, SIC2 ≤ 25 %)"
+VARIANTE = "Variante 1: Regeln vom 02.11.2026 (Gesamtscore 50/50, Puffer 30, Drift 2,5–7,5 %, SIC2 ≤ 25 %)"
 
 
 def _nn(x):

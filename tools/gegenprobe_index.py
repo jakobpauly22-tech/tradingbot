@@ -7,8 +7,8 @@ Abnahmekriterien und Zeitraum (01.04.2016–31.12.2024) aus index_nachbau / docs
 verfehlt: Ursachen suchen und mit Jakob besprechen, nicht weiter anpassen. Aufbau des Nachbaus: daten/sp500_nachbau.py.
 
 Läufe: 1 nicht bestanden (Programmierfehler, Garmin-Datenfehler); 2 bestanden mit Streubesitz-Obergrenze 105 %;
-3 (03.11.2026) mit Obergrenze 130 % (Jakob: Streubesitz Ende Q2 und Aktienzahl zum Deckblattdatum haben verschiedene
-Stichtage, dazwischen Rückkäufe und Kursbewegungen); 4 (03.11.2026) für den Zeitraum nach der 2-%-Regel ab 01.10.2016.
+3 (02.11.2026) mit Obergrenze 130 % (Jakob: Streubesitz Ende Q2 und Aktienzahl zum Deckblattdatum haben verschiedene
+Stichtage, dazwischen Rückkäufe und Kursbewegungen); 4 (02.11.2026) für den Zeitraum nach der 2-%-Regel ab 01.10.2016.
 """
 import sys
 import warnings
@@ -25,7 +25,7 @@ from tradingbot.konfiguration import PROJEKT_WURZEL
 warnings.simplefilter("ignore")
 LAUF, VORHERIGER = 4, 3
 AENDERUNG = ("Zeitraum nach der Regel für den gewerteten Beginn (erster Stichtag, ab dem alle folgenden unter 2 % nicht kaufbarem "
-             "Gewicht liegen): 01.10.2016 statt 01.04.2016. Nachbau, Daten und Kriterien unverändert, keine Anpassung (Jakob 03.11.2026).")
+             "Gewicht liegen): 01.10.2016 statt 01.04.2016. Nachbau, Daten und Kriterien unverändert, keine Anpassung (Jakob 02.11.2026).")
 
 
 def main() -> int:

@@ -10,7 +10,7 @@ Technik: Jeder Zugriff auf Daten ab dem Sperrdatum braucht eine `TresorFreigabe`
 nur über `oeffne_tresor`, das sie im Protokoll (docs/TRESOR_PROTOKOLL.md, in Git) einträgt. Eine zweite
 Öffnung für dieselbe Phase wird verweigert.
 
-Zentrale Datumsgrenze (Jakob, 03.11.2026): Alle Datenlader (Kurse mit Dividenden und Splits, Tiingo, FRED,
+Zentrale Datumsgrenze (Jakob, 02.11.2026): Alle Datenlader (Kurse mit Dividenden und Splits, Tiingo, FRED,
 SEC-Fundamentaldaten) liefern nur Daten bis `datengrenze()` (Tag vor dem Sperrdatum, heute 31.12.2024). Aufgehoben
 wird die Grenze nur innerhalb von `with tresor_geoeffnet(freigabe):` mit einer im Protokoll eingetragenen Freigabe.
 """

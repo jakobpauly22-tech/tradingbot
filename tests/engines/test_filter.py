@@ -1,4 +1,4 @@
-"""Ausschlussfilter: je Zweig der Entscheidung vom 03.11.2026 ein Fall."""
+"""Ausschlussfilter: je Zweig der Entscheidung vom 02.11.2026 ein Fall."""
 import pytest
 
 from tradingbot.engines.fundamental.filter import anwenden
