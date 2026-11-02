@@ -256,7 +256,8 @@ def main() -> int:
     for etf, erg in pruefprotokoll.get("ausschuettend", {}).items():
         text.append(f"- **Plausibilität {etf}** (inkl. Dividenden) gegen den ersetzten ETF: {pz(erg['ersatz'])} gegen {pz(erg['vergleich'])} p.a., "
                     f"Differenz {erg['differenz_pp']:+.3f} Pp. (Grenze ±{erg['max_pp']}, bestanden); nur Kurs {pz(erg['nur_kurs'])}. "
-                    "Dividenden als Zahlung in die Kasse, versteuert als Aktienfonds (Teilfreistellung 30 %).")
+                    "Die Prüfung rechnet vor Steuern (Total-Return-Index, Dividenden reinvestiert, ohne Steuern und Kosten). Im Backtest "
+                    "gehen die Dividenden als Zahlung in die Kasse und werden als Aktienfonds versteuert (Teilfreistellung 30 %).")
     text += ["- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert "
              "(Entscheidung Jakob 03.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
              "## Entscheidungsbaum (docs/TECHNIK.md)", "",

@@ -53,6 +53,10 @@ universum:
     - {ticker: EUNH.DE, datum: 2012-06-11, regel: vortagesschluss, grund: "Hoch unter Tief, Schluss außerhalb der Spanne"}
     - {ticker: EUN5.DE, datum: 2012-06-12, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
     - {ticker: EUN5.DE, datum: 2012-06-13, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
+    - {ticker: IUSA.DE, datum: 2013-02-20, regel: dividende_ergaenzen, betrag_eur: 0.0508, betrag_usd: 0.0681, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-05-29, regel: dividende_ergaenzen, betrag_eur: 0.0532, betrag_usd: 0.0684, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-08-28, regel: dividende_ergaenzen, betrag_eur: 0.0437, betrag_usd: 0.0585, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-11-27, regel: dividende_ergaenzen, betrag_eur: 0.0429, betrag_usd: 0.0582, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
 
 backtest:
   daten_ab: 2012-01-01                 # Projektentscheidung 01.11.2026 (Historie ab 2012)
