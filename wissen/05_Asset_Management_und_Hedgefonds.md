@@ -89,6 +89,25 @@ Grundlagenwissen für Strategie-Bibliothek, Technik-Engine und Smart-Money-Engin
   - **Strategie:** Engle-Granger-Test, Spread berechnen, z-Score bilden; bei z > +2 teures Papier verkaufen und billiges kaufen, bei z < −2 umgekehrt; schließen, wenn der Spread zum Mittelwert zurückkehrt.
   - **BMW/Mercedes-Benz 2021–2025:** vier Trades mit je +5,3 % bis +8,0 % (z. B. Einstieg 29.10.2021 bei z = −2,07: 100 BMW kaufen, 123 Mercedes verkaufen, +924 € bzw. +7,5 %). Haltedauer teils über ein Jahr.
 
+## 8. Technische Indikatoren (eigene Zusammenfassung, Quellen außerhalb der Vorlesung)
+
+Formeln wie in `src/tradingbot/engines/technik/indikatoren.py`; jeder Wert am Tag t nutzt nur Daten bis t.
+
+| Indikator | Formel | Quelle |
+| --- | --- | --- |
+| SMA(n) | Mittel der letzten n Schlusskurse | – |
+| Wilder-Glättung RMA(n) | Start = Mittel der ersten n Werte, dann S_t = S_{t−1} + (x_t − S_{t−1}) / n (EMA mit α = 1/n) | Wilder (1978) |
+| True Range | TR = max(H − L, \|H − C_{t−1}\|, \|L − C_{t−1}\|) | Wilder (1978) |
+| ATR(n) | RMA(TR, n); steuert Stop (2 × ATR) und Positionsgröße | Wilder (1978) |
+| RSI(n) | 100 − 100 / (1 + RS), RS = RMA(Gewinne) / RMA(Verluste) | Wilder (1978) |
+| ADX(n) | +DM/−DM aus Hoch/Tief-Differenzen, ±DI = 100 · RMA(±DM)/RMA(TR), DX = 100 · \|+DI − −DI\| / (+DI + −DI), ADX = RMA(DX) | Wilder (1978) |
+| Momentum 12−1 | im Monat M: C(Ende M−2) / C(Ende M−13) − 1, der jüngste Monat wird ausgelassen (kurzfristige Umkehr) | Jegadeesh/Titman (1993); Zeitreihen-Variante: Moskowitz/Ooi/Pedersen (2012) |
+| Donchian-Kanal | höchstes Hoch / tiefstes Tief der letzten n Tage ohne den heutigen | Donchian; Turtle-Regeln (Faith 2007) |
+
+Positionsgröße nach Risiko (fester Bruchteil): Stück = Risiko · Kapital / (2 · ATR); als Gewicht 0,01 · Kurs / (2 · ATR),
+gedeckelt (Satellite: 25 % je ETF, 10 % je Einzelaktie). Bezug zu Abschnitt 6: Trendfolge der CTAs nutzt dieselben
+Bausteine (Zeitreihen-Momentum, Ausbrüche, volatilitätsgesteuerte Positionsgröße).
+
 ## Bezug zum Trading-Bot
 
 | Konzept | Einsatz im Bot |
@@ -104,3 +123,4 @@ Grundlagenwissen für Strategie-Bibliothek, Technik-Engine und Smart-Money-Engin
 | Pairs Trading mit Kointegration | Ideen-Backlog: marktneutrales Modul (braucht Leerverkauf, später) |
 | Merger Arbitrage, Crowding | News-Engine und Smart Money: Übernahmen und überfüllte Positionen als Risiko |
 | Hedgefonds-Strategien und Manager | Smart-Money-Engine: Einordnung von 13F-Positionen nach Stil |
+| Technische Indikatoren (Abschnitt 8) | Technik-Engine: Satellite-Strategien, Stops, Positionsgröße |
