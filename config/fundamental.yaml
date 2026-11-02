@@ -40,7 +40,7 @@ schattenportfolio:
 filter:                                # Code: engines/fundamental/filter.py
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
   # Entscheidung 03.11.2026: bei 7 oder 8 von 9 Signalen auf 9 Punkte hochrechnen und markieren; darunter Filter überspringen
-  piotroski_mindestsignale: 7
+  piotroski_mindestsignale: 7          # 7–8 Signale: auf 9 Punkte hochrechnen, kaufmännisch runden (03.11.2026)
   altman:
     # Entscheidungen 03.11.2026:
     # - verarbeitendes Gewerbe (SIC 2000–3999): Altman Z (1968), X4 mit Marktwert point-in-time; Gefahrenzone = harter Ausschluss

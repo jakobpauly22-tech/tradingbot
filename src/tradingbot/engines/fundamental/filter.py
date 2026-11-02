@@ -1,7 +1,9 @@
 """Ausschlussfilter der Fundamental-Engine (Entscheidungen Jakob 03.11.2026, config/fundamental.yaml `filter`).
 
-- Piotroski: F ≤ 3 → raus. Bei 7 oder 8 von 9 Signalen gilt der auf 9 Punkte hochgerechnete Wert (markiert);
-  bei weniger Signalen wird der Filter übersprungen (markiert).
+- Piotroski: F ≤ 3 → raus. Bei 7 oder 8 von 9 Signalen gilt der auf 9 Punkte hochgerechnete Wert, kaufmännisch auf
+  ganze Punkte gerundet (Entscheidung Jakob 03.11.2026: die Hochrechnung schätzt den wahrscheinlichsten ganzzahligen
+  Wert der 9-Punkte-Skala, so werden Firmen mit und ohne fehlendes Signal gleich behandelt; 3 von 8 → 3,375 → 3 → raus,
+  3 von 7 → 3,857 → 4 → bleibt). Bei weniger Signalen wird der Filter übersprungen (markiert).
 - Altman:
   * verarbeitendes Gewerbe (SIC 2000–3999): Z (1968, Marktwert) in der Gefahrenzone → harter Ausschluss;
   * Versorger (SIC 4900–4999): kein Altman;
@@ -12,6 +14,7 @@
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -22,9 +25,18 @@ class Filterergebnis:
     hinweise: list[str] = field(default_factory=list)      # Warnhinweise und Markierungen (übersprungen, hochgerechnet)
 
 
-def piotroski_fuer_filter(p: dict) -> float | None:
-    """Wert für den Filter: exakter Score bei 9 Signalen, sonst der hochgerechnete (7–8 Signale), sonst None."""
-    return p["wert"] if p["wert"] is not None else p.get("wert_hochgerechnet")
+def kaufmaennisch_runden(x: float) -> int:
+    """Rundet .5 immer auf (Python-round rundet .5 zur geraden Zahl)."""
+    return math.floor(x + 0.5)
+
+
+def piotroski_fuer_filter(p: dict) -> int | None:
+    """Wert für den Filter: exakter Score bei 9 Signalen, sonst der hochgerechnete (7–8 Signale) kaufmännisch gerundet,
+    sonst None."""
+    if p["wert"] is not None:
+        return p["wert"]
+    hoch = p.get("wert_hochgerechnet")
+    return None if hoch is None else kaufmaennisch_runden(hoch)
 
 
 def anwenden(*, sic: int, piotroski: dict, altman: dict | None, beneish: dict, cfo_t: float | None, konfig: dict) -> Filterergebnis:
@@ -39,9 +51,10 @@ def anwenden(*, sic: int, piotroski: dict, altman: dict | None, beneish: dict, c
         ergebnis.hinweise.append("Piotroski übersprungen (weniger als 7 Signale)")
     else:
         if piotroski.get("hochgerechnet"):
-            ergebnis.hinweise.append(f"Piotroski hochgerechnet ({piotroski['anzahl_signale']} von 9 Signalen)")
+            ergebnis.hinweise.append(f"Piotroski hochgerechnet ({piotroski['anzahl_signale']} von 9 Signalen, "
+                                     f"{piotroski['wert_hochgerechnet']:.3f} → {f_score})")
         if f_score < f["piotroski_min"]:
-            ergebnis.gruende.append(f"Piotroski {f_score:.2f} ≤ 3")
+            ergebnis.gruende.append(f"Piotroski {f_score} ≤ 3")
     piotroski_schwach = f_score is not None and f_score < f["piotroski_min"]
 
     if versorger:

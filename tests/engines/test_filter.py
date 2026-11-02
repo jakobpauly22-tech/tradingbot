@@ -44,7 +44,7 @@ def test_versorger_ohne_altman():
 
 def test_piotroski_hochgerechnet_und_uebersprungen():
     hoch = anwenden(sic=7372, piotroski=_p(2, n=8), altman=None, beneish=GUT_BENEISH, cfo_t=1e9, konfig=KONFIG)
-    assert hoch.ausgeschlossen and "Piotroski 2.25 ≤ 3" in hoch.gruende and any("hochgerechnet" in h for h in hoch.hinweise)
+    assert hoch.ausgeschlossen and "Piotroski 2 ≤ 3" in hoch.gruende and any("hochgerechnet" in h for h in hoch.hinweise)
     weg = anwenden(sic=7372, piotroski=_p(1, n=6), altman=None, beneish=GUT_BENEISH, cfo_t=1e9, konfig=KONFIG)
     assert not weg.ausgeschlossen and any("übersprungen" in h for h in weg.hinweise)
 
@@ -54,3 +54,13 @@ def test_beneish_raus_oder_uebersprungen():
     assert raus.ausgeschlossen and "Beneish -1.50 > -1.78" in raus.gruende
     fehlt = anwenden(sic=2834, piotroski=_p(7), altman=_a(4.0, "sicher", "Z"), beneish={"wert": None}, cfo_t=1e9, konfig=KONFIG)
     assert not fehlt.ausgeschlossen and "Beneish übersprungen (nicht berechenbar)" in fehlt.hinweise
+
+
+@pytest.mark.parametrize("punkte, signale, gerundet, raus", [(3, 8, 3, True), (3, 7, 4, False), (4, 8, 5, False)])
+def test_piotroski_hochgerechnet_kaufmaennisch_gerundet(punkte, signale, gerundet, raus):
+    # 3 von 8 → 3,375 → 3 → raus; 3 von 7 → 3,857 → 4 → bleibt; 4 von 8 → 4,5 → 5 (kaufmännisch, nicht 4)
+    from tradingbot.engines.fundamental.filter import piotroski_fuer_filter
+    p = _p(punkte, n=signale)
+    assert piotroski_fuer_filter(p) == gerundet
+    e = anwenden(sic=7372, piotroski=p, altman=None, beneish=GUT_BENEISH, cfo_t=1e9, konfig=KONFIG)
+    assert e.ausgeschlossen is raus
