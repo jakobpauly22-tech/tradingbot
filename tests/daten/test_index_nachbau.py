@@ -41,3 +41,36 @@ def test_gesamtrendite_mit_dividende():
     k = pd.DataFrame({"close": [100.0, 98.0, 99.0], "dividende": [0.0, 3.0, 0.0]}, index=tage)
     r = gesamtrenditen({"A": k}, tage)["A"]
     assert r.iloc[1] == pytest.approx(0.01) and r.iloc[2] == pytest.approx(99 / 98 - 1)
+
+
+def _index(renditen, start="2012-01-03"):
+    tage = pd.bdate_range(start, periods=len(renditen))
+    return pd.Series(100 * np.cumprod(1 + np.asarray(renditen)), index=tage)
+
+
+def test_abnahme_bestanden_bei_nahezu_gleichem_verlauf():
+    from tradingbot.daten.index_nachbau import abnahme_gegenprobe
+
+    rng = np.random.default_rng(3)
+    r = rng.normal(0.0005, 0.01, 3270)                              # ca. 2012–2024
+    referenz = _index(r)
+    nachbau = _index(r + rng.normal(0, 0.0002, len(r)))              # 0,02 % Rauschen je Tag (≈ 0,3 Pp. p.a.), keine Drift
+    a = abnahme_gegenprobe(nachbau, referenz)
+    assert a["kriterien"]["korrelation"]["wert"] > 0.99 and a["bestanden"]
+    assert list(a["jahre"].index) == list(range(2012, 2025))
+
+
+def test_abnahme_verfehlt_bei_drift_und_bei_einem_ausreisserjahr():
+    from tradingbot.daten.index_nachbau import abnahme_gegenprobe
+
+    rng = np.random.default_rng(4)
+    r = rng.normal(0.0005, 0.01, 3270)
+    referenz = _index(r)
+    drift = abnahme_gegenprobe(_index(r + 0.0001), referenz)         # +0,01 % je Tag ≈ +2,5 Pp. p.a.
+    assert not drift["kriterien"]["annualisiert_abweichung"]["bestanden"] and not drift["bestanden"]
+    ausreisser = r.copy()
+    ausreisser[1000] += 0.03                                         # ein Tag mit +3 % zusätzlich (2015)
+    einzel = abnahme_gegenprobe(_index(ausreisser), referenz)
+    assert not einzel["kriterien"]["jahresabweichung_max"]["bestanden"]
+    assert einzel["jahre"]["abweichung"].abs().idxmax() == 2015
+    assert einzel["kriterien"]["korrelation"]["bestanden"]          # Korrelation allein hätte es nicht bemerkt

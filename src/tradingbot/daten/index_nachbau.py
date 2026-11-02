@@ -47,6 +47,45 @@ def marktwert_index(renditen: pd.DataFrame, marktwerte: pd.DataFrame, mitglied: 
     return pd.DataFrame({"index": basis * (1 + r_index).cumprod(), "abdeckung": abdeckung})
 
 
+# --- Abnahme der Gegenprobe (Entscheidung Jakob 03.11.2026, docs/DATENQUALITAET.md) ----------------------------
+# Nachbau ohne Ausschluss gegen den offiziellen S&P 500 Total Return (^SP500TR), beide in USD, gemeinsame Handelstage.
+# Wird ein Kriterium verfehlt: erst Ursachen suchen und mit Jakob besprechen, NICHT nachjustieren.
+ABNAHME_KORRELATION_MIN = 0.99          # Korrelation der Tagesrenditen
+ABNAHME_JAHRESABWEICHUNG_MAX = 0.01     # Abweichung der Jahresrenditen je Kalenderjahr (1 Prozentpunkt)
+ABNAHME_ANNUALISIERT_MAX = 0.005        # Abweichung der annualisierten Rendite 2012–2024 (0,5 Prozentpunkte)
+ABNAHME_ZEITRAUM = ("2012-01-01", "2024-12-31")
+
+
+def abnahme_gegenprobe(nachbau: pd.Series, referenz: pd.Series, zeitraum=ABNAHME_ZEITRAUM) -> dict:
+    """Prüft den Nachbau gegen den Referenzindex nach den drei Abnahmekriterien.
+
+    Formeln: Tagesrendite r_t = I_t / I_{t−1} − 1 (gemeinsame Handelstage); Jahresrendite = Indexstand am letzten
+    gemeinsamen Handelstag des Jahres / Stand am letzten des Vorjahres − 1 (erstes Jahr ab dem ersten Tag);
+    annualisiert geometrisch (CAGR, wissen/01 Abschnitt 5 und „Bezug zum Trading-Bot“).
+    Ergebnis: Werte je Kriterium, Grenzen, `bestanden` je Kriterium und gesamt sowie die Jahrestabelle.
+    """
+    from tradingbot.kennzahlen.performance import cagr
+
+    von, bis = (pd.Timestamp(z) for z in zeitraum)
+    beide = pd.concat({"nachbau": nachbau, "referenz": referenz}, axis=1).dropna().loc[von:bis]
+    renditen = beide.pct_change().dropna()
+    korrelation = float(renditen["nachbau"].corr(renditen["referenz"]))
+    jahresende = beide.groupby(beide.index.year).last()
+    start = beide.iloc[[0]].set_axis([beide.index[0].year - 1])
+    jahre = pd.concat([start, jahresende]).pct_change().dropna()
+    jahre["abweichung"] = jahre["nachbau"] - jahre["referenz"]
+    annualisiert = cagr(beide["nachbau"]) - cagr(beide["referenz"])
+    kriterien = {
+        "korrelation": {"wert": korrelation, "grenze": f">= {ABNAHME_KORRELATION_MIN}", "bestanden": korrelation >= ABNAHME_KORRELATION_MIN},
+        "jahresabweichung_max": {"wert": float(jahre["abweichung"].abs().max()), "grenze": f"<= {ABNAHME_JAHRESABWEICHUNG_MAX}",
+                                 "bestanden": bool((jahre["abweichung"].abs() <= ABNAHME_JAHRESABWEICHUNG_MAX + 1e-12).all())},
+        "annualisiert_abweichung": {"wert": float(annualisiert), "grenze": f"|x| <= {ABNAHME_ANNUALISIERT_MAX}",
+                                    "bestanden": abs(annualisiert) <= ABNAHME_ANNUALISIERT_MAX + 1e-12},
+    }
+    return {"kriterien": kriterien, "bestanden": all(k["bestanden"] for k in kriterien.values()),
+            "jahre": jahre, "tage": len(beide), "zeitraum": (beide.index[0].date(), beide.index[-1].date())}
+
+
 def gesamtrenditen(kurse: dict[str, pd.DataFrame], tage: pd.DatetimeIndex) -> pd.DataFrame:
     """Tägliche Gesamtrenditen je Titel (Tage × Titel); fehlende Tage bleiben leer (kein Auffüllen von Renditen)."""
     spalten = {}

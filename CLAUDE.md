@@ -14,6 +14,7 @@ Regelbasierter Trading-Bot für ein kleines Privatdepot (Start 500 €): Core/Sa
 | `wissen/00_Uebersicht.md` | Einstieg ins Grundlagenwissen aus dem Studium; vor dem Bau eines Moduls die passende Datei lesen (z.B. `01` Bewertung, `02` Portfolio/Anleihen, `04` Risikomanagement, `08` Kostenrechnung, `09` Ökonometrie). |
 | `tests/musterloesungen/` | 641 Tests aus Übungsblättern mit Musterlösung; `referenz.py` enthält die Referenzformeln. |
 | `docs/BOT_ANHANG.md` | Schema des täglichen Briefing-Anhangs für die News-Engine. |
+| `docs/DATENQUALITAET.md` | Regeln und Abnahmekriterien der Datenbasis (Universum, Kursreihen, Kursabdeckung, Fehlerschwelle, Gegenprobe des Index-Nachbaus). Bei Verfehlung Ursachen suchen und mit Jakob besprechen, nicht nachjustieren. |
 
 Bei Widersprüchen gilt die neueste Entscheidung von Jakob. Weicht der Code von der Roadmap ab, Jakob fragen statt still anpassen.
 
