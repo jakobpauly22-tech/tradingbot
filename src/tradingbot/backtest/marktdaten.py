@@ -29,10 +29,20 @@ class Instrument:
             object.__setattr__(self, "steuerart", "aktienfonds" if self.klasse == "etf" else "aktie")
 
 
+@dataclass(frozen=True)
+class Delisting:
+    """Ende der Kursreihe eines Titels (Rückfall-Regel, daten/delisting.py): Position wird am nächsten Handelstag nach
+    `letzter_tag` zum letzten Schlusskurs · (1 + `rendite`) geschlossen, ohne Gebühren (Barabfindung oder Ausbuchung)."""
+    letzter_tag: pd.Timestamp
+    rendite: float          # 0,0 bei Übernahme/Fusion, −0,30 bei Pleite/Performance/unbekannt
+    grund: str
+
+
 class Marktdaten:
     def __init__(self, kurse: dict[str, pd.DataFrame], waehrungen: dict[str, str] | None = None, fx: dict[str, pd.Series] | None = None,
-                 datenstand: dict[str, str | None] | None = None):
+                 datenstand: dict[str, str | None] | None = None, delistings: dict[str, Delisting] | None = None):
         self.kurse = {t: k.sort_index() for t, k in kurse.items()}
+        self.delistings = delistings or {}
         self.datenstand = datenstand or {t: k.attrs.get("abgerufen_um") for t, k in kurse.items()}  # Abrufzeit je Ticker
         self.waehrungen = {t: (waehrungen or {}).get(t, "EUR") for t in kurse}
         self.fx = fx or {}
@@ -63,9 +73,18 @@ class Marktdaten:
 class Sicht:
     """Was eine Strategie am Stichtag (nach Börsenschluss) wissen kann: alle Daten bis einschließlich Stichtag."""
 
-    def __init__(self, marktdaten: Marktdaten, stichtag: pd.Timestamp):
+    def __init__(self, marktdaten: Marktdaten, stichtag: pd.Timestamp, bestand: dict[str, float] | None = None, cash: float = 0.0):
         self._marktdaten = marktdaten
         self.stichtag = pd.Timestamp(stichtag)
+        self.bestand = dict(bestand or {})   # eigener Bestand (Stück) nach Börsenschluss des Stichtags
+        self.cash = cash
+
+    def gewichte(self) -> pd.Series:
+        """Anteil jedes gehaltenen Titels am Wert des Teilportfolios zum Schluss des Stichtags."""
+        schluss = self._marktdaten.schluss.loc[self.stichtag]
+        werte = pd.Series({t: s * float(schluss[t]) for t, s in self.bestand.items()}, dtype=float)
+        gesamt = self.cash + werte.sum()
+        return werte / gesamt if gesamt > 0 else werte
 
     @property
     def ticker(self) -> list[str]:

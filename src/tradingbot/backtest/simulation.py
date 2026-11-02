@@ -5,6 +5,9 @@ Ablauf je Handelstag t:
 2. Offene Zielgewichte vom Vortag zur Eröffnung ausführen: erst Verkäufe, dann Käufe.
 3. Bewertung zum Schlusskurs (fehlende Kurse: letzter bekannter Schluss).
 4. Strategie mit der Sicht bis t fragen; neue Zielgewichte werden am nächsten Handelstag ausgeführt.
+   Ein Zielgewicht NaN heißt „Bestand unverändert halten“ (z.B. Drift-Band des Fundamental-Schattenportfolios).
+Vor Schritt 2: Endet die Kursreihe eines gehaltenen Titels (Delisting, `Marktdaten.delistings`), wird die Position am
+nächsten Handelstag zum letzten Schluss · (1 + Delisting-Rendite) ohne Gebühren geschlossen; der Erlös bleibt Kasse.
 
 Regeln der Ausführung (config/backtest.yaml):
 - Nur long, keine Margin: Käufe nur aus vorhandenem Cash, Verkäufe höchstens bis zum Bestand.
@@ -118,6 +121,7 @@ class _Lauf:
         self.verworfen: list[dict] = []
         self.dividenden: list[dict] = []
         self.steuerereignisse: list[Steuerereignis] = []
+        self.delisting_faelle: list[dict] = []
 
     def _ereignis(self, datum, ticker, art, betrag, quellensteuer=0.0):
         self.steuerereignisse.append(Steuerereignis(pd.Timestamp(datum), self.d.name, ticker, art, self.steuerarten[ticker], betrag, quellensteuer))
@@ -190,16 +194,35 @@ class _Lauf:
             ereignisse.append(Steuerereignis(pd.Timestamp(tag), self.d.name, ticker, "veraeusserung", self.steuerarten[ticker], ergebnis.gewinn - vp))
         return kopie.cash, ereignisse
 
+    def delistings_schliessen(self, tag):
+        """Schließt gehaltene Titel, deren Kursreihe vor `tag` geendet hat (Rückfall-Regel, ohne Gebühren)."""
+        for ticker, stueck in self.portfolio.bestand().items():
+            d = self.m.delistings.get(ticker)
+            if d is None or tag <= d.letzter_tag:
+                continue
+            kurs = float(self.m.kurse[ticker]["close"].loc[: d.letzter_tag].iloc[-1])
+            preis = kurs * (1.0 + d.rendite)
+            ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, 0.0)
+            vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
+            self._ereignis(tag, ticker, "veraeusserung", ergebnis.gewinn - vorabpauschalen)
+            self.trades.append(dict(zip(_TRADE_SPALTEN, [
+                tag, ticker, -1, stueck, kurs, preis, stueck * preis, 0.0, 0.0, 0.0, ergebnis.einstand, ergebnis.gewinn,
+            ])))
+            self.delisting_faelle.append({"datum": tag, "ticker": ticker, "letzter_tag": d.letzter_tag, "grund": d.grund,
+                                          "rendite": d.rendite, "erloes": stueck * preis})
+
     def ausfuehren(self, tag, ziel: pd.Series):
+        halten = ziel[ziel.isna()].index
+        ziel = ziel.dropna()
         if (ziel < 0).any():
             raise ValueError(f"{self.d.strategie.name}: negative Gewichte sind nicht erlaubt (nur long)")
         if ziel.sum() > 1 + 1e-9:
             raise ValueError(f"{self.d.strategie.name}: Summe der Gewichte {ziel.sum():.4f} > 1 (kein Hebel)")
-        unbekannt = set(ziel.index) - set(self.klassen)
+        unbekannt = (set(ziel.index) | set(halten)) - set(self.klassen)
         if unbekannt:
             raise ValueError(f"{self.d.strategie.name}: Ticker außerhalb des Universums: {sorted(unbekannt)}")
 
-        bestand = self.portfolio.bestand()
+        bestand = {t: s for t, s in self.portfolio.bestand().items() if t not in halten}
         betroffen = sorted(set(bestand) | set(ziel.index))
         # Ohne Eröffnungskurs gilt der Schluss des Vortags (der heutige Schluss ist morgens noch unbekannt)
         vortage = self.m.schluss.loc[self.m.schluss.index < tag]
@@ -211,7 +234,13 @@ class _Lauf:
                 eroeffnung[ticker] = bewertung[ticker] = float(kerze["open"])
             elif pd.notna(schluss_vortag.get(ticker)):
                 bewertung[ticker] = float(schluss_vortag[ticker])
-        gesamtwert = self.portfolio.cash + sum(s * bewertung[t] for t, s in bestand.items())
+        gehalten_wert = 0.0
+        for t in halten:
+            s_h = self.portfolio.stueck(t)
+            if s_h > TOLERANZ:
+                kerze = self.m.kerze(t, tag)
+                gehalten_wert += s_h * (float(kerze["open"]) if kerze is not None and kerze["open"] > 0 else float(schluss_vortag.get(t, 0.0)))
+        gesamtwert = self.portfolio.cash + sum(s * bewertung[t] for t, s in bestand.items()) + gehalten_wert
 
         plan = {}
         for ticker in betroffen:
@@ -329,13 +358,15 @@ def simuliere(
             if vorher is not None and tag.year != vorher.year:
                 lauf.jahresende(vorher.year)
             lauf.dividenden_gutschreiben(tag)
+            if marktdaten.delistings:
+                lauf.delistings_schliessen(tag)
             if offen is not None:
                 lauf.ausfuehren(tag, offen)
                 offen = None
             schluss = marktdaten.schluss.loc[tag]
             werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss), "cash": lauf.portfolio.cash})
             bestaende.append({"datum": tag, **lauf.portfolio.bestand()})
-            ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag))
+            ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag, lauf.portfolio.bestand(), lauf.portfolio.cash))
             if ziel is not None:
                 offen = pd.Series(ziel, dtype=float)
             vorher = tag
@@ -394,6 +425,7 @@ def simuliere(
             steuern=pd.Series(zuordnung[n], name="steuer", dtype=float).rename_axis("jahr").to_frame(),
             steuern_gruppe=gruppen_tabellen[definition.steuergruppe],
             meta={"start": str(tage[0].date()), "ende": str(tage[-1].date()), "startkapital": definition.startkapital,
+                  "delistings": pd.DataFrame(lauf.delisting_faelle, columns=["datum", "ticker", "letzter_tag", "grund", "rendite", "erloes"]),
                   "art": definition.art, "steuergruppe": definition.steuergruppe, "rolle": definition.rolle, "kosten": kosten, "regeln": regeln,
                   "steuern_gezahlt": steuern_gezahlt,
                   "liquidationswert": liquidation[n]["liquidationswert"],
