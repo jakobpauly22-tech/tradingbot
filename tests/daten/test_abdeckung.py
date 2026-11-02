@@ -55,3 +55,17 @@ def test_zwei_gattungen_zaehlen_beim_gewicht_einmal():
     assert t.gewicht_investierbar_ohne_kurse == pytest.approx(0.10)                     # 100 / (900 + 100), nicht / 1900
     t = lauf({1: False, 2: False, 3: True})
     assert t.ohne_gueltige_kurse == 1 and t.gewicht_investierbar_ohne_kurse == pytest.approx(0.90)
+
+
+def test_streubesitz_unplausible_werte_werden_verworfen():
+    from tradingbot.daten.abdeckung import streubesitz_am
+
+    reihe = pd.DataFrame({"wert": [2.0e10, 3.1e19, 9.7e6, 2.4e10],
+                          "filed": pd.to_datetime(["2018-02-01", "2019-02-01", "2020-02-01", "2021-02-01"])},
+                         index=pd.to_datetime(["2017-06-30", "2018-06-30", "2019-06-30", "2020-06-30"]))
+    assert streubesitz_am(reihe, "2018-03-01") == 2.0e10
+    assert streubesitz_am(reihe, "2019-03-01") == 2.0e10          # 3·10¹⁹ verworfen, älterer plausibler Wert gilt
+    assert streubesitz_am(reihe, "2020-03-01") == 2.0e10          # 9,7 Mio. (falsche Einheit) verworfen
+    assert streubesitz_am(reihe, "2021-02-01") == 2.0e10          # am Einreichungstag noch nicht bekannt
+    assert streubesitz_am(reihe, "2021-02-02") == 2.4e10
+    assert streubesitz_am(reihe, "2017-01-01") is None and streubesitz_am(pd.DataFrame(), "2020-01-01") is None

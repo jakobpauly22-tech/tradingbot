@@ -14,7 +14,8 @@ import warnings
 
 import pandas as pd
 
-from tradingbot.daten.abdeckung import SCHWELLE_GEWICHT, STREUBESITZ, nicht_kaufbar_je_stichtag, rebalancing_stichtage, rueckfall_faelle
+from tradingbot.daten.abdeckung import (SCHWELLE_GEWICHT, STREUBESITZ, STREUBESITZ_MAX, STREUBESITZ_MIN, nicht_kaufbar_je_stichtag,
+                                         rebalancing_stichtage, rueckfall_faelle, streubesitz_am)
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.delisting import delisting_grund_mit_korrektur, einreichungen
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
@@ -58,6 +59,8 @@ def main(argumente) -> None:
         streubesitz[cik] = kennzahl_jahreswerte(erst, STREUBESITZ, "2100-01-01") if erst is not None else pd.DataFrame()
         del erst
     schwelle_sec.pruefe()
+    alle_werte = pd.concat([r["wert"] for r in streubesitz.values() if len(r)])
+    unplausibel = int((~alle_werte.between(STREUBESITZ_MIN, STREUBESITZ_MAX)).sum())
 
     def firma(nr):
         zeile = relevant.loc[nr]
@@ -66,11 +69,11 @@ def main(argumente) -> None:
     def gewicht(nr, tag):
         werte = []
         for cik in _ciks(relevant.loc[nr]):
-            s = streubesitz.get(cik)
-            if s is not None and len(s):
-                bekannt = s[(s["filed"] + pd.Timedelta(days=1)) <= tag]
-                if len(bekannt):
-                    werte.append((bekannt.index[-1], float(bekannt["wert"].iloc[-1])))
+            reihe = streubesitz.get(cik)
+            wert = streubesitz_am(reihe, tag)
+            if wert is not None:
+                datum = reihe[reihe["wert"] == wert].index[-1]
+                werte.append((datum, wert))
         return max(werte)[1] if werte else None
 
     def finanzwert(nr, tag):
@@ -103,12 +106,15 @@ def main(argumente) -> None:
             schwelle_delisting.zaehle(f"{zeile['ticker']}: {type(fehler).__name__}")
     schwelle_delisting.pruefe()
     rueckfall = rueckfall_faelle(status, gruende)
+    rueckfall = rueckfall[rueckfall.index <= 2024]       # Entwicklungszeitraum; Tresor ab 2025 bleibt zu
 
     ziel = PROJEKT_WURZEL / "daten" / "universum"
     tabelle.to_csv(ziel / "auswertung_abdeckung.csv", index=False)
     ueber = tabelle[tabelle["ueber_schwelle"]]
     zeilen = ["# Kursabdeckung je Stichtag", "",
               f"Datenstand kursstatus.csv: {len(status)} Mitgliedschaften, davon gültig {int(gueltig.sum())}.", "",
+              f"Gewicht: Streubesitz laut SEC-Deckblatt, plausibel nur zwischen {STREUBESITZ_MIN/1e9:.1f} Mrd. und {STREUBESITZ_MAX/1e12:.0f} Bio. USD; "
+              f"verworfen {unplausibel} von {len(alle_werte)} Meldungen ({unplausibel/len(alle_werte):.1%}).", "",
               "## 1. Nicht kaufbar (keine gültige Kursreihe am Rebalancing-Stichtag)", "",
               "Firmen (eine je CIK; Gattungen wie GOOG/GOOGL zählen einmal). Gattungen ohne Kurse in Klammern.", "",
               "| Stichtag | Firmen | ohne Kurse | Gewicht | investierbar (ohne Finanzwerte) | davon ohne Kurse | Gewicht | ohne Streubesitzwert |",

@@ -24,6 +24,7 @@ Alle Regeln hat Jakob festgelegt. Sie gelten vor dem ersten Backtest der Fundame
 - **Nicht kaufbar:** Eine Firma ohne gültige Kursreihe am Rebalancing-Stichtag (für keine ihrer Aktiengattungen) kann nicht ins Portfolio.
 - **Rückfall-Regel:** Eine gehaltene Aktie, die später ihre Kurse verliert, wird nach der Delisting-Regel geschlossen.
 - **Gewicht:** Streubesitzwert laut SEC-Deckblatt (`dei:EntityPublicFloat`, point-in-time), je Firma, nicht je Aktiengattung.
+- **Plausibilität des Streubesitzes (03.11.2026):** Die SEC-Rohdaten enthalten grob falsche Werte (z.B. eBay 3·10¹⁹ USD, Werte in Tausend statt USD, Nullen bei Tochtergesellschaften); 262 von 11.297 Meldungen (2,3 %). Werte außerhalb 0,5 Mrd. bis 10 Bio. USD gelten als fehlend; es zählt der jüngste plausible, zum Stichtag bekannte Wert. Nichts wird umgerechnet. Code: `abdeckung.streubesitz_am`.
 - **Schwelle:** Liegt das Gewicht der nicht kaufbaren Firmen im investierbaren Universum (ohne Finanzwerte) an einem Stichtag **über 2 %**, wird das vor dem ersten Backtest mit Jakob besprochen.
 - Auswertung: `tools/auswertung_abdeckung.py` → `daten/universum/auswertung_abdeckung.md`.
 

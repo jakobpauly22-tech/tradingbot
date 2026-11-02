@@ -20,6 +20,24 @@ import pandas as pd
 
 SCHWELLE_GEWICHT = 0.02
 STREUBESITZ = {"art": "letzter", "einheit": "USD", "konzepte": ["dei:EntityPublicFloat"]}
+# Plausibilitätsbereich wie bei der Börsenwert-Prüfung der Kurse (kursquellen.plausibel). Die SEC-Rohdaten enthalten
+# grob falsche Streubesitzwerte (z.B. eBay 3·10¹⁹ USD, mehrere Firmen pauschal 10¹⁸ USD, Werte in Tausend statt USD,
+# Nullen bei Tochtergesellschaften nach Übernahmen): rund 1,7 % aller Meldungen der Universums-Firmen. Werte außerhalb
+# gelten als fehlend; es zählt der jüngste plausible, zum Stichtag bekannte Wert. Nichts wird umgerechnet.
+STREUBESITZ_MIN = 5e8
+STREUBESITZ_MAX = 1e13
+
+
+def streubesitz_am(reihe: pd.DataFrame, stichtag) -> float | None:
+    """Jüngster plausible Streubesitzwert, der am Stichtag bekannt war (Handelstag nach `filed`).
+
+    `reihe`: Ergebnis von sec.kennzahl_jahreswerte(..., STREUBESITZ, ...) mit Spalten wert, filed; Index = Datum des Werts.
+    """
+    if reihe is None or len(reihe) == 0:
+        return None
+    tag = pd.Timestamp(stichtag)
+    bekannt = reihe[((reihe["filed"] + pd.Timedelta(days=1)) <= tag) & reihe["wert"].between(STREUBESITZ_MIN, STREUBESITZ_MAX)]
+    return float(bekannt["wert"].iloc[-1]) if len(bekannt) else None
 
 
 def rebalancing_stichtage(von="2012-01-01", bis="2024-12-31", haeufigkeit="QS") -> pd.DatetimeIndex:
