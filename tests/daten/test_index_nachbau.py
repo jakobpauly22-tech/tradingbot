@@ -77,3 +77,16 @@ def test_abnahme_verfehlt_bei_drift_und_bei_einem_ausreisserjahr():
     assert not einzel["kriterien"]["jahresabweichung_max"]["bestanden"]
     assert einzel["jahre"]["abweichung"].abs().idxmax() == jahr
     assert einzel["kriterien"]["korrelation"]["bestanden"]          # Korrelation allein hätte es nicht bemerkt
+
+
+def test_marktwert_aus_streubesitz_fortgeschrieben():
+    from tradingbot.daten.index_nachbau import marktwerte_aus_streubesitz
+
+    tage = pd.bdate_range("2019-06-27", "2019-07-05")
+    schluss = pd.DataFrame({"A": [100.0, 100.0, 110.0, 120.0, 120.0, 132.0, 132.0]}, index=tage)
+    reihe = pd.DataFrame({"wert": [5e10, 3e19], "filed": pd.to_datetime(["2019-07-01", "2019-07-03"])},
+                         index=pd.to_datetime(["2019-06-28", "2019-07-02"]))       # zweiter Wert unplausibel
+    mw = marktwerte_aus_streubesitz(schluss, {"A": reihe})["A"]
+    assert mw.loc[:"2019-07-01"].isna().all()                                     # erst ab dem Tag nach filed
+    assert mw.loc["2019-07-02"] == pytest.approx(5e10 * 120 / 100)               # Kurs am Messtag 28.06.: 100
+    assert mw.loc["2019-07-05"] == pytest.approx(5e10 * 132 / 100)               # 3·10¹⁹ verworfen, alter Wert läuft weiter

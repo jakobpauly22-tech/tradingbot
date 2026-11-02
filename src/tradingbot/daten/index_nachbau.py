@@ -8,8 +8,10 @@ Formel (Laspeyres-Kettenindex, wie bei Indexanbietern):
     w_i,t   = MW_i,t−1 / Σ_j MW_j,t−1              über die Mitglieder am Tag t (Gewichte vom Vortag, kein Look-ahead)
     r_i,t   = (C_i,t + D_i,t − C_i,t−1) / C_i,t−1   Gesamtrendite inklusive Dividende (simple_return)
     I_t     = I_t−1 · (1 + Σ_i w_i,t · r_i,t)
-Marktwert MW = splitbereinigter Schlusskurs × splitbereinigte ausstehende Aktien (SEC, point-in-time).
-Abweichung zum Original: S&P gewichtet nach Streubesitz (float-adjusted), wir nach allen ausstehenden Aktien.
+Marktwert MW = Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs (marktwerte_aus_streubesitz), je Firma
+(nicht je Aktiengattung). Umgestellt am 03.11.2026 vor der ersten Gegenprobe, weil die Aktienzahl auf dem Deckblatt
+bei Mehrgattungsfirmen fehlt oder nur eine Gattung zählt. Abweichung zum Original: S&P nutzt tagesaktuelle
+Streubesitzfaktoren, wir den jährlichen Wert vom Deckblatt.
 Quelle Formel Gesamtrendite: wissen/02_Kapitalmarkttheorie_Portfolio_Anleihen.md, Abschnitt 2; referenz.simple_return.
 """
 from __future__ import annotations
@@ -17,6 +19,35 @@ from __future__ import annotations
 import pandas as pd
 
 from tradingbot.kennzahlen.rendite import simple_return
+
+
+def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.DataFrame:
+    """Marktwert je Firma und Tag aus dem Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs.
+
+    Formel:  MW_i,t = F_i · C_i,t / C_i,e    (F = jüngster bis t bekannte plausible Streubesitz, gemessen am Tag e)
+    Begründung (03.11.2026): Die Aktienzahl auf dem Deckblatt fehlt oder ist eine Teilmenge bei Firmen mit mehreren
+    Aktiengattungen (z.B. Berkshire, Alphabet, Fox); der Streubesitz wird je Firma über alle Gattungen gemeldet und
+    entspricht der Streubesitz-Gewichtung des S&P 500. Point-in-time: F gilt ab dem Tag nach der Einreichung.
+    `schluss`: Tage × Firmen (splitbereinigte Schlusskurse); `streubesitz`: Firma → DataFrame(wert, filed; Index = e).
+    """
+    from tradingbot.daten.abdeckung import STREUBESITZ_MAX, STREUBESITZ_MIN
+
+    ergebnis = pd.DataFrame(index=schluss.index, columns=schluss.columns, dtype=float)
+    for firma in schluss.columns:
+        reihe = streubesitz.get(firma)
+        if reihe is None or len(reihe) == 0:
+            continue
+        reihe = reihe[reihe["wert"].between(STREUBESITZ_MIN, STREUBESITZ_MAX)].sort_values("filed")
+        c = schluss[firma]
+        for i, (e, zeile) in enumerate(reihe.iterrows()):
+            ab = zeile["filed"] + pd.Timedelta(days=1)
+            bis = reihe["filed"].iloc[i + 1] + pd.Timedelta(days=1) if i + 1 < len(reihe) else None
+            vorher = c.loc[:e].dropna()
+            if vorher.empty:
+                continue
+            fenster = (c.index >= ab) & ((c.index < bis) if bis is not None else True)
+            ergebnis.loc[fenster, firma] = zeile["wert"] * c[fenster] / vorher.iloc[-1]
+    return ergebnis
 
 
 def aktien_splitbereinigt(aktien: pd.Series, splits: pd.Series) -> pd.Series:
