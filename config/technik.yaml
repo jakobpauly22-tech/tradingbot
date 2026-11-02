@@ -15,10 +15,19 @@ universum:
   #   besicherte Gold-ETC mit Xetra-Kursen seit spätestens 2012. iShares Physical Gold (33,6 Mrd. €) hat
   #   Xetra-Kurse erst ab 07/2021 und fällt heraus.
   regel: groesster_physischer_ucits_etf_je_anlageklasse_xetra_bis_2012
+  kaufbarkeit: anteilspreis_hoechstens_positionsgroesse_im_ganzen_zeitraum   # Jakob 03.11.2026
+  # Plausibilität des Ersatzes (Jakob 03.11.2026): IUSA inklusive Dividenden gegen SXR8, Abweichung der Rendite p.a.
+  # höchstens 0,3 Prozentpunkte. Der Lauf sperrt bei Verfehlung.
+  plausibilitaet_ersatz:
+    - {ticker: IUSA.DE, vergleich: SXR8.DE, von: 2013-01-03, bis: 2019-12-31, max_pp: 0.3}
   stand: 2026-11-03
   quelle: justETF-Fondsprofile (Fondsgröße, Replikation, Xetra-Ticker), Yahoo-Kurshistorie (Xetra)
   etfs:
-    - {klasse: Aktien USA,              ticker: SXR8.DE, isin: IE00B5BMR087, name: iShares Core S&P 500 (Acc),                  steuerart: aktienfonds,     volumen_mio_eur: null,  hinweis: "größter physischer S&P-500-UCITS-ETF"}
+    # Kaufbarkeitsregel (Jakob 03.11.2026): Jeder ETF muss im ganzen Zeitraum mit mindestens einem Stück kaufbar sein
+    # (Anteilspreis ≤ Positionsgröße 25 % von 1.250 € = 312,50 €). SXR8 (137.659 Mio. €) liegt ab 19.02.2020 darüber und
+    # wird durch den nächsten der Rangfolge ersetzt (VUSA erst ab 2017 auf Xetra bei Yahoo, Invesco synthetisch,
+    # Vanguard Acc ab 2019): iShares Core S&P 500 (Dist), gleicher Index. Begründung der Rückschau: docs/TECHNIK.md.
+    - {klasse: Aktien USA,              ticker: IUSA.DE, isin: IE0031442068, name: iShares Core S&P 500 (Dist),                 steuerart: aktienfonds,     volumen_mio_eur: 20247, hinweis: "Ersatz für SXR8 (Stückpreis); ausschüttend, Dividenden als Zahlung in die Kasse"}
     - {klasse: Aktien Europa,           ticker: EUNK.DE, isin: IE00B4K48X80, name: iShares Core MSCI Europe (Acc),              steuerart: aktienfonds,     volumen_mio_eur: 16100, hinweis: "Amundi Core Stoxx Europe 600 (22.040) erst seit 2013"}
     - {klasse: Aktien Japan,            ticker: EUNN.DE, isin: IE00B4L5YX21, name: iShares Core MSCI Japan IMI (Acc),           steuerart: aktienfonds,     volumen_mio_eur: 7271,  hinweis: "vor Xtrackers MSCI Japan 1C (6.430)"}
     - {klasse: Aktien Pazifik ex Japan, ticker: SXR1.DE, isin: IE00B52MJY50, name: iShares Core MSCI Pacific ex Japan (Acc),    steuerart: aktienfonds,     volumen_mio_eur: 3829,  hinweis: ""}

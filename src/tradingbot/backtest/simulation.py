@@ -114,7 +114,7 @@ class Ergebnis:
 
 _TRADE_SPALTEN = [
     "datum", "ticker", "richtung", "stueck", "eroeffnung", "ausfuehrungspreis", "kurswert",
-    "gebuehr", "spread_slippage", "einstand_fifo", "gewinn_realisiert",
+    "gebuehr", "spread_slippage", "einstand_fifo", "gewinn_realisiert", "zielwert",
 ]
 
 
@@ -279,7 +279,7 @@ class _Lauf:
             vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
             self._ereignis(tag, ticker, "veraeusserung", ergebnis.gewinn - vorabpauschalen)
             self.trades.append(dict(zip(_TRADE_SPALTEN, [
-                tag, ticker, -1, stueck, kurs, preis, stueck * preis, 0.0, 0.0, ergebnis.einstand, ergebnis.gewinn,
+                tag, ticker, -1, stueck, kurs, preis, stueck * preis, 0.0, 0.0, ergebnis.einstand, ergebnis.gewinn, None,
             ])))
             self.delisting_faelle.append({"datum": tag, "ticker": ticker, "letzter_tag": d.letzter_tag, "grund": d.grund,
                                           "rendite": d.rendite, "erloes": stueck * preis})
@@ -357,7 +357,7 @@ class _Lauf:
         vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
         self._ereignis(tag, ticker, "veraeusserung", ergebnis.gewinn - vorabpauschalen)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
-            tag, ticker, -1, stueck, kurs, preis, kurswert, gebuehr, stueck * (kurs - preis), ergebnis.einstand, ergebnis.gewinn,
+            tag, ticker, -1, stueck, kurs, preis, kurswert, gebuehr, stueck * (kurs - preis), ergebnis.einstand, ergebnis.gewinn, None,
         ])))
 
     def _kaufen(self, tag, ticker, delta, kurs):
@@ -391,7 +391,7 @@ class _Lauf:
             return
         self.portfolio.kaufen(tag, ticker, stueck, preis, gebuehr, w, fx)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
-            tag, ticker, +1, stueck, kurs, preis, kurswert, gebuehr, stueck * (preis - kurs), None, None,
+            tag, ticker, +1, stueck, kurs, preis, kurswert, gebuehr, stueck * (preis - kurs), None, None, delta * kurs,
         ])))
 
 

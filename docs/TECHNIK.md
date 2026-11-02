@@ -30,6 +30,21 @@ ohne Bruchstücke nicht kaufbar; die fünf Läufe sind davon betroffen.
      in beiden Hälften).
 4. **Xetra-Gold:** Die zwei Tage im Juni 2017 (Schluss über dem Tageshoch) bleiben unverändert; im Bericht vermerkt.
 
+## Ersatz-ETF wegen Stückpreis (Jakob, 03.11.2026)
+
+- **Regel:** Jeder ETF muss über den gesamten Zeitraum mit mindestens einem Stück kaufbar sein (Anteilspreis ≤
+  Positionsgröße 312,50 €). Eine zusätzliche Drittel-Grenze für Aktien-ETFs entfällt, weil sie nichts ändert und nur
+  einen weiteren Parameter einführt. Damit fällt nur SXR8 heraus (ab 19.02.2020 über 312,50 €).
+- **Ersatz:** iShares Core S&P 500 (Dist), IUSA.DE – der nächste der Rangfolge der Auswahlregel.
+- **Begründung der Rückschau:** Die Kaufbarkeit wird mit Kursen des ganzen Zeitraums geprüft. Das ist hier
+  unbedenklich, weil der Ersatz denselben Index abbildet und nicht nach Rendite ausgewählt wird.
+- **Ausschüttungen:** IUSA schüttet aus; Dividenden werden als Zahlung in die Kasse gebucht und versteuert
+  (Aktienfonds, Teilfreistellung 30 %), nicht nur über den Kursverlauf.
+- **Plausibilität:** IUSA inklusive Dividenden gegen SXR8, 03.01.2013–31.12.2019, Abweichung höchstens 0,3 Prozentpunkte
+  p.a.; Ergebnis im Bericht.
+- **Investitionsgrad je ETF:** Der Bericht weist je ETF aus, welcher Anteil des Zielwerts einer neuen Position nach der
+  Rundung auf ganze Stücke tatsächlich gekauft wurde (vor allem IBCI, EUNH, EUN5).
+
 Maßstab im Entscheidungsbaum: Buy & Hold aller ETFs der Liste, gleich gewichtet, quartalsweise, kostenfrei (Entscheidung
 03.11.2026). „Ohne Kosten“ heißt für die Strategien: keine Gebühren, kein Spread, keine Slippage, kein Währungstausch;
 ganze Stücke bleiben (strukturelle Eigenschaft des Handels über die API).

@@ -61,6 +61,20 @@ def plausibilitaet_ersatzquelle(original: str, ersatz_eur: pd.DataFrame, von, bi
             "originalwaehrung": orig.attrs.get("originalwaehrung")}
 
 
+def plausibilitaet_ausschuettend(p: dict, kurse_ersatz: pd.DataFrame) -> dict:
+    """Rendite p.a. inklusive Dividenden (reinvestiert, ohne Steuern) des Ersatz-ETFs gegen den ersetzten ETF."""
+    from tradingbot.kennzahlen.performance import cagr
+    from tradingbot.kennzahlen.rendite import total_return_index
+    von, bis = str(p["von"]), str(p["bis"])
+    vergleich = lade_kurse(p["vergleich"], von, bis)
+    r_e, r_v = cagr(total_return_index(kurse_ersatz.loc[von:bis])), cagr(total_return_index(vergleich.loc[von:bis]))
+    ohne_div = cagr(kurse_ersatz.loc[von:bis, "close"])
+    jahre_ohne = sorted(set(range(pd.Timestamp(von).year, pd.Timestamp(bis).year + 1))
+                        - set(kurse_ersatz.loc[von:bis].index[kurse_ersatz.loc[von:bis, "dividende"] > 0].year))
+    return {"ersatz": r_e, "vergleich": r_v, "differenz_pp": (r_e - r_v) * 100, "nur_kurs": ohne_div,
+            "jahre_ohne_ausschuettung": jahre_ohne, "max_pp": float(p["max_pp"]), "bestanden": abs(r_e - r_v) * 100 <= float(p["max_pp"])}
+
+
 def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict, dict]:
     """Kurse in EUR je ETF (optional über eine freigegebene Ersatzquelle desselben Produkts), Währungen, Befunde und
     Prüfprotokoll (Korrekturen, Plausibilität der Ersatzquellen)."""
@@ -80,10 +94,21 @@ def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict, dict]:
             roh = lade_kurse_eur(t, von, bis)
         else:
             roh = lade_kurse(t, von, bis)
-        eigene = [c for c in korrekturen if c["ticker"] == t]
+        eigene = [c for c in korrekturen if c["ticker"] == t and c["regel"] != "dividende_ergaenzen"]
+        for c in [c for c in korrekturen if c["ticker"] == t and c["regel"] == "dividende_ergaenzen"]:
+            tag = roh.index[roh.index >= pd.Timestamp(str(c["datum"]))][0]
+            roh = roh.copy()
+            roh.loc[tag, "dividende"] = float(c["betrag_eur"])
+            protokoll["korrekturen"].append(f"{t} {tag.date()}: Ausschüttung {float(c['betrag_eur']):.4f} € ergänzt ({c['grund']})")
         if eigene:
             roh, log = korrigiere(roh, eigene)
             protokoll["korrekturen"] += log
+        for pl in [x for x in (k["universum"].get("plausibilitaet_ersatz") or []) if x["ticker"] == t]:
+            erg = plausibilitaet_ausschuettend(pl, roh)
+            protokoll.setdefault("ausschuettend", {})[t] = erg
+            if not erg["bestanden"]:
+                befunde.setdefault(t, []).append(f"[ersatzquelle] Rendite inkl. Dividenden {erg['differenz_pp']:+.3f} Pp. p.a. gegen {pl['vergleich']} "
+                                                 f"(Grenze ±{erg['max_pp']}); Jahre ohne Ausschüttung: {erg['jahre_ohne_ausschuettung']}")
         kurse[t] = roh
         waehrungen[t] = e.get("handelswaehrung", "EUR")   # Kurse immer in EUR; Abrechnung über die Kasse der Handelswährung
         b = [x for x in pruefe_etf_kurse(roh) if not (quelle != t or e.get("handelswaehrung", "EUR") != "EUR") or "währung" not in x]
@@ -118,6 +143,9 @@ def main() -> int:
         print(f"Ersatzquelle {p['quelle']} für {t}: {p['tage']} Tage mit Umsatz, Median-Abweichung {p['median']:.3%}, 95-%-Quantil {p['p95']:.3%}")
     for z in pruefprotokoll["korrekturen"]:
         print("Korrektur:", z)
+    for etf, erg in pruefprotokoll.get("ausschuettend", {}).items():
+        print(f"Plausibilität {etf}: Rendite inkl. Dividenden {erg['ersatz']:.3%} gegen {erg['vergleich']:.3%}, Differenz {erg['differenz_pp']:+.3f} Pp. "
+              f"(Grenze ±{erg['max_pp']}) → {'bestanden' if erg['bestanden'] else 'NICHT bestanden'}; Jahre ohne Ausschüttung {erg['jahre_ohne_ausschuettung']}")
     ersatz_fehler = {t: b for t, b in befunde.items() if any("ersatzquelle" in x for x in b)}
     offen = {**offen, **ersatz_fehler}
     if offen:
@@ -159,11 +187,11 @@ def main() -> int:
         raise SystemExit(f"Unbekannte Umsetzung des Buy-&-Hold-Vergleichs: {umsetzung}")
     laeufe, ohne_kosten = {}, {}
     for name, (regeln, regime) in VARIANTEN.items():
-        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [definition(name, regeln, regime)], m, start, ende, benchmark_ticker="SXR8.DE", konfig=bt)
+        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [definition(name, regeln, regime)], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt)
         # gleiche Strategie ohne Kosten (keine Gebühren, kein Spread, keine Slippage, kein Tausch), vor Steuern; ganze Stücke bleiben
         ohne_kosten[name] = simuliere([definition(name, regeln, regime)], m, start, ende, kosten=Kostenmodell.ohne_kosten(),
                                       steuern=Steuerregeln.ohne_steuern(), konfig=bt)[f"technik_{name}"]
-    lauf_bh = fuehre_lauf_aus("technik_buy_and_hold", [bh], m, start, ende, benchmark_ticker="SXR8.DE", konfig=bt, **optionen_bh)
+    lauf_bh = fuehre_lauf_aus("technik_buy_and_hold", [bh], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt, **optionen_bh)
 
     rf = lade_makro(bt.get("risikofreier_zins", "ECBDFR"))
     abschnitte = [("gesamt", start, ende)] + [(f"Hälfte {i + 1}", x, y) for i, (x, y) in enumerate(haelften(start, ende, int(sp["haelften"])))]
@@ -225,6 +253,10 @@ def main() -> int:
                     "Abrechnung über die USD-Kasse (Netto-Tausch), Gebühr nach dem Xetra-Plan.")
     for z in pruefprotokoll["korrekturen"]:
         text.append(f"- Korrektur: {z}")
+    for etf, erg in pruefprotokoll.get("ausschuettend", {}).items():
+        text.append(f"- **Plausibilität {etf}** (inkl. Dividenden) gegen den ersetzten ETF: {pz(erg['ersatz'])} gegen {pz(erg['vergleich'])} p.a., "
+                    f"Differenz {erg['differenz_pp']:+.3f} Pp. (Grenze ±{erg['max_pp']}, bestanden); nur Kurs {pz(erg['nur_kurs'])}. "
+                    "Dividenden als Zahlung in die Kasse, versteuert als Aktienfonds (Teilfreistellung 30 %).")
     text += ["- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert "
              "(Entscheidung Jakob 03.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
              "## Entscheidungsbaum (docs/TECHNIK.md)", "",
@@ -250,7 +282,17 @@ def main() -> int:
         stueck, regel, invest = gescheitert(e)
         text.append(f"| {name} | {int(kk['trades'])} | {kk['kosten']:,.0f} € | {pz(invest)} | {stueck} | {regel} | {kk['steuern_gezahlt']:,.0f} € | "
                     f"{pz(kk['cagr_nach_verkauf_und_steuern'])} |")
-    text += ["", "Gescheiterte Orders zählen je Tag und ETF; bei stehendem Signal wird ein Kauf täglich erneut versucht."]
+    text += ["", "Gescheiterte Orders zählen je Tag und ETF; bei stehendem Signal wird ein Kauf täglich erneut versucht.", "",
+             "## Investitionsgrad je ETF (gekaufter Wert / Zielwert neuer Positionen, Rundung auf ganze Stücke)", "",
+             "| ETF | " + " | ".join(laeufe) + " |", "| --- |" + " --- |" * len(laeufe)]
+    for etf in [e["ticker"] for e in k["universum"]["etfs"]]:
+        zellen = []
+        for name, lauf in laeufe.items():
+            tr = next(iter(lauf.ergebnisse.values())).trades
+            kauf = tr[(tr.ticker == etf) & (tr.richtung > 0) & tr.zielwert.notna()]
+            zellen.append(f"{pz((kauf.kurswert / kauf.zielwert).mean())} ({len(kauf)})" if len(kauf) else "–")
+        text.append(f"| {etf} | " + " | ".join(zellen) + " |")
+    text += ["", "In Klammern: Zahl der Käufe."]
     if a.vergleich:
         vorher = pd.read_csv(a.vergleich)
         text += ["", f"## Vergleich mit dem früheren Lauf (`{a.vergleich}`), nach Kosten", "",

@@ -91,3 +91,15 @@ def test_gebuehrenplan_xetra_fuer_usd_notierten_etf(konfig, mit_kosten):
     e = simuliere([d], m, tage[0], tage[-1], kosten=mit_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["core"]
     assert e.trades.iloc[0]["gebuehr"] == pytest.approx(1.25)
     assert len(e.waehrungstausche) == 1 and e.waehrungstausche.iloc[0]["nach"] == "USD"
+
+
+def test_zielwert_je_kauf_fuer_investitionsgrad(konfig, ohne_kosten):
+    from tradingbot.backtest.marktdaten import Instrument, Marktdaten
+    from tradingbot.backtest.simulation import Ausfuehrungsregeln, TeilportfolioDefinition, simuliere
+    from tradingbot.backtest.strategie import BuyAndHold
+    m = Marktdaten({"A": kerzen([200.0] * 5)})
+    d = TeilportfolioDefinition("core", 1000.0, BuyAndHold({"A": 0.25}), [Instrument("A", "etf")])
+    e = simuliere([d], m, m.kalender[0], m.kalender[-1], kosten=ohne_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["core"]
+    kauf = e.trades.iloc[0]
+    # Ziel 250 €, ein Stück zu 200 € → Investitionsgrad 80 %
+    assert kauf["zielwert"] == pytest.approx(250.0) and kauf["kurswert"] / kauf["zielwert"] == pytest.approx(0.8)
