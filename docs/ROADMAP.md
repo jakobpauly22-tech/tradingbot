@@ -352,6 +352,18 @@ Technische Indikatoren wie bei TradingView werden selbst in Python berechnet und
 | Fundamental-Veto | Piotroski ≤ 3, Z'' mit zweitem Signal, Altman Z (Industrie) als Veto für Einzelaktien-Trades; Beneish nur Warnhinweis; ruht bei reinem ETF-Universum |
 | Ergebnis (Zweig a) | Ohne Kosten erreichen weder Crossover noch Momentum den Sharpe von Buy & Hold in beiden Hälften: kein Renditebaustein; echtes Geld bleibt im Core, beide laufen im Paper Trading als Schatten mit; RSI(2) und Price Channel raus. Ohne Kosten senken Crossover und Momentum den maximalen Drawdown deutlich (Crossover −12,4 % gegen −17,1 %); sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten |
 
+**Entschieden am 02.11.2026: Phase 2** (Parameter in `config/betrieb.yaml` und `config/risiko.yaml`).
+
+| Thema | Entscheidung |
+| --- | --- |
+| Core-ETF | SPYI.DE (MSCI ACWI IMI); ganze Stücke, Rest bleibt Kasse und wird mit dem nächsten Betrag investiert |
+| Daten im Betrieb | Betriebsfreigabe für Kurse ab 2025 nur für Signale und Bücher, protokolliert; eigener Datenbereich, den Backtest- und Auswertungswerkzeuge technisch nicht lesen können; Paper Trading wird ab seinem Startdatum gemessen |
+| Budget | eigenes Bot-Budget (500 €) im Paper-Konto; täglicher Abgleich der Bot-Bestände mit IBKR, bei Abweichung stoppt der Tageslauf |
+| Ordertyp | Käufe als Limit mit Vortagesschluss + 2 %, vor 09:00 gesendet (Xetra-Eröffnungsauktion); Verkäufe ohne Limit; nicht ausgeführte Orders verfallen und stehen im Journal |
+| Bibliothek | ib_async; bei Problemen mit Python 3.15 eine ältere Python-Version im venv |
+| Freigabefenster | abends 18–24 Uhr, Ausführung am nächsten Morgen |
+| Sicherheit | Senden nur bei Konto-ID „DU…“, Port 4002 und TRADING_MODE=paper; Not-Aus-Datei STOP; Schutz gegen Doppel-Orders; Plausibilitätsgrenzen (Orderwert ≤ Bot-Budget, Orders je Tag, Limit ≤ 2 % über dem letzten Kurs) |
+
 ## Strategie-Bibliothek
 
 Jede Strategie wird ein eigenes Modul mit Idee, Datenbedarf, Haltedauer und Backtest. Das Scoring gewichtet sie nach Backtest-Ergebnis. Neue Strategien, z.B. aus TradingView oder Vorlesungen, kommen zuerst hierher.
@@ -430,7 +442,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Bewertung: DCF und Multiples | Fundamental | 1 | Hoch | Idee |
 | Bilanz-Scores (Piotroski, Altman, Beneish) | Fundamental | 1 | Hoch | Idee |
 | Strategie-Bibliothek | Basis | 1 | Mittel | Idee |
-| Risk-Manager mit Vetorecht | Qualität | 2 | Hoch | Idee |
+| Risk-Manager mit Vetorecht | Qualität | 2 | Hoch | In Arbeit (6a: Regeln und Tests fertig) |
 | Paper Trading | Ausführung | 2 | Hoch | Idee |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |

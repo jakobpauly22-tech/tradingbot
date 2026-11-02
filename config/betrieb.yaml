@@ -1,0 +1,41 @@
+# Betrieb: Paper Trading, Broker-Anbindung, Freigaben (Phase 2, Entscheidungen Jakob 02.11.2026)
+# Live (Port 4001) bleibt gesperrt, bis Jakob nach den Go-Live-Kriterien ausdrücklich freigibt.
+
+core:
+  etf: SPYI.DE                         # SPDR MSCI ACWI IMI, gleich dem Hauptbenchmark
+  ganze_stuecke: true                  # Rest unter einem Anteil bleibt Kasse und wird mit dem nächsten Betrag investiert
+
+bot_budget:
+  betrag_eur: 500.0                    # eigenes Budget im Paper-Konto; der Rest des Kontos wird ignoriert
+  abgleich: taeglich                   # Bot-Bestände gegen IBKR; bei Abweichung stoppt der Tageslauf mit Meldung
+
+ibkr:
+  host: 127.0.0.1                      # nur lokal
+  port_paper: 4002
+  port_live: 4001                      # gesperrt (Code verweigert die Verbindung)
+  konto_praefix_paper: DU              # Senden nur, wenn die Konto-ID damit beginnt
+  modus_variable: TRADING_MODE         # aus .env; nur „paper“ erlaubt
+  bibliothek: ib_async                 # bei Problemen mit Python 3.15: ältere Python-Version im venv, nicht die Bibliothek wechseln
+
+orders:
+  kauf: {typ: limit, aufschlag_vortagesschluss: 0.02, senden_vor: "09:00"}   # geht in die Xetra-Eröffnungsauktion
+  verkauf: {typ: market}               # ohne Limit
+  gueltigkeit: tag                     # nicht ausgeführte Orders verfallen und werden im Journal vermerkt
+
+freigabe:
+  fenster: {von: "18:00", bis: "24:00"}   # abends; Ausführung am nächsten Morgen
+  ohne_freigabe: verfaellt             # verpasste Freigabe = verpasster Trade
+
+sicherheit:
+  not_aus_datei: STOP                  # existiert die Datei STOP im Projektordner, wird nichts gesendet
+  doppel_orders: pruefen               # vor dem Senden offene Orders prüfen; jeder Vorschlag nur einmal
+  plausibilitaet:
+    max_orderwert_eur: 500.0           # höchstens das Bot-Budget
+    max_orders_pro_tag: 5              # VORLÄUFIG (Claude), bitte bestätigen: Core braucht 1 Order, Schatten senden nichts
+    max_limit_abstand: 0.02            # Kauflimit höchstens 2 % über dem letzten Kurs
+
+daten:
+  # Betriebsfreigabe (Jakob 02.11.2026): Der Tageslauf darf Kurse ab 2025 lesen, nur für Signale und Bücher, protokolliert.
+  # Betriebsdaten liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge technisch nicht lesen können.
+  betriebsbereich: daten/betrieb
+  paper_start: null                    # wird beim ersten Tageslauf gesetzt; gemessen wird ab diesem Tag
