@@ -21,6 +21,73 @@ import pandas as pd
 from tradingbot.kennzahlen.rendite import simple_return
 
 
+# --- Plausibilität des Streubesitzes gegen den Börsenwert (Entscheidung Jakob 03.11.2026) ------------------------
+# Ein fester Bereich reicht nicht (Garmin meldet in drei Jahren das 1.000-Fache, noch unter 10 Bio. USD), und ein
+# Abgleich mit dem Median der Firma würde echte Wachstumsfälle verwerfen (Nvidia seit 2016 mehr als verhundertfacht).
+STREUBESITZ_ANTEIL_MIN = 0.30        # Streubesitz mindestens 30 % von Kurs × Aktienzahl am Messtag
+STREUBESITZ_ANTEIL_MAX = 1.05        # höchstens 105 %
+STREUBESITZ_VERAENDERUNG_FAKTOR = 3.0  # ohne Aktienzahl: Veränderung zum Vorjahr höchstens Faktor 3 neben der Kursveränderung
+AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag entfernt
+
+
+def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Prüft die Streubesitzwerte einer Firma gegen den Börsenwert am Messtag e.
+
+    Mit Aktienzahl:  0,30 ≤ F_e / (C_e · A_e) ≤ 1,05   (A_e: Aktienzahl nahe e, splitbereinigt wie die Kurse)
+    Ohne Aktienzahl: 1/3 ≤ (F_e / F_v) / (C_e / C_v) ≤ 3  (v: letzter akzeptierter Wert davor)
+    Eine Aktienzahl zählt nur, wenn C_e · A_e selbst plausibel ist (0,5 Mrd. bis 10 Bio. USD); sonst gilt die Firma
+    für diesen Wert als „ohne Aktienzahl“ (z.B. nur eine Aktiengattung gemeldet, Mantelgesellschaft, falsche Einheit).
+    Der erste Wert ohne Aktienzahl und ohne Vorgänger bleibt ungeprüft gültig (kein Vergleich möglich).
+    Gibt (gültige Werte, verworfene Werte mit Spalte `grund`) zurück; verworfene Werte gelten als fehlend.
+    """
+    from tradingbot.daten.abdeckung import STREUBESITZ_MAX, STREUBESITZ_MIN
+
+    gueltig, verworfen = [], []
+    vorher = None                                           # (F, C) des letzten akzeptierten Werts
+    aktien = aktien.dropna().sort_index()
+    for e, zeile in reihe.sort_index().iterrows():
+        f = float(zeile["wert"])
+        kurse_bis = schluss.loc[:e].dropna()
+        grund = None
+        if not STREUBESITZ_MIN <= f <= STREUBESITZ_MAX:
+            grund = "außerhalb 0,5 Mrd. bis 10 Bio. USD"
+        elif kurse_bis.empty:
+            grund = "kein Kurs am Messtag"
+        else:
+            c_e = float(kurse_bis.iloc[-1])
+            boersenwert = None
+            if len(aktien):
+                abstand = pd.Series(abs((aktien.index - e).days), index=aktien.index)
+                if abstand.min() <= AKTIEN_ABSTAND_TAGE:
+                    wert = c_e * float(aktien.loc[abstand.idxmin()])
+                    boersenwert = wert if STREUBESITZ_MIN <= wert <= STREUBESITZ_MAX else None
+            if boersenwert is not None:
+                anteil = f / boersenwert
+                if not STREUBESITZ_ANTEIL_MIN <= anteil <= STREUBESITZ_ANTEIL_MAX:
+                    grund = f"{anteil:.0%} des Börsenwerts"
+            elif vorher is not None:
+                verhaeltnis = (f / vorher[0]) / (c_e / vorher[1])
+                if not 1 / STREUBESITZ_VERAENDERUNG_FAKTOR <= verhaeltnis <= STREUBESITZ_VERAENDERUNG_FAKTOR:
+                    grund = f"Veränderung zum Vorjahr {verhaeltnis:.1f}-fach der Kursveränderung"
+            if grund is None:
+                vorher = (f, c_e)
+        (verworfen if grund else gueltig).append({"ende": e, "wert": f, "filed": zeile["filed"], "grund": grund})
+    spalten = ["wert", "filed", "grund"]
+    zu_df = lambda z: pd.DataFrame(z, columns=["ende", *spalten]).set_index("ende")  # noqa: E731
+    return zu_df(gueltig).drop(columns="grund"), zu_df(verworfen)
+
+
+def handelstage(schluss: pd.DataFrame, von, bis, mindestanteil: float = 0.5) -> pd.DatetimeIndex:
+    """Echte Börsentage: Tage, an denen mindestens `mindestanteil` der im Zeitraum üblichen Zahl an Titeln einen Kurs hat.
+
+    Behebt den Fehler des ersten Gegenprobe-Laufs: Mit allen Werktagen fehlte an US-Feiertagen (z.B. 25.12.2018) jeder
+    Marktwert, und am Tag danach (26.12.2018, S&P 500 +5 %) hatte der Nachbau keine Gewichte und blieb stehen.
+    """
+    teil = schluss.loc[pd.Timestamp(von):pd.Timestamp(bis)]
+    anzahl = teil.notna().sum(axis=1)
+    return pd.DatetimeIndex(anzahl.index[anzahl >= mindestanteil * anzahl.median()])
+
+
 def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.DataFrame:
     """Marktwert je Firma und Tag aus dem Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs.
 
