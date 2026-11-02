@@ -21,7 +21,7 @@ entschieden hat (`tools/backtest_technik.py --nur-pruefen` meldet sie, Exit 2). 
 Unterwegs gefunden und behoben: ADX setzte in der Anlaufphase DX = 0 statt NaN (verfälschte die Glättung); Test
 „dauerhafter Aufwärtstrend ergibt ADX 100“ deckt das jetzt ab.
 
-## ETF-Universum nach der Auswahlregel (Fondsvolumen laut justETF, 03.11.2026)
+## ETF-Universum nach der Auswahlregel (Fondsvolumen laut justETF, 02.11.2026)
 
 | Klasse | ETF | Ticker | Volumen Mio. € |
 | --- | --- | --- | --- |

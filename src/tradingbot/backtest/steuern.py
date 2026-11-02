@@ -28,7 +28,7 @@ USD-Kasse gehalten. Der Rücktausch von Fremdwährungsguthaben kann als privates
 (§ 23 Abs. 1 S. 1 Nr. 2 EStG, Haltedauer unter einem Jahr; Freigrenze 1.000 € je Jahr, § 23 Abs. 3 S. 5 EStG).
 Diese Währungsgewinne und -verluste sind noch nicht modelliert; die Tauschkosten mindern vereinfachend keinen Gewinn.
 
-Offener Punkt (Jakob, 03.11.2026): Xetra-Gold (4GLD) ist ein Lieferanspruch auf Gold. Gewinne sind nach einer
+Offener Punkt (Jakob, 02.11.2026): Xetra-Gold (4GLD) ist ein Lieferanspruch auf Gold. Gewinne sind nach einer
 Haltedauer von mehr als einem Jahr steuerfrei, davor ein privates Veräußerungsgeschäft (§ 23 Abs. 1 S. 1 Nr. 2 EStG,
 persönlicher Steuersatz, Freigrenze 1.000 €; BFH VIII R 4/15). Der Backtest rechnet konservativ wie bei anderen ETCs
 mit Abgeltungsteuer und ohne Steuerfreiheit nach einem Jahr.

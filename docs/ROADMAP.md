@@ -64,7 +64,7 @@ Die Limits richten sich nach der Risikotragfähigkeit, weil sie niedriger ist al
 | Regel | Core (70 %) | Satellite (30 %) |
 | --- | --- | --- |
 | Haltedauer | Monate bis Jahre, Rebalancing quartalsweise | Tage bis ca. 3 Monate je nach Signal, kein Intraday-Handel |
-| Positionsgröße | max. 5 % je Aktie | 1 % Risiko pro Trade, max. 25 % je ETF-Position, max. 10 % je Einzelaktie (03.11.2026) |
+| Positionsgröße | max. 5 % je Aktie | 1 % Risiko pro Trade, max. 25 % je ETF-Position, max. 10 % je Einzelaktie (02.11.2026) |
 | Ausstieg | These gebrochen oder fairer Wert erreicht | Stop bei 2 × ATR plus Zeit-Stop, wenn das Signal abgelaufen ist |
 | Monatslimit | keins, Marktschwankungen werden ausgehalten | minus 10 %: Bot pausiert, Ursache prüfen |
 | Notbremse | Review, wenn der Core 12 Monate lang mehr als 10 Prozentpunkte hinter dem ACWI IMI liegt | minus 20 % vom Höchststand: Satellite stoppt, komplette Überprüfung |
@@ -337,7 +337,7 @@ Technische Indikatoren wie bei TradingView werden selbst in Python berechnet und
 - Fürs Auge: [TradingViews Bibliothek Lightweight Charts ist Open Source unter Apache 2.0](https://in.tradingview.com/free-charting-libraries) und zeigt im eigenen Dashboard Kerzencharts mit den Signalen des Bots. Bedingung ist ein Hinweis auf TradingView.
 - TradingView bleibt dein manuelles Cockpit zum Gegenprüfen. Eine Community-Strategie mit offenem Quellcode kann als Beschreibung oder Pine-Script übergeben und in Python nachgebaut werden.
 
-**Entschieden am 03.11.2026: Sitzung 5** (Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`).
+**Entschieden am 02.11.2026: Sitzung 5** (Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`).
 
 | Thema | Entscheidung |
 | --- | --- |
@@ -350,6 +350,7 @@ Technische Indikatoren wie bei TradingView werden selbst in Python berechnet und
 | Erfolgskriterien | je Strategie und Regime nach Kosten mit 1.250 €: Sharpe ≥ Buy & Hold (alle ETFs gleich gewichtet, quartalsweise, gleiche Kosten) und max. Drawdown nicht schlechter als −20 %, in beiden Hälften des Zeitraums; jede Strategie und das Regime zählen als eigene Variante |
 | Gegenprobe | Crossover auf einem ETF im TradingView Strategy Tester mit identischen Gebühren (Pine Script in `tools/tradingview/`) |
 | Fundamental-Veto | Piotroski ≤ 3, Z'' mit zweitem Signal, Altman Z (Industrie) als Veto für Einzelaktien-Trades; Beneish nur Warnhinweis; ruht bei reinem ETF-Universum |
+| Ergebnis (Zweig a) | Ohne Kosten erreichen weder Crossover noch Momentum den Sharpe von Buy & Hold in beiden Hälften: kein Renditebaustein; echtes Geld bleibt im Core, beide laufen im Paper Trading als Schatten mit; RSI(2) und Price Channel raus. Ohne Kosten senken Crossover und Momentum den maximalen Drawdown deutlich (Crossover −12,4 % gegen −17,1 %); sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten |
 
 ## Strategie-Bibliothek
 
@@ -433,7 +434,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Paper Trading | Ausführung | 2 | Hoch | Idee |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
-| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; erster gewerteter Lauf: alle 5 Varianten verfehlt (docs/berichte/2026-11-02_technik_satellite.md) |
+| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; Zweig a): kein Renditebaustein, Crossover und Momentum als Schatten im Paper Trading und als mögliche Risikosignale (docs/TECHNIK.md) |
 | Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | Idee |
 | Schattenportfolio Einzelaktien | Fundamental | 2 | Mittel | Idee |
 | Briefing-Auswertung | News | 3 | Mittel | Idee |

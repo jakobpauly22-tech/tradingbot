@@ -1,4 +1,4 @@
-"""Satellite-Strategien der Technik-Engine (Entscheidungen Jakob 03.11.2026, config/technik.yaml).
+"""Satellite-Strategien der Technik-Engine (Entscheidungen Jakob 02.11.2026, config/technik.yaml).
 
 Rahmen für alle Strategien (`SatelliteStrategie`, Schnittstelle `backtest.strategie.Strategie`):
 - Signale auf den Tagesschluss, Ausführung zur Eröffnung des nächsten Handelstags (Simulation).
@@ -62,7 +62,7 @@ class Regel:
 
 class Crossover(Regel):
     """Two MA Crossover: investiert, solange SMA50 > SMA200; Ausstieg beim Kreuzen nach unten.
-    Nach einem Stop wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt (Jakob 03.11.2026; der Schluss
+    Nach einem Stop wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt (Jakob 02.11.2026; der Schluss
     am Stop-Tag zählt nicht). Stärke = SMA50/SMA200 − 1 (prozentualer Abstand)."""
 
     name, familie = "crossover", TREND

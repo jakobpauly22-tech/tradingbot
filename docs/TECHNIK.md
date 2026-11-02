@@ -9,7 +9,7 @@ Crossovers auf SXR8 ist bestanden (`daten/technik/tradingview_crossover_SXR8.csv
 Stückpreis-Problem: SXR8 liegt ab Februar 2020 über der ganzen Positionsgröße (25 % von 1.250 € = 312,50 €) und ist
 ohne Bruchstücke nicht kaufbar; die fünf Läufe sind davon betroffen.
 
-## Entscheidungen (Jakob, 03.11.2026)
+## Entscheidungen (Jakob, 02.11.2026)
 
 1. **RSI(2) und Price Channel sind für den Satellite raus.** Begründung strukturell (Handelsfrequenz bei
    Mindestgebühr), nicht ergebnisgetrieben; vorher als Risiko benannt. Im Satellite bleiben Crossover und Momentum.
@@ -30,7 +30,7 @@ ohne Bruchstücke nicht kaufbar; die fünf Läufe sind davon betroffen.
      in beiden Hälften).
 4. **Xetra-Gold:** Die zwei Tage im Juni 2017 (Schluss über dem Tageshoch) bleiben unverändert; im Bericht vermerkt.
 
-## Ersatz-ETF wegen Stückpreis (Jakob, 03.11.2026)
+## Ersatz-ETF wegen Stückpreis (Jakob, 02.11.2026)
 
 - **Regel:** Jeder ETF muss über den gesamten Zeitraum mit mindestens einem Stück kaufbar sein (Anteilspreis ≤
   Positionsgröße 312,50 €). Eine zusätzliche Drittel-Grenze für Aktien-ETFs entfällt, weil sie nichts ändert und nur
@@ -46,5 +46,17 @@ ohne Bruchstücke nicht kaufbar; die fünf Läufe sind davon betroffen.
   Rundung auf ganze Stücke tatsächlich gekauft wurde (vor allem IBCI, EUNH, EUN5).
 
 Maßstab im Entscheidungsbaum: Buy & Hold aller ETFs der Liste, gleich gewichtet, quartalsweise, kostenfrei (Entscheidung
-03.11.2026). „Ohne Kosten“ heißt für die Strategien: keine Gebühren, kein Spread, keine Slippage, kein Währungstausch;
+02.11.2026). „Ohne Kosten“ heißt für die Strategien: keine Gebühren, kein Spread, keine Slippage, kein Währungstausch;
 ganze Stücke bleiben (strukturelle Eigenschaft des Handels über die API).
+
+## Ergebnis der Neuberechnung (02.11.2026): Zweig a)
+
+Bericht `docs/berichte/2026-11-02_2004_technik_satellite.md`, von Jakob geprüft und bestätigt. Ohne Kosten erreichen weder
+Crossover noch Momentum den Sharpe von Buy & Hold in beiden Hälften. Die Technik-Engine ist kein Renditebaustein; echtes
+Geld bleibt im Core, Crossover und Momentum laufen im Paper Trading als Schatten vorwärts mit. Ohne Kosten senken beide den
+maximalen Drawdown deutlich (Crossover −12,4 %, Momentum −18,8 % gegen −17,1 % bei Buy & Hold über den ganzen Zeitraum);
+sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten.
+
+Für künftige Läufe (Jakob, 02.11.2026): Buy & Hold mit Bruchstücken und voll investiert (strengere Messlatte). Der Lauf
+2026-11-02_2004 rechnete Buy & Hold kostenfrei, aber mit ganzen Stücken; kein Neulauf, weil der Sharpe-Vergleich davon kaum
+abhängt. Kosten werden im Bericht nach Gebühr, Spread und Slippage sowie Währungstausch aufgeschlüsselt.

@@ -2,21 +2,21 @@
 
 Stand 02.11.2026 20:04. Zeitraum 2013-01-03 bis 2024-12-31, Kapital 1,250 € (Schatten), 11 ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: 5 (diese Neuberechnung zählt nicht als neue Variante).
 
-Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, Umsetzung `kostenfrei` (Entscheidung Jakob 03.11.2026).
+Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, Umsetzung `kostenfrei` (Entscheidung Jakob 02.11.2026).
 
 ## Daten
 
 - Universum: IUSA.DE (Aktien USA), EUNK.DE (Aktien Europa), EUNN.DE (Aktien Japan), SXR1.DE (Aktien Pazifik ex Japan), EUNM.DE (Aktien Schwellenländer), EUNH.DE (Anleihen Euro-Staaten), EUN5.DE (Anleihen Euro-Unternehmen), IBCI.DE (Anleihen Euro inflationsindexiert), SXRM.DE (Anleihen US-Staaten), IUSP.DE (Anleihen Schwellenländer), 4GLD.DE (Gold)
 - **SXRM.DE über Ersatzquelle CSBGU0.SW** (gleicher Fonds, gleiche Anteilsklasse, in EUR umgerechnet): an 1484 Tagen mit Xetra-Umsatz Median-Abweichung 0,06% (Grenze 0,5 %, bestanden), 95-%-Quantil 0,27%. Abrechnung über die USD-Kasse (Netto-Tausch), Gebühr nach dem Xetra-Plan.
-- Korrektur: IUSA.DE 2013-02-20: Ausschüttung 0.0508 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026))
-- Korrektur: IUSA.DE 2013-05-29: Ausschüttung 0.0532 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026))
-- Korrektur: IUSA.DE 2013-08-28: Ausschüttung 0.0437 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026))
-- Korrektur: IUSA.DE 2013-11-27: Ausschüttung 0.0429 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026))
+- Korrektur: IUSA.DE 2013-02-20: Ausschüttung 0.0508 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026))
+- Korrektur: IUSA.DE 2013-05-29: Ausschüttung 0.0532 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026))
+- Korrektur: IUSA.DE 2013-08-28: Ausschüttung 0.0437 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026))
+- Korrektur: IUSA.DE 2013-11-27: Ausschüttung 0.0429 € ergänzt (Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026))
 - Korrektur: EUNH.DE 2012-06-11: O/H/T/S [104.39, 104.39, 104.98, 104.39] → 104.980 (Vortagesschluss; Hoch unter Tief, Schluss außerhalb der Spanne)
 - Korrektur: EUN5.DE 2012-06-12: O/H/T/S [117.6, 117.63, 117.41, 117.23] → 117.720 (Vortagesschluss; Schluss außerhalb der Spanne)
 - Korrektur: EUN5.DE 2012-06-13: O/H/T/S [117.05, 117.05, 117.05, 116.97] → 117.720 (Vortagesschluss; Schluss außerhalb der Spanne)
 - **Plausibilität IUSA.DE** (inkl. Dividenden) gegen den ersetzten ETF: 16,32% gegen 16,53% p.a., Differenz -0.206 Pp. (Grenze ±0.3, bestanden); nur Kurs 14,56%. Die Prüfung rechnet vor Steuern (Total-Return-Index, Dividenden reinvestiert, ohne Steuern und Kosten). Im Backtest gehen die Dividenden als Zahlung in die Kasse und werden als Aktienfonds versteuert (Teilfreistellung 30 %).
-- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert (Entscheidung Jakob 03.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).
+- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert (Entscheidung Jakob 02.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).
 
 ## Entscheidungsbaum (docs/TECHNIK.md)
 
@@ -117,3 +117,19 @@ In Klammern: Zahl der Käufe.
 | regime | Hälfte 2 | 0,35% | -0,65% | -0,09 | -0,21 | -21,25% | -27,49% |
 
 Ablage der Läufe: `daten\backtests\20261102T195940_technik_crossover`, `daten\backtests\20261102T200044_technik_momentum`, `daten\backtests\20261102T200140_technik_price_channel`, `daten\backtests\20261102T200233_technik_rsi2`, `daten\backtests\20261102T200345_technik_regime`, `daten\backtests\20261102T200434_technik_buy_and_hold`
+
+## Nachtrag nach Prüfung durch Jakob (02.11.2026)
+
+Zweig a) bestätigt. Buy & Hold war hier kostenfrei, aber mit ganzen Stücken gerechnet; künftige Läufe rechnen es mit Bruchstücken und voll investiert (strengere Messlatte). Kein Neulauf, weil der Sharpe-Vergleich davon kaum abhängt.
+
+Kosten aufgeschlüsselt (aus den abgelegten Läufen; Währungstausch = Gesamtkosten − Gebühren − Spread und Slippage):
+
+| Variante | Trades | Gebühren | Spread und Slippage | Währungstausch | gesamt | je Trade |
+| --- | --- | --- | --- | --- | --- | --- |
+| crossover | 250 | 312 € | 61 € | 85 € | 459 € | 1.84 € |
+| momentum | 218 | 272 € | 61 € | 37 € | 370 € | 1.70 € |
+| price_channel | 540 | 675 € | 113 € | 131 € | 919 € | 1.70 € |
+| rsi2 | 538 | 672 € | 108 € | 75 € | 855 € | 1.59 € |
+| regime | 384 | 480 € | 89 € | 121 € | 690 € | 1.80 € |
+
+Im Schnitt rund 1,70 € je Trade statt der Mindestgebühr von 1,25 €: Spread und Slippage (0,10 % je Ausführung) und der Währungstausch für SXRM kommen hinzu.

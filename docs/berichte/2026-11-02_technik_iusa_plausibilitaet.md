@@ -1,6 +1,6 @@
 # Ersatz IUSA: Plausibilitätsprüfung nicht bestanden (Datenlücke) – Entscheidung nötig vor dem Neulauf
 
-Prüfung laut Entscheidung 03.11.2026: IUSA.DE inklusive Dividenden gegen SXR8.DE, 03.01.2013–31.12.2019, Abweichung der
+Prüfung laut Entscheidung 02.11.2026: IUSA.DE inklusive Dividenden gegen SXR8.DE, 03.01.2013–31.12.2019, Abweichung der
 Rendite p.a. höchstens 0,3 Prozentpunkte. `tools/backtest_technik.py` sperrt den Lauf (Exit 2).
 
 | Prüfung | IUSA inkl. Dividenden | SXR8 | Differenz |

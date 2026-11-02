@@ -1,5 +1,5 @@
 //@version=5
-// Gegenprobe Two MA Crossover 50/200 (Satellite, Technik-Engine) – Entscheidung Jakob 03.11.2026
+// Gegenprobe Two MA Crossover 50/200 (Satellite, Technik-Engine) – Entscheidung Jakob 02.11.2026
 // Gleiche Regeln wie src/tradingbot/engines/technik/strategien.py (Crossover); Gegenstück im Bot:
 //   .venv\Scripts\python tools\gegenprobe_crossover.py
 //

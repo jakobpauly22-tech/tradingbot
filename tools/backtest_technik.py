@@ -1,4 +1,4 @@
-r"""Gewertete Backtests der Satellite-Strategien (Sitzung 5, Entscheidungen Jakob 03.11.2026, config/technik.yaml).
+r"""Gewertete Backtests der Satellite-Strategien (Sitzung 5, Entscheidungen Jakob 02.11.2026, config/technik.yaml).
 
 Aufruf:
   .venv\Scripts\python tools\backtest_technik.py --nur-pruefen   Daten prüfen, Zeitraum bestimmen, nichts simulieren
@@ -181,8 +181,9 @@ def main() -> int:
     if umsetzung == "ohne_gebuehrenregel":          # gleiche Kosten, aber Käufe unter 125 € erlaubt
         from tradingbot.backtest.simulation import Ausfuehrungsregeln
         optionen_bh = {"regeln": Ausfuehrungsregeln(max_gebuehr_anteil=1.0)}
-    elif umsetzung == "kostenfrei":                 # strengere Messlatte: ohne Kosten (wie das Kontrollportfolio)
-        optionen_bh = {"kosten": Kostenmodell.ohne_kosten()}
+    elif umsetzung == "kostenfrei":                 # strengere Messlatte: ohne Kosten, mit Bruchstücken, voll investiert (02.11.2026)
+        from tradingbot.backtest.simulation import Ausfuehrungsregeln
+        optionen_bh = {"kosten": Kostenmodell.ohne_kosten(), "regeln": Ausfuehrungsregeln(ganze_stuecke=False)}
     else:
         raise SystemExit(f"Unbekannte Umsetzung des Buy-&-Hold-Vergleichs: {umsetzung}")
     laeufe, ohne_kosten = {}, {}
@@ -244,7 +245,8 @@ def main() -> int:
             f"Stand {datetime.now():%d.%m.%Y %H:%M}. Zeitraum {start.date()} bis {ende.date()}, Kapital {sp['kapital']:,.0f} € (Schatten), "
             f"{len(instrumente)} ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: {varianten['variante'].nunique()}"
             + (" (diese Neuberechnung zählt nicht als neue Variante)." if a.anlass else "."), "",
-            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, Umsetzung `{umsetzung}` (Entscheidung Jakob 03.11.2026).", "",
+            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, Umsetzung `{umsetzung}`, mit Bruchstücken und voll investiert "
+            "(Entscheidungen Jakob 02.11.2026).", "",
             "## Daten", ""]
     text.append("- Universum: " + ", ".join(f"{e['ticker']} ({e['klasse']})" for e in k["universum"]["etfs"]))
     for etf, pp in pruefprotokoll["ersatzquellen"].items():
@@ -259,7 +261,7 @@ def main() -> int:
                     "Die Prüfung rechnet vor Steuern (Total-Return-Index, Dividenden reinvestiert, ohne Steuern und Kosten). Im Backtest "
                     "gehen die Dividenden als Zahlung in die Kasse und werden als Aktienfonds versteuert (Teilfreistellung 30 %).")
     text += ["- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert "
-             "(Entscheidung Jakob 03.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
+             "(Entscheidung Jakob 02.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
              "## Entscheidungsbaum (docs/TECHNIK.md)", "",
              "| Variante | Sharpe ≥ B&H ohne Kosten in beiden Hälften | Kriterien nach Kosten bestanden |", "| --- | --- | --- |"]
     text += [f"| {n} | {ok(ohne_kosten_sharpe[n])} | {ok(bewertung[n])} |" for n in VARIANTEN]
@@ -283,6 +285,14 @@ def main() -> int:
         stueck, regel, invest = gescheitert(e)
         text.append(f"| {name} | {int(kk['trades'])} | {kk['kosten']:,.0f} € | {pz(invest)} | {stueck} | {regel} | {kk['steuern_gezahlt']:,.0f} € | "
                     f"{pz(kk['cagr_nach_verkauf_und_steuern'])} |")
+    text += ["", "## Kosten aufgeschlüsselt (nach Kosten, vor Steuern)", "",
+             "| Variante | Trades | Gebühren | Spread und Slippage | Währungstausch | gesamt | je Trade |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for name, lauf in laeufe.items():
+        e = next(iter(lauf.ergebnisse.values()))
+        geb, spr = float(e.trades.gebuehr.sum()), float(e.trades.spread_slippage.sum())
+        tausch = float(e.waehrungstausche["kosten"].sum()) if len(e.waehrungstausche) else 0.0
+        n = max(len(e.trades), 1)
+        text.append(f"| {name} | {len(e.trades)} | {geb:,.0f} € | {spr:,.0f} € | {tausch:,.0f} € | {geb + spr + tausch:,.0f} € | {(geb + spr + tausch) / n:,.2f} € |")
     text += ["", "Gescheiterte Orders zählen je Tag und ETF; bei stehendem Signal wird ein Kauf täglich erneut versucht.", "",
              "## Investitionsgrad je ETF (gekaufter Wert / Zielwert neuer Positionen, Rundung auf ganze Stücke)", "",
              "| ETF | " + " | ".join(laeufe) + " |", "| --- |" + " --- |" * len(laeufe)]

@@ -1,4 +1,4 @@
-# Technik-Engine und Satellite-Strategien (Entscheidungen Jakob, 03.11.2026, Sitzung 5)
+# Technik-Engine und Satellite-Strategien (Entscheidungen Jakob, 02.11.2026, Sitzung 5)
 # Parameter vor dem ersten Backtest festgelegt, nicht nachträglich optimieren (ROADMAP „Startauswahl und Parameter“).
 # Code: src/tradingbot/engines/technik/
 
@@ -6,7 +6,7 @@ universum:
   # Auswahlregel (vor dem Lauf festgeschrieben): je Anlageklasse der größte physisch replizierende UCITS-ETF mit
   # Xetra-Notierung seit spätestens 2012. Umsetzung (Claude, zur Prüfung durch Jakob):
   # - Anlageklassen: fünf Aktienregionen, fünf Anleiheklassen, Gold.
-  # - „Größter“ = Fondsvolumen laut justETF am 03.11.2026 (heutiges Volumen: leichter Rückschaufehler, weil heute
+  # - „Größter“ = Fondsvolumen laut justETF am 02.11.2026 (heutiges Volumen: leichter Rückschaufehler, weil heute
   #   große Fonds damals erfolgreich waren; ein Volumen von 2012 ist kostenlos nicht verfügbar).
   # - „Physisch“ = heutige Replikationsmethode laut justETF (vollständig oder Sampling).
   # - „Xetra seit spätestens 2012“ = Xetra-Kurshistorie bei Yahoo ab spätestens 31.12.2012 (gleichzeitig die
@@ -15,15 +15,15 @@ universum:
   #   besicherte Gold-ETC mit Xetra-Kursen seit spätestens 2012. iShares Physical Gold (33,6 Mrd. €) hat
   #   Xetra-Kurse erst ab 07/2021 und fällt heraus.
   regel: groesster_physischer_ucits_etf_je_anlageklasse_xetra_bis_2012
-  kaufbarkeit: anteilspreis_hoechstens_positionsgroesse_im_ganzen_zeitraum   # Jakob 03.11.2026
-  # Plausibilität des Ersatzes (Jakob 03.11.2026): IUSA inklusive Dividenden gegen SXR8, Abweichung der Rendite p.a.
+  kaufbarkeit: anteilspreis_hoechstens_positionsgroesse_im_ganzen_zeitraum   # Jakob 02.11.2026
+  # Plausibilität des Ersatzes (Jakob 02.11.2026): IUSA inklusive Dividenden gegen SXR8, Abweichung der Rendite p.a.
   # höchstens 0,3 Prozentpunkte. Der Lauf sperrt bei Verfehlung.
   plausibilitaet_ersatz:
     - {ticker: IUSA.DE, vergleich: SXR8.DE, von: 2013-01-03, bis: 2019-12-31, max_pp: 0.3}
-  stand: 2026-11-03
+  stand: 2026-11-02
   quelle: justETF-Fondsprofile (Fondsgröße, Replikation, Xetra-Ticker), Yahoo-Kurshistorie (Xetra)
   etfs:
-    # Kaufbarkeitsregel (Jakob 03.11.2026): Jeder ETF muss im ganzen Zeitraum mit mindestens einem Stück kaufbar sein
+    # Kaufbarkeitsregel (Jakob 02.11.2026): Jeder ETF muss im ganzen Zeitraum mit mindestens einem Stück kaufbar sein
     # (Anteilspreis ≤ Positionsgröße 25 % von 1.250 € = 312,50 €). SXR8 (137.659 Mio. €) liegt ab 19.02.2020 darüber und
     # wird durch den nächsten der Rangfolge ersetzt (VUSA erst ab 2017 auf Xetra bei Yahoo, Invesco synthetisch,
     # Vanguard Acc ab 2019): iShares Core S&P 500 (Dist), gleicher Index. Begründung der Rückschau: docs/TECHNIK.md.
@@ -37,26 +37,26 @@ universum:
     - {klasse: Anleihen Euro inflationsindexiert, ticker: IBCI.DE, isin: IE00B0M62X26, name: iShares Euro Inflation Linked Govt Bond (Acc), steuerart: sonstiger_fonds, volumen_mio_eur: 1817, hinweis: "vor Amundi (1.424)"}
     - {klasse: Anleihen US-Staaten,     ticker: SXRM.DE, isin: IE00B3VWN518, name: iShares USD Treasury Bond 7-10yr (Acc),      steuerart: sonstiger_fonds, volumen_mio_eur: 4625,  hinweis: "vor Dist-Klasse (3.482) und 1-3yr (2.359); Xetra-Handel in USD, 2012 kaum Umsatz", kursquelle: CSBGU0.SW, handelswaehrung: USD}
     - {klasse: Anleihen Schwellenländer, ticker: IUSP.DE, isin: IE00B5M4WH52, name: iShares J.P. Morgan EM Local Government Bond (Dist), steuerart: sonstiger_fonds, volumen_mio_eur: 4612, hinweis: "vor USD-EM-Bond IUS7 (3.672); Xetra ab 08/2011"}
-    - {klasse: Gold,                    ticker: 4GLD.DE, isin: DE000A0S9GB0, name: Xetra-Gold,                                  steuerart: etc,             volumen_mio_eur: 20485, hinweis: "Nächster der Rangfolge (Jakob 03.11.2026): Invesco Physical Gold (8PSG, 25.438) mit fehlerhaften Yahoo-Kursen; iShares Physical Gold erst ab 2021 auf Xetra"}
+    - {klasse: Gold,                    ticker: 4GLD.DE, isin: DE000A0S9GB0, name: Xetra-Gold,                                  steuerart: etc,             volumen_mio_eur: 20485, hinweis: "Nächster der Rangfolge (Jakob 02.11.2026): Invesco Physical Gold (8PSG, 25.438) mit fehlerhaften Yahoo-Kursen; iShares Physical Gold erst ab 2021 auf Xetra"}
 
   # Auffällige Kursreihen brauchen eine Entscheidung von Jakob (docs/DATENQUALITAET.md); tools/backtest_technik.py
   # sperrt den Lauf, solange eine Reihe auffällig und hier nicht eingetragen ist. Eintrag je Ticker:
   # {ticker: …, entscheidung: …, datum: …}; optional `kursquelle` am ETF (gleiches Produkt, andere Börse).
-  datenfreigaben:                      # Entscheidungen Jakob 03.11.2026
-    - {ticker: SXRM.DE, entscheidung: "Ersatzquelle CSBGU0.SW (gleicher Fonds und gleiche Anteilsklasse an der SIX, USD), in EUR umgerechnet; Plausibilität: an Tagen mit Xetra-Umsatz Median-Abweichung höchstens 0,5 % (Ergebnis im Bericht)", datum: 2026-11-03}
-    - {ticker: 4GLD.DE, entscheidung: "Ersatz für 8PSG (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % bzw. 0,45 %) unverändert übernommen, im Bericht als offen markiert (Claude)", datum: 2026-11-03}
-    - {ticker: EUNH.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-03}
-    - {ticker: EUN5.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-03}
-  # Dokumentierte Korrekturen (Jakob 03.11.2026): alle Preise des Tages = Schlusskurs des Vortags. Wirkung über
+  datenfreigaben:                      # Entscheidungen Jakob 02.11.2026
+    - {ticker: SXRM.DE, entscheidung: "Ersatzquelle CSBGU0.SW (gleicher Fonds und gleiche Anteilsklasse an der SIX, USD), in EUR umgerechnet; Plausibilität: an Tagen mit Xetra-Umsatz Median-Abweichung höchstens 0,5 % (Ergebnis im Bericht)", datum: 2026-11-02}
+    - {ticker: 4GLD.DE, entscheidung: "Ersatz für 8PSG (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % bzw. 0,45 %) unverändert übernommen, im Bericht als offen markiert (Claude)", datum: 2026-11-02}
+    - {ticker: EUNH.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-02}
+    - {ticker: EUN5.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-02}
+  # Dokumentierte Korrekturen (Jakob 02.11.2026): alle Preise des Tages = Schlusskurs des Vortags. Wirkung über
   # SMA200 bis Anfang 2013 (Beginn des gewerteten Zeitraums).
   korrekturen:
     - {ticker: EUNH.DE, datum: 2012-06-11, regel: vortagesschluss, grund: "Hoch unter Tief, Schluss außerhalb der Spanne"}
     - {ticker: EUN5.DE, datum: 2012-06-12, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
     - {ticker: EUN5.DE, datum: 2012-06-13, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
-    - {ticker: IUSA.DE, datum: 2013-02-20, regel: dividende_ergaenzen, betrag_eur: 0.0508, betrag_usd: 0.0681, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
-    - {ticker: IUSA.DE, datum: 2013-05-29, regel: dividende_ergaenzen, betrag_eur: 0.0532, betrag_usd: 0.0684, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
-    - {ticker: IUSA.DE, datum: 2013-08-28, regel: dividende_ergaenzen, betrag_eur: 0.0437, betrag_usd: 0.0585, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
-    - {ticker: IUSA.DE, datum: 2013-11-27, regel: dividende_ergaenzen, betrag_eur: 0.0429, betrag_usd: 0.0582, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 03.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-02-20, regel: dividende_ergaenzen, betrag_eur: 0.0508, betrag_usd: 0.0681, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-05-29, regel: dividende_ergaenzen, betrag_eur: 0.0532, betrag_usd: 0.0684, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-08-28, regel: dividende_ergaenzen, betrag_eur: 0.0437, betrag_usd: 0.0585, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026)"}
+    - {ticker: IUSA.DE, datum: 2013-11-27, regel: dividende_ergaenzen, betrag_eur: 0.0429, betrag_usd: 0.0582, quelle: "IDUS.L (iShares Core S&P 500 USD Dist, gleicher Fonds IE0031442068), USD zum EUR/USD-Kurs des Ex-Tags", grund: "Yahoo führt für IUSA 2013 keine Ausschüttungen (Jakob 02.11.2026)"}
 
 backtest:
   daten_ab: 2012-01-01                 # Projektentscheidung 01.11.2026 (Historie ab 2012)
@@ -71,7 +71,7 @@ satellite:
   risiko_je_trade: 0.01                # 1 % des aktuellen Satellite-Werts
   stop_atr_faktor: 2.0                 # Stop = Einstiegskurs − 2 × ATR(20), fest ab Einstieg
   atr_tage: 20
-  max_position:                        # Entscheidung 03.11.2026: ETFs 25 % (bei 10 % greift die Risikoregel nie)
+  max_position:                        # Entscheidung 02.11.2026: ETFs 25 % (bei 10 % greift die Risikoregel nie)
     etf: 0.25
     aktie: 0.10
   zeit_stop_tage:                      # Handelstage seit Einstieg
@@ -80,7 +80,7 @@ satellite:
     crossover: 63                      # nur verkaufen, wenn das Einstiegssignal nicht mehr gilt (kein Zwangsverkauf mit Rückkauf)
     momentum: 63                       # wie crossover
   # Stop und Zeit-Stop werden auf den Tagesschluss geprüft, ausgeführt zur Eröffnung des nächsten Handelstags
-  # (wie alle Signale; Freigabe morgens). Freigegeben 03.11.2026.
+  # (wie alle Signale; Freigabe morgens). Freigegeben 02.11.2026.
   stop_pruefung: schlusskurs_ausfuehrung_folgetag
 
 strategien:
@@ -93,18 +93,18 @@ strategien:
   # Mehr Signale als Plätze: Vergabe nach Stärke. Momentum: 12−1-Wert (Entscheidung Jakob). Übrige (Claude, zur
   # Prüfung): Crossover SMA50/SMA200 − 1; Price Channel (Schluss − 55-Tage-Hoch) / ATR; RSI(2): niedrigster RSI zuerst.
   # Regime: gilt für Einstiege; Ausstiege folgen immer der Regel der Strategie, die den Einstieg erzeugt hat.
-  # Nach einem Stop (Jakob 03.11.2026): Crossover wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt
-  # (kein neues Kreuzen nötig); Momentum zur nächsten Monatsprüfung. Umsetzungsdetails freigegeben 03.11.2026.
+  # Nach einem Stop (Jakob 02.11.2026): Crossover wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt
+  # (kein neues Kreuzen nötig); Momentum zur nächsten Monatsprüfung. Umsetzungsdetails freigegeben 02.11.2026.
 
 erfolgskriterien:                      # je Strategie und Regime, nach Kosten, Kapital 1.250 €
   sharpe_mindestens: buy_and_hold      # alle ETFs der Liste gleich gewichtet, quartalsweise, gleiche Kosten
   max_drawdown_mindestens: -0.20       # nicht schlechter als −20 %
   in_beiden_haelften: true             # wegen fünf getesteter Varianten
-  # OFFEN (03.11.2026): Mit 1.250 € und 11 ETFs ist jede Buy-&-Hold-Position 114 € < 125 €; die 1-%-Gebührenregel
+  # OFFEN (02.11.2026): Mit 1.250 € und 11 ETFs ist jede Buy-&-Hold-Position 114 € < 125 €; die 1-%-Gebührenregel
   # verwirft dann jeden Kauf. Mögliche Werte: kostenfrei | ohne_gebuehrenregel. Entscheidung Jakob vor dem Lauf.
-  buy_and_hold_umsetzung: kostenfrei   # Entscheidung Jakob 03.11.2026: strengere Messlatte
+  buy_and_hold_umsetzung: kostenfrei   # Entscheidung Jakob 02.11.2026: strengere Messlatte
   varianten: [crossover, momentum, price_channel, rsi2, regime]
-  # Entscheidung 03.11.2026: RSI(2) und Price Channel sind für den Satellite raus (Handelsfrequenz bei Mindestgebühr,
+  # Entscheidung 02.11.2026: RSI(2) und Price Channel sind für den Satellite raus (Handelsfrequenz bei Mindestgebühr,
   # strukturell begründet). Die fünf Varianten werden einmal als Modellkorrektur neu gerechnet (docs/TECHNIK.md).
   satellite_strategien: [crossover, momentum]
   entscheidungsbaum: docs/TECHNIK.md

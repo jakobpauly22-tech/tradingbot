@@ -2,7 +2,7 @@
 
 Stand 02.11.2026 18:56. Zeitraum 2013-01-03 bis 2024-12-31, Kapital 1,250 € (Schatten), 11 ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: 5.
 
-Buy & Hold: alle ETFs gleich gewichtet, quartalsweise (Umsetzung: kostenfrei; Entscheidung Jakob 03.11.2026: kostenfrei als strengere Messlatte, weil 114 € je Position unter der 125-€-Grenze lägen).
+Buy & Hold: alle ETFs gleich gewichtet, quartalsweise (Umsetzung: kostenfrei; Entscheidung Jakob 02.11.2026: kostenfrei als strengere Messlatte, weil 114 € je Position unter der 125-€-Grenze lägen).
 
 ## Daten
 

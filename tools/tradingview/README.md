@@ -1,6 +1,6 @@
 # Gegenprobe mit TradingView (Crossover 50/200)
 
-Entscheidung 03.11.2026: Der Crossover wird an einem ETF im TradingView Strategy Tester nachgerechnet; die Regeln müssen in
+Entscheidung 02.11.2026: Der Crossover wird an einem ETF im TradingView Strategy Tester nachgerechnet; die Regeln müssen in
 beiden Rechnungen ähnliche Ergebnisse liefern (ROADMAP, „Regeln für die Übernahme“, Punkt 5).
 
 1. In TradingView den Pine Editor öffnen, `crossover_gegenprobe.pine` einfügen, „Zum Chart hinzufügen“.
