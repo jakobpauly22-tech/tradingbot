@@ -1,0 +1,21 @@
+# Risk-Manager (Veto), Entscheidungen Jakob. Wird in Phase 2 mit Code hinterlegt (src/tradingbot/risiko/).
+
+fundamental_veto:
+  # Entscheidung 03.11.2026 nach der Filter-Diagnose (docs/FUNDAMENTAL.md, Variante 2)
+  gilt_fuer: einzelaktien              # alle Einzelaktien-Trades, Core und Satellite
+  veto:
+    - piotroski_hoechstens_3           # Piotroski (gerundet) ≤ 3
+    - z_zwei_strich_mit_zweitem_signal # Z'' in der Gefahrenzone und (Piotroski ≤ 3 oder operativer Cashflow < 0)
+    - altman_z_industrie               # Altman Z (1968) in der Gefahrenzone, SIC 2000–3999
+  warnhinweis:
+    - beneish                          # M > −1,78: nur Hinweis in der Investment-These, kein Veto
+    - z_zwei_strich_allein
+  etf_universum: ruht                  # bei einem reinen ETF-Universum ruht das Veto vorerst
+  regeln: config/fundamental.yaml      # Schwellen und Branchen wie im Abschnitt `filter`
+
+positionsgroesse:
+  satellite:
+    risiko_je_trade: 0.01
+    max_position: {etf: 0.25, aktie: 0.10}   # Entscheidung 03.11.2026 (vorher 10 % für alles)
+  core:
+    max_einzelaktie: 0.05              # breite ETFs ausgenommen

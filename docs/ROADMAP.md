@@ -64,7 +64,7 @@ Die Limits richten sich nach der Risikotragfähigkeit, weil sie niedriger ist al
 | Regel | Core (70 %) | Satellite (30 %) |
 | --- | --- | --- |
 | Haltedauer | Monate bis Jahre, Rebalancing quartalsweise | Tage bis ca. 3 Monate je nach Signal, kein Intraday-Handel |
-| Positionsgröße | max. 5 % je Aktie | 1 % Risiko pro Trade, max. 10 % je Position |
+| Positionsgröße | max. 5 % je Aktie | 1 % Risiko pro Trade, max. 25 % je ETF-Position, max. 10 % je Einzelaktie (03.11.2026) |
 | Ausstieg | These gebrochen oder fairer Wert erreicht | Stop bei 2 × ATR plus Zeit-Stop, wenn das Signal abgelaufen ist |
 | Monatslimit | keins, Marktschwankungen werden ausgehalten | minus 10 %: Bot pausiert, Ursache prüfen |
 | Notbremse | Review, wenn der Core 12 Monate lang mehr als 10 Prozentpunkte hinter dem ACWI IMI liegt | minus 20 % vom Höchststand: Satellite stoppt, komplette Überprüfung |
@@ -337,6 +337,20 @@ Technische Indikatoren wie bei TradingView werden selbst in Python berechnet und
 - Fürs Auge: [TradingViews Bibliothek Lightweight Charts ist Open Source unter Apache 2.0](https://in.tradingview.com/free-charting-libraries) und zeigt im eigenen Dashboard Kerzencharts mit den Signalen des Bots. Bedingung ist ein Hinweis auf TradingView.
 - TradingView bleibt dein manuelles Cockpit zum Gegenprüfen. Eine Community-Strategie mit offenem Quellcode kann als Beschreibung oder Pine-Script übergeben und in Python nachgebaut werden.
 
+**Entschieden am 03.11.2026: Sitzung 5** (Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`).
+
+| Thema | Entscheidung |
+| --- | --- |
+| Universum | 10–15 Xetra-ETFs (Aktienregionen, Anleihen, Gold); Regel: je Anlageklasse der größte physisch replizierende UCITS-ETF mit Xetra-Notierung seit spätestens 2012. Ergebnis: 11 Werte (5 Aktienregionen, 5 Anleiheklassen, Gold als physisch besicherter ETC) |
+| Zeitraum | gewertet ab dem Tag, an dem alle ETFs 12 Monate Historie haben, bis 31.12.2024; Tresor zu |
+| Positionsgröße | 1 % Risiko je Trade (Stop 2 × ATR(20)); höchstens 25 % je ETF-Position, 10 % je Einzelaktie. Grund: mit 1.250 € und 10 % wäre jede Position 125 €, die Risikoregel griffe nie, Kauf und Verkauf kosteten 2 % |
+| Zeit-Stops | RSI(2) 10, Price Channel 63 Handelstage; Crossover und Momentum steigen über das Signal aus, nach 63 Tagen nur, wenn das Einstiegssignal nicht mehr gilt |
+| Momentum | 12−1 als Zeitreihe, monatlich; mehr Signale als Plätze → Vergabe nach Stärke des 12−1-Werts |
+| ADX-Regime | über 25 nur Trend und Ausbruch, unter 20 nur RSI(2), dazwischen alle |
+| Erfolgskriterien | je Strategie und Regime nach Kosten mit 1.250 €: Sharpe ≥ Buy & Hold (alle ETFs gleich gewichtet, quartalsweise, gleiche Kosten) und max. Drawdown nicht schlechter als −20 %, in beiden Hälften des Zeitraums; jede Strategie und das Regime zählen als eigene Variante |
+| Gegenprobe | Crossover auf einem ETF im TradingView Strategy Tester mit identischen Gebühren (Pine Script in `tools/tradingview/`) |
+| Fundamental-Veto | Piotroski ≤ 3, Z'' mit zweitem Signal, Altman Z (Industrie) als Veto für Einzelaktien-Trades; Beneish nur Warnhinweis; ruht bei reinem ETF-Universum |
+
 ## Strategie-Bibliothek
 
 Jede Strategie wird ein eigenes Modul mit Idee, Datenbedarf, Haltedauer und Backtest. Das Scoring gewichtet sie nach Backtest-Ergebnis. Neue Strategien, z.B. aus TradingView oder Vorlesungen, kommen zuerst hierher.
@@ -419,7 +433,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Paper Trading | Ausführung | 2 | Hoch | Idee |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
-| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Idee |
+| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | In Arbeit (Sitzung 5) |
 | Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | Idee |
 | Schattenportfolio Einzelaktien | Fundamental | 2 | Mittel | Idee |
 | Briefing-Auswertung | News | 3 | Mittel | Idee |

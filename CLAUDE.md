@@ -23,7 +23,7 @@ Bei Widersprüchen gilt die neueste Entscheidung von Jakob. Weicht der Code von 
 | Regel | Core (70 %) | Satellite (30 %) |
 | --- | --- | --- |
 | Haltedauer | Monate bis Jahre, Rebalancing quartalsweise | Tage bis ca. 3 Monate, kein Intraday |
-| Positionsgröße | max. 5 % je Einzelaktie (breite ETFs ausgenommen) | 1 % Risiko pro Trade, max. 10 % je Position |
+| Positionsgröße | max. 5 % je Einzelaktie (breite ETFs ausgenommen) | 1 % Risiko pro Trade, max. 25 % je ETF-Position, max. 10 % je Einzelaktie (03.11.2026) |
 | Ausstieg | These gebrochen oder fairer Wert erreicht | Stop 2 × ATR(20) plus Zeit-Stop |
 | Monatslimit | keins | −10 %: Bot pausiert, Ursache prüfen |
 | Notbremse | Review, wenn 12 Monate > 10 Prozentpunkte hinter MSCI ACWI IMI | −20 % vom Höchststand: Satellite stoppt |
@@ -112,6 +112,16 @@ Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nich
 - **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
 - **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
 - **Erster Lauf (03.11.2026):** beide Erfolgskriterien verfehlt (Ergebnis und Diagnose in `docs/FUNDAMENTAL.md`). Der kombinierte Score geht nicht als Stockpicker ins Paper Trading; Score und Gewichte bleiben unverändert. Im Paper Trading laufen zwei Schattenportfolios vorwärts mit: (A) Originalscore, (B) nur Qualitätshälfte. DCF zurückgestellt. Gezählte Varianten: `daten/fundamental/varianten.csv`.
+
+## Technik-Engine und Risk-Manager (Entscheidungen 03.11.2026)
+
+Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`. Details in `docs/ROADMAP.md`, Abschnitt Technik-Engine.
+
+- **Fundamental-Veto:** Piotroski ≤ 3, Z'' mit zweitem Signal und Altman Z (Industrie) sind Veto im Risk-Manager für alle Einzelaktien-Trades; Beneish nur Warnhinweis. Bei einem reinen ETF-Universum ruht das Veto vorerst.
+- **Satellite-Universum:** 11 Xetra-ETFs/-ETCs nach der Regel „je Anlageklasse der größte physisch replizierende UCITS-ETF mit Xetra-Notierung seit spätestens 2012“ (Liste in `config/technik.yaml`). Gewerteter Backtest ab dem Tag, an dem alle 12 Monate Historie haben, bis 31.12.2024.
+- **Strategien:** Crossover 50/200, Momentum 12−1 (Zeitreihe, monatlich, Vergabe nach Stärke), Price Channel 55/20, RSI(2) < 10 über SMA200, ADX-Regime (über 25 Trend und Ausbruch, unter 20 nur RSI(2), dazwischen alle). Zeit-Stops: RSI(2) 10, Price Channel 63 Handelstage; Crossover und Momentum nach 63 Tagen nur, wenn das Signal nicht mehr gilt.
+- **Erfolgskriterien je Variante** (fünf Varianten, nach Kosten, 1.250 €): Sharpe ≥ Buy & Hold (alle ETFs gleich gewichtet, quartalsweise, gleiche Kosten) und maximaler Drawdown nicht schlechter als −20 %, beides in beiden Hälften.
+- **Berichte** zusätzlich als Datei unter `docs/berichte/`.
 
 ## Briefing-Archiv (Eingang der News-Engine)
 

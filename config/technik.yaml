@@ -1,0 +1,74 @@
+# Technik-Engine und Satellite-Strategien (Entscheidungen Jakob, 03.11.2026, Sitzung 5)
+# Parameter vor dem ersten Backtest festgelegt, nicht nachträglich optimieren (ROADMAP „Startauswahl und Parameter“).
+# Code: src/tradingbot/engines/technik/
+
+universum:
+  # Auswahlregel (vor dem Lauf festgeschrieben): je Anlageklasse der größte physisch replizierende UCITS-ETF mit
+  # Xetra-Notierung seit spätestens 2012. Umsetzung (Claude, zur Prüfung durch Jakob):
+  # - Anlageklassen: fünf Aktienregionen, fünf Anleiheklassen, Gold.
+  # - „Größter“ = Fondsvolumen laut justETF am 03.11.2026 (heutiges Volumen: leichter Rückschaufehler, weil heute
+  #   große Fonds damals erfolgreich waren; ein Volumen von 2012 ist kostenlos nicht verfügbar).
+  # - „Physisch“ = heutige Replikationsmethode laut justETF (vollständig oder Sampling).
+  # - „Xetra seit spätestens 2012“ = Xetra-Kurshistorie bei Yahoo ab spätestens 31.12.2012 (gleichzeitig die
+  #   Datenbedingung für den Backtest).
+  # - Gold: Ein UCITS-ETF auf Gold allein ist nicht zulässig (Streuungsregeln); stattdessen der größte physisch
+  #   besicherte Gold-ETC mit Xetra-Kursen seit spätestens 2012. iShares Physical Gold (33,6 Mrd. €) hat
+  #   Xetra-Kurse erst ab 07/2021 und fällt heraus.
+  regel: groesster_physischer_ucits_etf_je_anlageklasse_xetra_bis_2012
+  stand: 2026-11-03
+  quelle: justETF-Fondsprofile (Fondsgröße, Replikation, Xetra-Ticker), Yahoo-Kurshistorie (Xetra)
+  etfs:
+    - {klasse: Aktien USA,              ticker: SXR8.DE, isin: IE00B5BMR087, name: iShares Core S&P 500 (Acc),                  steuerart: aktienfonds,     volumen_mio_eur: null,  hinweis: "größter physischer S&P-500-UCITS-ETF"}
+    - {klasse: Aktien Europa,           ticker: EUNK.DE, isin: IE00B4K48X80, name: iShares Core MSCI Europe (Acc),              steuerart: aktienfonds,     volumen_mio_eur: 16100, hinweis: "Amundi Core Stoxx Europe 600 (22.040) erst seit 2013"}
+    - {klasse: Aktien Japan,            ticker: EUNN.DE, isin: IE00B4L5YX21, name: iShares Core MSCI Japan IMI (Acc),           steuerart: aktienfonds,     volumen_mio_eur: 7271,  hinweis: "vor Xtrackers MSCI Japan 1C (6.430)"}
+    - {klasse: Aktien Pazifik ex Japan, ticker: SXR1.DE, isin: IE00B52MJY50, name: iShares Core MSCI Pacific ex Japan (Acc),    steuerart: aktienfonds,     volumen_mio_eur: 3829,  hinweis: ""}
+    - {klasse: Aktien Schwellenländer,  ticker: EUNM.DE, isin: IE00B4L5YC18, name: iShares MSCI EM (Acc),                       steuerart: aktienfonds,     volumen_mio_eur: 8909,  hinweis: "Core MSCI EM IMI und Xtrackers MSCI EM 1C erst ab 2014/2017"}
+    - {klasse: Anleihen Euro-Staaten,   ticker: EUNH.DE, isin: IE00B4WXJJ64, name: iShares Core Euro Government Bond (Dist),    steuerart: sonstiger_fonds, volumen_mio_eur: 5383,  hinweis: "vor Xtrackers Eurozone Govt 1C (2.476), iShares € Govt 1-3yr (1.742)"}
+    - {klasse: Anleihen Euro-Unternehmen, ticker: EUN5.DE, isin: IE00B3F81R35, name: iShares Core EUR Corporate Bond (Dist),   steuerart: sonstiger_fonds, volumen_mio_eur: 9519,  hinweis: ""}
+    - {klasse: Anleihen Euro inflationsindexiert, ticker: IBCI.DE, isin: IE00B0M62X26, name: iShares Euro Inflation Linked Govt Bond (Acc), steuerart: sonstiger_fonds, volumen_mio_eur: 1817, hinweis: "vor Amundi (1.424)"}
+    - {klasse: Anleihen US-Staaten,     ticker: SXRM.DE, isin: IE00B3VWN518, name: iShares USD Treasury Bond 7-10yr (Acc),      steuerart: sonstiger_fonds, volumen_mio_eur: 4625,  hinweis: "vor Dist-Klasse (3.482) und 1-3yr (2.359); 2012 kaum Xetra-Umsatz"}
+    - {klasse: Anleihen Schwellenländer, ticker: IUSP.DE, isin: IE00B5M4WH52, name: iShares J.P. Morgan EM Local Government Bond (Dist), steuerart: sonstiger_fonds, volumen_mio_eur: 4612, hinweis: "vor USD-EM-Bond IUS7 (3.672); Xetra ab 08/2011"}
+    - {klasse: Gold,                    ticker: 8PSG.DE, isin: IE00B579F325, name: Invesco Physical Gold ETC,                   steuerart: etc,             volumen_mio_eur: 25438, hinweis: "ETC, kein UCITS-ETF; iShares Physical Gold erst ab 2021 auf Xetra"}
+
+backtest:
+  daten_ab: 2012-01-01                 # Projektentscheidung 01.11.2026 (Historie ab 2012)
+  # Start des gewerteten Backtests: sobald alle ETFs 12 Monate Kurshistorie haben (ab daten_ab gerechnet)
+  gewertet_ab_regel: alle_etfs_12_monate_historie
+  gewertet_bis: 2024-12-31             # Tresor ab 2025 bleibt zu
+  haelften: 2                          # Kriterien müssen in beiden Hälften erfüllt sein
+  kapital: 1250.0                      # Satellite-Schattenkapital (config/backtest.yaml)
+  steuergruppe: schatten
+
+satellite:
+  risiko_je_trade: 0.01                # 1 % des aktuellen Satellite-Werts
+  stop_atr_faktor: 2.0                 # Stop = Einstiegskurs − 2 × ATR(20), fest ab Einstieg
+  atr_tage: 20
+  max_position:                        # Entscheidung 03.11.2026: ETFs 25 % (bei 10 % greift die Risikoregel nie)
+    etf: 0.25
+    aktie: 0.10
+  zeit_stop_tage:                      # Handelstage seit Einstieg
+    rsi2: 10                           # Zwangsausstieg
+    price_channel: 63                  # Zwangsausstieg
+    crossover: 63                      # nur verkaufen, wenn das Einstiegssignal nicht mehr gilt (kein Zwangsverkauf mit Rückkauf)
+    momentum: 63                       # wie crossover
+  # Stop und Zeit-Stop werden auf den Tagesschluss geprüft, ausgeführt zur Eröffnung des nächsten Handelstags
+  # (wie alle Signale; Freigabe morgens). Vereinfachung, zur Prüfung durch Jakob.
+  stop_pruefung: schlusskurs_ausfuehrung_folgetag
+
+strategien:
+  crossover:   {schnell: 50, langsam: 200}
+  momentum:    {monate: 12, ohne_letzte_monate: 1, pruefung: monatlich, art: zeitreihe}   # investiert, wenn 12−1 > 0
+  price_channel: {einstieg_hoch_tage: 55, ausstieg_tief_tage: 20}
+  rsi2:        {tage: 2, einstieg_unter: 10, trendfilter_sma: 200, ausstieg_ueber_sma: 5}
+  regime:      {adx_tage: 14, stark_ueber: 25, schwach_unter: 20}
+  # über 25: nur Trend (Crossover, Momentum) und Ausbruch (Price Channel); unter 20: nur RSI(2); dazwischen alle
+  # Mehr Signale als Plätze: Vergabe nach Stärke. Momentum: 12−1-Wert (Entscheidung Jakob). Übrige (Claude, zur
+  # Prüfung): Crossover SMA50/SMA200 − 1; Price Channel (Schluss − 55-Tage-Hoch) / ATR; RSI(2): niedrigster RSI zuerst.
+  # Regime: gilt für Einstiege; Ausstiege folgen immer der Regel der Strategie, die den Einstieg erzeugt hat.
+  # Nach einem Stop: Crossover erst nach neuem Kreuzen von unten, Momentum erst nach der nächsten Monatsprüfung.
+
+erfolgskriterien:                      # je Strategie und Regime, nach Kosten, Kapital 1.250 €
+  sharpe_mindestens: buy_and_hold      # alle ETFs der Liste gleich gewichtet, quartalsweise, gleiche Kosten
+  max_drawdown_mindestens: -0.20       # nicht schlechter als −20 %
+  in_beiden_haelften: true             # wegen fünf getesteter Varianten
+  varianten: [crossover, momentum, price_channel, rsi2, regime]
