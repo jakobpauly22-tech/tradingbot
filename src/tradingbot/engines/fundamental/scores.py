@@ -29,8 +29,25 @@ def _brauche(t, posten: list[tuple[str, int]]) -> list[str]:
 
 
 # --- Piotroski F-Score -----------------------------------------------------------------------------
-def piotroski(t: pd.DataFrame) -> dict:
-    """Piotroski F-Score (0–9), neun binäre Signale.
+PIOTROSKI_SIGNALE = {
+    # Signal: benötigte Posten (Name, Jahr t−j)
+    "roa": [("jahresueberschuss", 0), ("bilanzsumme", 1)],
+    "cfo": [("operativer_cashflow", 0), ("bilanzsumme", 1)],
+    "delta_roa": [("jahresueberschuss", 0), ("bilanzsumme", 1), ("jahresueberschuss", 1), ("bilanzsumme", 2)],
+    "accrual": [("operativer_cashflow", 0), ("jahresueberschuss", 0), ("bilanzsumme", 1)],
+    "delta_lever": [("langfristige_finanzschulden", 0), ("langfristige_finanzschulden", 1), ("bilanzsumme", 0),
+                    ("bilanzsumme", 1), ("bilanzsumme", 2)],
+    "delta_liquid": [("umlaufvermoegen", 0), ("kurzfristige_verbindlichkeiten", 0), ("umlaufvermoegen", 1),
+                     ("kurzfristige_verbindlichkeiten", 1)],
+    "eq_offer": [("gewichtete_aktien", 0), ("gewichtete_aktien", 1)],
+    "delta_margin": [("bruttoergebnis", 0), ("umsatz", 0), ("bruttoergebnis", 1), ("umsatz", 1)],
+    "delta_turn": [("umsatz", 0), ("bilanzsumme", 1), ("umsatz", 1), ("bilanzsumme", 2)],
+}
+PIOTROSKI_MINDESTSIGNALE = 7      # Entscheidung Jakob 03.11.2026 (config/fundamental.yaml)
+
+
+def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -> dict:
+    """Piotroski F-Score (0–9), neun binäre Signale, jedes einzeln berechnet, soweit seine Posten vorliegen.
 
     Ursprünglich für Value-Aktien entwickelt (Firmen mit hohem Buchwert-Markt-Verhältnis, Piotroski 2000); hier dient er
     als allgemeiner Qualitätsfilter für das ganze investierbare Universum (Entscheidung Jakob, Filter F ≤ 3 → raus).
@@ -43,40 +60,50 @@ def piotroski(t: pd.DataFrame) -> dict:
                    EQ_OFFER: keine neuen Aktien – Näherung über die gewichtete Aktienzahl (t ≤ t−1), da die SEC-Daten
                    die Ausgabe von Stammaktien nicht einheitlich melden
     Effizienz:     ΔMARGIN: Bruttomarge gestiegen;  ΔTURN: Kapitalumschlag Umsatz_t/BS_{t−1} gestiegen
-    Benötigt drei Bilanzen (t, t−1, t−2), weil ROA_{t−1} die Bilanzsumme zu Beginn von t−1 braucht.
+    Fehlende Signale (Entscheidung Jakob 03.11.2026): alle 9 → `wert`; 7 oder 8 → auf 9 Punkte hochgerechnet
+    (`wert_hochgerechnet` = Punkte · 9 / Anzahl, `hochgerechnet` = True); weniger → kein Wert, der Filter wird übersprungen.
     """
-    noetig = [("jahresueberschuss", 0), ("jahresueberschuss", 1), ("operativer_cashflow", 0), ("bilanzsumme", 0),
-              ("bilanzsumme", 1), ("bilanzsumme", 2), ("langfristige_finanzschulden", 0), ("langfristige_finanzschulden", 1),
-              ("umlaufvermoegen", 0), ("umlaufvermoegen", 1), ("kurzfristige_verbindlichkeiten", 0), ("kurzfristige_verbindlichkeiten", 1),
-              ("gewichtete_aktien", 0), ("gewichtete_aktien", 1), ("bruttoergebnis", 0), ("bruttoergebnis", 1),
-              ("umsatz", 0), ("umsatz", 1)]
-    fehlend = _brauche(t, noetig)
-    if fehlend:
-        return {"wert": None, "signale": {}, "fehlend": fehlend}
+    signale, zwischen, fehlend = {}, {}, []
     w = lambda n, j: _w(t, n, j)  # noqa: E731
-    roa = _quotient(w("jahresueberschuss", 0), w("bilanzsumme", 1))
-    roa_vj = _quotient(w("jahresueberschuss", 1), w("bilanzsumme", 2))
-    cfo = _quotient(w("operativer_cashflow", 0), w("bilanzsumme", 1))
-    lever = _quotient(w("langfristige_finanzschulden", 0), (w("bilanzsumme", 0) + w("bilanzsumme", 1)) / 2)
-    lever_vj = _quotient(w("langfristige_finanzschulden", 1), (w("bilanzsumme", 1) + w("bilanzsumme", 2)) / 2)
-    liquid = _quotient(w("umlaufvermoegen", 0), w("kurzfristige_verbindlichkeiten", 0))
-    liquid_vj = _quotient(w("umlaufvermoegen", 1), w("kurzfristige_verbindlichkeiten", 1))
-    marge = _quotient(w("bruttoergebnis", 0), w("umsatz", 0))
-    marge_vj = _quotient(w("bruttoergebnis", 1), w("umsatz", 1))
-    turn = _quotient(w("umsatz", 0), w("bilanzsumme", 1))
-    turn_vj = _quotient(w("umsatz", 1), w("bilanzsumme", 2))
-    werte = [roa, roa_vj, cfo, lever, lever_vj, liquid, liquid_vj, marge, marge_vj, turn, turn_vj]
-    if any(v is None for v in werte):
-        return {"wert": None, "signale": {}, "fehlend": ["Division durch null"]}
-    signale = {
-        "roa": int(roa > 0), "cfo": int(cfo > 0), "delta_roa": int(roa > roa_vj), "accrual": int(cfo > roa),
-        "delta_lever": int(lever <= lever_vj), "delta_liquid": int(liquid > liquid_vj),
-        "eq_offer": int(w("gewichtete_aktien", 0) <= w("gewichtete_aktien", 1)),
-        "delta_margin": int(marge > marge_vj), "delta_turn": int(turn > turn_vj),
-    }
-    return {"wert": sum(signale.values()), "signale": signale, "fehlend": [],
-            "zwischenwerte": {"roa": roa, "roa_vj": roa_vj, "cfo": cfo, "lever": lever, "lever_vj": lever_vj, "liquid": liquid,
-                              "liquid_vj": liquid_vj, "marge": marge, "marge_vj": marge_vj, "turn": turn, "turn_vj": turn_vj}}
+    for name, posten in PIOTROSKI_SIGNALE.items():
+        luecken = _brauche(t, posten)
+        if luecken:
+            fehlend += [f"{name}:{x}" for x in luecken]
+            continue
+        try:
+            if name == "roa":
+                zwischen["roa"] = w("jahresueberschuss", 0) / w("bilanzsumme", 1); signale[name] = int(zwischen["roa"] > 0)
+            elif name == "cfo":
+                zwischen["cfo"] = w("operativer_cashflow", 0) / w("bilanzsumme", 1); signale[name] = int(zwischen["cfo"] > 0)
+            elif name == "delta_roa":
+                roa, roa_vj = w("jahresueberschuss", 0) / w("bilanzsumme", 1), w("jahresueberschuss", 1) / w("bilanzsumme", 2)
+                zwischen.update(roa=roa, roa_vj=roa_vj); signale[name] = int(roa > roa_vj)
+            elif name == "accrual":
+                signale[name] = int(w("operativer_cashflow", 0) / w("bilanzsumme", 1) > w("jahresueberschuss", 0) / w("bilanzsumme", 1))
+            elif name == "delta_lever":
+                lever = w("langfristige_finanzschulden", 0) / ((w("bilanzsumme", 0) + w("bilanzsumme", 1)) / 2)
+                lever_vj = w("langfristige_finanzschulden", 1) / ((w("bilanzsumme", 1) + w("bilanzsumme", 2)) / 2)
+                zwischen.update(lever=lever, lever_vj=lever_vj); signale[name] = int(lever <= lever_vj)
+            elif name == "delta_liquid":
+                liquid = w("umlaufvermoegen", 0) / w("kurzfristige_verbindlichkeiten", 0)
+                liquid_vj = w("umlaufvermoegen", 1) / w("kurzfristige_verbindlichkeiten", 1)
+                zwischen.update(liquid=liquid, liquid_vj=liquid_vj); signale[name] = int(liquid > liquid_vj)
+            elif name == "eq_offer":
+                signale[name] = int(w("gewichtete_aktien", 0) <= w("gewichtete_aktien", 1))
+            elif name == "delta_margin":
+                marge, marge_vj = w("bruttoergebnis", 0) / w("umsatz", 0), w("bruttoergebnis", 1) / w("umsatz", 1)
+                zwischen.update(marge=marge, marge_vj=marge_vj); signale[name] = int(marge > marge_vj)
+            elif name == "delta_turn":
+                turn, turn_vj = w("umsatz", 0) / w("bilanzsumme", 1), w("umsatz", 1) / w("bilanzsumme", 2)
+                zwischen.update(turn=turn, turn_vj=turn_vj); signale[name] = int(turn > turn_vj)
+        except ZeroDivisionError:
+            fehlend.append(f"{name}:Division durch null")
+    n = len(signale)
+    punkte = sum(signale.values())
+    return {"wert": punkte if n == 9 else None,
+            "wert_hochgerechnet": punkte * 9 / n if n >= mindestsignale else None,
+            "hochgerechnet": mindestsignale <= n < 9, "anzahl_signale": n,
+            "signale": signale, "zwischenwerte": zwischen, "fehlend": fehlend}
 
 
 # --- Altman Z und Z'' ------------------------------------------------------------------------------

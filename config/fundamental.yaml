@@ -37,15 +37,24 @@ schattenportfolio:
   # des Ausschlusses sichtbar; Nachbau aus dem Universum, gebaut von tools/nachbau_sp500_ohne_finanzwerte.py nach bestandener Gegenprobe)
   benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]   # letzterer: daten.sp500_nachbau.lade_benchmark_sp500_ohne_finanzwerte (EUR-Spalte)
 
-filter:
+filter:                                # Code: engines/fundamental/filter.py
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
+  # Entscheidung 03.11.2026: bei 7 oder 8 von 9 Signalen auf 9 Punkte hochrechnen und markieren; darunter Filter überspringen
+  piotroski_mindestsignale: 7
   altman:
-    # Entscheidung 03.11.2026: Original 1968 für das verarbeitende Gewerbe (SIC 2000–3999), X4 mit Marktwert point-in-time;
-    # Z'' (Buchwert) für alle übrigen. Finanzwerte sind ohnehin ausgeschlossen.
+    # Entscheidungen 03.11.2026:
+    # - verarbeitendes Gewerbe (SIC 2000–3999): Altman Z (1968), X4 mit Marktwert point-in-time; Gefahrenzone = harter Ausschluss
+    # - Versorger (SIC 4900–4999): kein Altman
+    # - übrige: Z'' (Buchwert; Grenzen auf Buchwerten geschätzt, daher kein Marktwert); Gefahrenzone allein nur Warnhinweis,
+    #   Ausschluss nur zusammen mit Piotroski ≤ 3 oder negativem operativem Cashflow im letzten Geschäftsjahr
+    # Finanzwerte sind ohnehin ausgeschlossen.
     industrie_sic: [2000, 3999]
+    ohne_altman_sic: [4900, 4999]
     industrie: original_1968           # Gefahrenzone Z < 1,81, sicher Z > 2,99 (wissen/04, Abschnitt 8)
     uebrige: z_zwei_strich             # Gefahrenzone Z'' < 1,10, sicher Z'' > 2,60 (Altman 2000)
+    uebrige_ausschluss: gefahrenzone_und_zweites_signal   # Piotroski ≤ 3 oder operativer Cashflow_t < 0
   beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
+  beneish_fehlend: ueberspringen       # nicht berechenbar → Filter überspringen und markieren (03.11.2026)
 
 kennzahlen_regeln:
   aktualitaet_monate: 15               # letztes Geschäftsjahr höchstens 15 Monate vor dem Stichtag, sonst nicht bewertbar
@@ -69,6 +78,9 @@ backtest:
 
 score:
   erster_lauf: [qualitaet, multiples]  # Piotroski und Accruals; E/P und EBIT/EV gegen den Branchenmedian
+  # Entscheidung 03.11.2026 für Sitzung 4: ein fehlender Score zählt im Gesamtscore neutral (Median der Vergleichsgruppe),
+  # nie als gut
+  fehlender_score: median_der_vergleichsgruppe
   dcf_erst_nach_erstem_lauf: true
 
 dcf:                                   # für später, Annahmen schon festgelegt

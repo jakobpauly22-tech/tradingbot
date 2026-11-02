@@ -106,11 +106,22 @@ def test_stabile_grosskonzerne_sicher():
 # --- Grenzfälle --------------------------------------------------------------------------------
 def test_fehlende_posten_ergeben_keinen_score_sondern_eine_liste():
     ohne = APPLE.drop(columns=["bruttoergebnis"])
-    assert piotroski(ohne)["wert"] is None and "bruttoergebnis@t" in piotroski(ohne)["fehlend"]
+    assert "delta_margin:bruttoergebnis@t" in piotroski(ohne)["fehlend"]
     assert beneish(ohne)["wert"] is None
     assert altman(APPLE, industrie=True)["fehlend"] == ["marktwert_ek"]      # Z braucht den Marktwert
     nur_zwei = APPLE.iloc[:2]
-    assert "bilanzsumme@t-2" in piotroski(nur_zwei)["fehlend"]                # Piotroski braucht drei Bilanzen
+    p = piotroski(nur_zwei)                                                   # ohne t−2: ΔROA, ΔLEVER, ΔTURN fehlen
+    assert p["anzahl_signale"] == 6 and p["wert"] is None and p["wert_hochgerechnet"] is None   # < 7 → Filter überspringen
+
+
+def test_piotroski_hochrechnen_bei_sieben_oder_acht_signalen():
+    ohne_marge = piotroski(APPLE.drop(columns=["bruttoergebnis"]))           # wie viele Dienstleister: kein Bruttoergebnis
+    assert ohne_marge["anzahl_signale"] == 8 and ohne_marge["wert"] is None and ohne_marge["hochgerechnet"]
+    assert ohne_marge["wert_hochgerechnet"] == pytest.approx(6 * 9 / 8)       # Apple ohne ΔMARGIN: 6 von 8 → 6,75
+    sieben = piotroski(APPLE.drop(columns=["bruttoergebnis", "gewichtete_aktien"]))
+    assert sieben["anzahl_signale"] == 7 and sieben["wert_hochgerechnet"] == pytest.approx(5 * 9 / 7)
+    voll = piotroski(APPLE)
+    assert voll["wert"] == 6 and voll["wert_hochgerechnet"] == 6 and not voll["hochgerechnet"]
 
 
 def test_division_durch_null_und_negatives_eigenkapital():
