@@ -46,3 +46,16 @@ Der Nachbau des S&P 500 aus dem point-in-time-Universum (Börsenwert-gewichtet, 
 | Abweichung der annualisierten Rendite 01.04.2016–31.12.2024 | ≤ 0,5 Prozentpunkte |
 
 Code: `index_nachbau.abnahme_gegenprobe` mit den Konstanten `ABNAHME_*`. Bekannte, erwartbare Abweichungsquelle: S&P gewichtet nach Streubesitz, der Nachbau nach allen ausstehenden Aktien.
+
+### Läufe der Gegenprobe
+
+**Lauf 1 (03.11.2026): nicht bestanden.** Korrelation 0,966, größte Jahresabweichung 12,7 Pp. (2019), annualisiert +1,95 Pp. Ursachen (mit Jakob besprochen, nicht nachjustiert):
+1. Programmierfehler: Kurse erst ab Beginn des Nachbaus geladen, der Messtag des Streubesitzes liegt aber meist im Vorjahr; bis Herbst 2016 hatten kaum Firmen ein Gewicht.
+2. Programmierfehler: Kalender aus allen Werktagen statt echten Handelstagen; nach US-Feiertagen (z.B. 26.12.2018, S&P 500 +5 %) blieb der Nachbau stehen.
+3. Datenfehler: Garmin meldet den Streubesitz 2015, 2017 und 2018 1.000-fach zu hoch (bis 7.753 Mrd. USD), noch unter der Grenze von 10 Bio. USD; Gewicht 2019 rund 30 %.
+
+**Korrekturen (von Jakob freigegeben):** Kurse ab dem ersten Messtag (Vorlauf ab 2011); nur echte Handelstage (`index_nachbau.handelstage`); Streubesitz gegen den Börsenwert geprüft (`index_nachbau.streubesitz_pruefen`): mit Aktienzahl muss er zwischen 30 % und 105 % von Kurs × Aktienzahl am Messtag liegen; ohne brauchbare Aktienzahl (Kurs × Zahl selbst außerhalb 0,5 Mrd. bis 10 Bio. USD, z.B. nur eine Aktiengattung gemeldet) darf die Veränderung zum letzten gültigen Wert höchstens um Faktor 3 von der Kursveränderung abweichen. Verworfenes gilt als fehlend und wird gezählt. Tests: 26.12.2018, Messtag vor Beginn, Garmin und Nvidia mit echten Werten.
+
+**Lauf 2 (03.11.2026): bestanden.** Korrelation 0,9997; größte Jahresabweichung 0,43 Pp. (2022); annualisiert +0,08 Pp. Abdeckung der Mitglieder mit Rendite und Gewicht: Median 95 % (2016: 92 %, ab 2021: 96 %), Minimum 90 %.
+
+**Zur Beobachtung:** 1.925 von 10.031 Streubesitzwerten verworfen (19,2 %): 1.220 ohne Kurs am Messtag (meist Messtage vor 2011), 512 außerhalb 30–105 % des Börsenwerts, 187 außerhalb des festen Bereichs, 6 beim Vorjahresvergleich. Von den 512 liegen 246 zwischen 105 % und 130 %; das sind vermutlich überwiegend echte Werte (Streubesitz und Aktienzahl haben verschiedene Stichtage, dazwischen Rückkäufe und Kursbewegungen). Die Grenze bleibt unverändert, solange Jakob nicht anders entscheidet.
