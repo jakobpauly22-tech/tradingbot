@@ -129,6 +129,7 @@ class _Lauf:
         self.steuerregeln = steuerregeln
         self.klassen = {i.ticker: i.klasse for i in definition.instrumente}
         self.steuerarten = {i.ticker: i.steuerart for i in definition.instrumente}
+        self.gebuehrenplaene = {i.ticker: i.gebuehrenplan for i in definition.instrumente}
         self.portfolio = Teilportfolio(definition.name, definition.startkapital)
         self.trades: list[dict] = []
         self.verworfen: list[dict] = []
@@ -146,7 +147,8 @@ class _Lauf:
 
     def _gebuehren(self, tag, ticker, stueck, kurswert) -> float:
         waehrung = self.m.waehrungen[ticker]
-        return self.kosten.gebuehren_eur(waehrung, stueck, kurswert, self.m.eur_kurs(waehrung, tag))
+        plan = self.gebuehrenplaene.get(ticker) or waehrung
+        return self.kosten.gebuehren_eur(plan, stueck, kurswert, self.m.eur_kurs(plan, tag))
 
     def _w(self, tag, ticker) -> tuple[str, float]:
         w = self.m.waehrungen[ticker]
@@ -362,6 +364,9 @@ class _Lauf:
         preis = self.kosten.ausfuehrungspreis(kurs, +1, self.klassen[ticker])
         stueck = self._stueck_runden(delta * kurs / preis)  # Zielwert durch den teureren Ausführungspreis
         if stueck <= TOLERANZ:
+            if self.portfolio.stueck(ticker) <= TOLERANZ:
+                # neue Position, aber schon ein Stück kostet mehr als der Zielwert (keine Bruchstücke über die API)
+                self._verwerfen(tag, ticker, +1, 0, f"Stückpreis {preis:.2f} € über dem Zielwert {delta * kurs:.2f} €")
             return  # Abweichung vom Ziel kleiner als ein Stück: keine Order nötig
         # So weit reduzieren, bis Kurswert plus Gebühren in die Kasse der Handelswährung passen
         w, fx = self._w(tag, ticker)

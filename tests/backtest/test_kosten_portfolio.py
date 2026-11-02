@@ -68,3 +68,26 @@ def test_fremdwaehrungskasse_netto_tausch(konfig, mit_kosten):
     assert e.kosten_gesamt == pytest.approx(e.trades.gebuehr.sum() + e.trades.spread_slippage.sum() + 2 * 2.0 / 1.25)
     # Wert = EUR-Kasse + USD-Kasse/1,25 + Positionen; am Ende Rücktausch mit Kosten im Liquidationswert
     assert e.meta["liquidationswert"] < e.wert.iloc[-1]
+
+
+def test_stueckpreis_ueber_zielwert_wird_protokolliert(konfig, ohne_kosten):
+    from tradingbot.backtest.marktdaten import Instrument, Marktdaten
+    from tradingbot.backtest.simulation import Ausfuehrungsregeln, TeilportfolioDefinition, simuliere
+    from tradingbot.backtest.strategie import BuyAndHold
+    m = Marktdaten({"A": kerzen([500.0] * 5)})
+    d = TeilportfolioDefinition("core", 1000.0, BuyAndHold({"A": 0.25}), [Instrument("A", "etf")])
+    e = simuliere([d], m, m.kalender[0], m.kalender[-1], kosten=ohne_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["core"]
+    assert e.trades.empty and e.verworfen.iloc[0]["grund"].startswith("Stückpreis 500.00")
+
+
+def test_gebuehrenplan_xetra_fuer_usd_notierten_etf(konfig, mit_kosten):
+    """SXRM: Xetra-Handel in USD → Gebühr nach Xetra-Plan (0,05 %, min. 1,25 €), Abrechnung über die USD-Kasse."""
+    from tradingbot.backtest.marktdaten import Instrument, Marktdaten
+    from tradingbot.backtest.simulation import Ausfuehrungsregeln, TeilportfolioDefinition, simuliere
+    from tradingbot.backtest.strategie import BuyAndHold
+    tage = pd.bdate_range("2024-01-01", periods=5)
+    m = Marktdaten({"T": kerzen([100.0] * 5)}, {"T": "USD"}, {"USD": pd.Series(1.25, index=tage)})
+    d = TeilportfolioDefinition("core", 1000.0, BuyAndHold({"T": 0.5}), [Instrument("T", "etf", "sonstiger_fonds", gebuehrenplan="EUR")])
+    e = simuliere([d], m, tage[0], tage[-1], kosten=mit_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["core"]
+    assert e.trades.iloc[0]["gebuehr"] == pytest.approx(1.25)
+    assert len(e.waehrungstausche) == 1 and e.waehrungstausche.iloc[0]["nach"] == "USD"

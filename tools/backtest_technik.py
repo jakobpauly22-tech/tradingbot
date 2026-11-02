@@ -85,7 +85,7 @@ def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict, dict]:
             roh, log = korrigiere(roh, eigene)
             protokoll["korrekturen"] += log
         kurse[t] = roh
-        waehrungen[t] = "EUR"
+        waehrungen[t] = e.get("handelswaehrung", "EUR")   # Kurse immer in EUR; Abrechnung über die Kasse der Handelswährung
         b = [x for x in pruefe_etf_kurse(roh) if not (quelle != t or e.get("handelswaehrung", "EUR") != "EUR") or "währung" not in x]
         if b:
             befunde.setdefault(t, []).extend(b)
@@ -95,6 +95,8 @@ def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict, dict]:
 def main() -> int:
     arg = argparse.ArgumentParser()
     arg.add_argument("--nur-pruefen", action="store_true")
+    arg.add_argument("--anlass", default="", help="z.B. Modellkorrektur (zählt nicht als neue Variante)")
+    arg.add_argument("--vergleich", default="", help="CSV mit Kriterien eines früheren Laufs (alt gegen neu)")
     a = arg.parse_args()
     k = lade_konfiguration("technik")
     bt = lade_konfiguration("backtest")
@@ -128,29 +130,39 @@ def main() -> int:
     if a.nur_pruefen:
         return 0
 
-    m = Marktdaten(kurse, waehrungen)
-    instrumente = [Instrument(e["ticker"], "etf", e["steuerart"]) for e in k["universum"]["etfs"]]
+    from tradingbot.backtest.kosten import Kostenmodell
+    from tradingbot.backtest.simulation import simuliere
+    from tradingbot.backtest.steuern import Steuerregeln
+
+    fx = {}
+    if any(w != "EUR" for w in waehrungen.values()):
+        fx["USD"] = lade_kurse(lade_konfiguration("daten")["kurse"]["wechselkurse"].get("USD", "EURUSD=X"),
+                               str(k["backtest"]["daten_ab"]), str(k["backtest"]["gewertet_bis"]))["close"]
+    m = Marktdaten(kurse, waehrungen, fx)
+    instrumente = [Instrument(e["ticker"], "etf", e["steuerart"], gebuehrenplan="EUR" if e.get("handelswaehrung", "EUR") != "EUR" else None)
+                   for e in k["universum"]["etfs"]]
     sp = k["backtest"]
     bh_gewichte = {e["ticker"]: 1.0 / len(instrumente) for e in k["universum"]["etfs"]}
-    definitionen = {}
-    for name, (regeln, regime) in VARIANTEN.items():
-        definitionen[name] = TeilportfolioDefinition(f"technik_{name}", float(sp["kapital"]),
-                                                     SatelliteStrategie(regeln, kurse, k, regime=regime), instrumente,
-                                                     art="schatten", steuergruppe=sp["steuergruppe"], rolle="satellite")
+
+    def definition(name, regeln, regime):
+        return TeilportfolioDefinition(f"technik_{name}", float(sp["kapital"]), SatelliteStrategie(regeln, kurse, k, regime=regime),
+                                       instrumente, art="schatten", steuergruppe=sp["steuergruppe"], rolle="satellite")
+
     bh = TeilportfolioDefinition("buy_and_hold", float(sp["kapital"]), FesteGewichte(bh_gewichte, "Q"), instrumente,
                                  art="schatten", steuergruppe=sp["steuergruppe"], rolle="satellite")
-    optionen = {}
     if umsetzung == "ohne_gebuehrenregel":          # gleiche Kosten, aber Käufe unter 125 € erlaubt
         from tradingbot.backtest.simulation import Ausfuehrungsregeln
         optionen_bh = {"regeln": Ausfuehrungsregeln(max_gebuehr_anteil=1.0)}
     elif umsetzung == "kostenfrei":                 # strengere Messlatte: ohne Kosten (wie das Kontrollportfolio)
-        from tradingbot.backtest.kosten import Kostenmodell
         optionen_bh = {"kosten": Kostenmodell.ohne_kosten()}
     else:
         raise SystemExit(f"Unbekannte Umsetzung des Buy-&-Hold-Vergleichs: {umsetzung}")
-    laeufe = {}
-    for name, d in definitionen.items():
-        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [d], m, start, ende, benchmark_ticker="SXR8.DE", konfig=bt, **optionen)
+    laeufe, ohne_kosten = {}, {}
+    for name, (regeln, regime) in VARIANTEN.items():
+        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [definition(name, regeln, regime)], m, start, ende, benchmark_ticker="SXR8.DE", konfig=bt)
+        # gleiche Strategie ohne Kosten (keine Gebühren, kein Spread, keine Slippage, kein Tausch), vor Steuern; ganze Stücke bleiben
+        ohne_kosten[name] = simuliere([definition(name, regeln, regime)], m, start, ende, kosten=Kostenmodell.ohne_kosten(),
+                                      steuern=Steuerregeln.ohne_steuern(), konfig=bt)[f"technik_{name}"]
     lauf_bh = fuehre_lauf_aus("technik_buy_and_hold", [bh], m, start, ende, benchmark_ticker="SXR8.DE", konfig=bt, **optionen_bh)
 
     rf = lade_makro(bt.get("risikofreier_zins", "ECBDFR"))
@@ -164,25 +176,35 @@ def main() -> int:
     bh_wert = lauf_bh.ergebnisse["buy_and_hold"].wert
     zeilen = []
     for name, lauf in laeufe.items():
-        e = lauf.ergebnisse[f"technik_{name}"]
-        for abschnitt, von, bis in abschnitte:
-            s, b = kz(e.wert, von, bis), kz(bh_wert, von, bis)
-            zeilen.append({"variante": name, "abschnitt": abschnitt, "cagr": s["cagr"], "sharpe": s["sharpe"], "max_dd": s["max_drawdown"],
-                           "bh_cagr": b["cagr"], "bh_sharpe": b["sharpe"], "bh_max_dd": b["max_drawdown"],
-                           "sharpe_ok": s["sharpe"] >= b["sharpe"], "dd_ok": s["max_drawdown"] >= grenze_dd})
+        for art, e in (("nach Kosten", lauf.ergebnisse[f"technik_{name}"]), ("ohne Kosten", ohne_kosten[name])):
+            for abschnitt, von, bis in abschnitte:
+                s_, b = kz(e.wert, von, bis), kz(bh_wert, von, bis)
+                zeilen.append({"variante": name, "art": art, "abschnitt": abschnitt, "cagr": s_["cagr"], "sharpe": s_["sharpe"],
+                               "max_dd": s_["max_drawdown"], "bh_cagr": b["cagr"], "bh_sharpe": b["sharpe"], "bh_max_dd": b["max_drawdown"],
+                               "sharpe_ok": s_["sharpe"] >= b["sharpe"], "dd_ok": s_["max_drawdown"] >= grenze_dd})
     t = pd.DataFrame(zeilen)
-    bewertung = {}
+    bewertung, ohne_kosten_sharpe = {}, {}
     for name in VARIANTEN:
-        h = t[(t.variante == name) & (t.abschnitt != "gesamt")]
+        h = t[(t.variante == name) & (t.art == "nach Kosten") & (t.abschnitt != "gesamt")]
         bewertung[name] = bool(h["sharpe_ok"].all() and h["dd_ok"].all())
+        h0 = t[(t.variante == name) & (t.art == "ohne Kosten") & (t.abschnitt != "gesamt")]
+        ohne_kosten_sharpe[name] = bool(h0["sharpe_ok"].all())
+    zweig = "b" if (ohne_kosten_sharpe["crossover"] or ohne_kosten_sharpe["momentum"]) else "a"
 
-    # Varianten zählen
+    def gescheitert(e) -> tuple[int, int, float]:
+        v = e.verworfen
+        stueck = int(v["grund"].str.startswith("Stückpreis").sum()) if len(v) else 0
+        regel = int(v["grund"].str.startswith("Gebühren").sum()) if len(v) else 0
+        invest = float((1 - e.werte["cash"] / e.werte["wert"]).mean())
+        return stueck, regel, invest
+
+    # Varianten zählen (Neuberechnung mit Anlass zählt nicht als neue Variante)
     ziel = PROJEKT_WURZEL / "daten" / "technik"
     ziel.mkdir(parents=True, exist_ok=True)
     datei = ziel / "varianten.csv"
     alt = pd.read_csv(datei) if datei.exists() else pd.DataFrame()
     neu = pd.DataFrame([{"datum": datetime.now().isoformat(timespec="seconds"), "variante": n, "git": laeufe[n].meta["git"].get("commit"),
-                         "lauf": laeufe[n].pfad.name if laeufe[n].pfad else "", "bestanden": bewertung[n]} for n in VARIANTEN])
+                         "lauf": laeufe[n].pfad.name if laeufe[n].pfad else "", "bestanden": bewertung[n], "anlass": a.anlass} for n in VARIANTEN])
     varianten = pd.concat([alt, neu], ignore_index=True)
     varianten.to_csv(datei, index=False)
 
@@ -190,41 +212,59 @@ def main() -> int:
     pz = lambda x: f"{x:.2%}".replace(".", ",")  # noqa: E731
     zahl = lambda x: f"{x:.2f}".replace(".", ",")  # noqa: E731
     ok = lambda b: "ja" if b else "**nein**"  # noqa: E731
-    text = [f"# Satellite-Strategien der Technik-Engine – gewertete Backtests", "",
+    text = [f"# Satellite-Strategien der Technik-Engine – gewertete Backtests" + (f" ({a.anlass})" if a.anlass else ""), "",
             f"Stand {datetime.now():%d.%m.%Y %H:%M}. Zeitraum {start.date()} bis {ende.date()}, Kapital {sp['kapital']:,.0f} € (Schatten), "
-            f"{len(instrumente)} ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: {varianten['variante'].nunique()}.", "",
-            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise (Umsetzung: {umsetzung}; Entscheidung Jakob 03.11.2026: "
-            "kostenfrei als strengere Messlatte, weil 114 € je Position unter der 125-€-Grenze lägen).", "",
+            f"{len(instrumente)} ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: {varianten['variante'].nunique()}"
+            + (" (diese Neuberechnung zählt nicht als neue Variante)." if a.anlass else "."), "",
+            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, Umsetzung `{umsetzung}` (Entscheidung Jakob 03.11.2026).", "",
             "## Daten", ""]
+    text.append("- Universum: " + ", ".join(f"{e['ticker']} ({e['klasse']})" for e in k["universum"]["etfs"]))
     for etf, pp in pruefprotokoll["ersatzquellen"].items():
         text.append(f"- **{etf} über Ersatzquelle {pp['quelle']}** (gleicher Fonds, gleiche Anteilsklasse, in EUR umgerechnet): an {pp['tage']} Tagen "
                     f"mit Xetra-Umsatz Median-Abweichung {pz(pp['median'])} (Grenze 0,5 %, bestanden), 95-%-Quantil {pz(pp['p95'])}. "
-                    "SXRM wird auf Xetra in USD gehandelt; der Backtest rechnet den ETF wie einen EUR-Wert ohne Währungstausch "
-                    "(Vereinfachung, die Tauschkosten wären mit Netto-Tausch gering).")
+                    "Abrechnung über die USD-Kasse (Netto-Tausch), Gebühr nach dem Xetra-Plan.")
     for z in pruefprotokoll["korrekturen"]:
         text.append(f"- Korrektur: {z}")
-    text += ["- Xetra-Gold (4GLD) statt Invesco Physical Gold (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss "
-             "über dem Tageshoch (0,14 % und 0,45 %) unverändert übernommen – offen, bitte bestätigen. Steuer konservativ mit "
-             "Abgeltungsteuer, ohne Steuerfreiheit nach einem Jahr (§ 23 EStG als offener Punkt im Steuermodul).", "",
-            "## Ergebnis je Variante (Kriterien in beiden Hälften)", "", "| Variante | bestanden |", "| --- | --- |"]
-    text += [f"| {n} | {'**ja**' if b else 'nein'} |" for n, b in bewertung.items()]
-    text += ["", "## Kennzahlen nach Kosten, vor Steuern", "",
-             "| Variante | Abschnitt | Rendite p.a. | Sharpe | max. Drawdown | B&H Rendite | B&H Sharpe | B&H Drawdown | Sharpe ≥ B&H | DD ≥ −20 % |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    text += ["- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert "
+             "(Entscheidung Jakob 03.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
+             "## Entscheidungsbaum (docs/TECHNIK.md)", "",
+             "| Variante | Sharpe ≥ B&H ohne Kosten in beiden Hälften | Kriterien nach Kosten bestanden |", "| --- | --- | --- |"]
+    text += [f"| {n} | {ok(ohne_kosten_sharpe[n])} | {ok(bewertung[n])} |" for n in VARIANTEN]
+    text += ["", f"**Zweig {zweig}):** " + ("Weder Crossover noch Momentum erreichen ohne Kosten den Sharpe von Buy & Hold in beiden Hälften: "
+             "Die Technik-Engine ist kein Renditebaustein. Echtes Geld bleibt im Core; Crossover und Momentum laufen im Paper Trading als "
+             "Schatten vorwärts mit." if zweig == "a" else
+             "Mindestens eine von Crossover und Momentum erreicht ohne Kosten den Sharpe von Buy & Hold in beiden Hälften: Mindestkapital "
+             "aus dem Kostenbudget (höchstens 0,5 % p.a.) ableiten und einmal neu rechnen (neue Variante)."), "",
+             "## Kennzahlen vor Steuern", "",
+             "| Variante | Art | Abschnitt | Rendite p.a. | Sharpe | max. Drawdown | B&H Rendite | B&H Sharpe | B&H Drawdown | Sharpe ≥ B&H | DD ≥ −20 % |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in t.itertuples():
-        text.append(f"| {r.variante} | {r.abschnitt} | {pz(r.cagr)} | {zahl(r.sharpe)} | {pz(r.max_dd)} | {pz(r.bh_cagr)} | {zahl(r.bh_sharpe)} | "
+        text.append(f"| {r.variante} | {r.art} | {r.abschnitt} | {pz(r.cagr)} | {zahl(r.sharpe)} | {pz(r.max_dd)} | {pz(r.bh_cagr)} | {zahl(r.bh_sharpe)} | "
                     f"{pz(r.bh_max_dd)} | {ok(r.sharpe_ok)} | {ok(r.dd_ok)} |")
-    text += ["", "## Handel und Kosten", "", "| Variante | Trades | verworfene Orders | Kosten | Steuern gezahlt | Rendite nach Verkauf und Steuern |",
-             "| --- | --- | --- | --- | --- | --- |"]
+    text += ["", "## Handel, Kosten, Investitionsgrad", "",
+             "| Variante | Trades | Kosten | Investitionsgrad (Mittel) | gescheitert am Stückpreis | gescheitert an der 125-€-Regel | Steuern gezahlt | Rendite nach Verkauf und Steuern |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for name, lauf in {**laeufe, "buy_and_hold": lauf_bh}.items():
         kk = lauf.kennzahlen.iloc[0]
-        text.append(f"| {name} | {int(kk['trades'])} | {int(kk['verworfen'])} | {kk['kosten']:,.0f} € | {kk['steuern_gezahlt']:,.0f} € | "
+        e = next(iter(lauf.ergebnisse.values()))
+        stueck, regel, invest = gescheitert(e)
+        text.append(f"| {name} | {int(kk['trades'])} | {kk['kosten']:,.0f} € | {pz(invest)} | {stueck} | {regel} | {kk['steuern_gezahlt']:,.0f} € | "
                     f"{pz(kk['cagr_nach_verkauf_und_steuern'])} |")
+    text += ["", "Gescheiterte Orders zählen je Tag und ETF; bei stehendem Signal wird ein Kauf täglich erneut versucht."]
+    if a.vergleich:
+        vorher = pd.read_csv(a.vergleich)
+        text += ["", f"## Vergleich mit dem früheren Lauf (`{a.vergleich}`), nach Kosten", "",
+                 "| Variante | Abschnitt | Rendite p.a. vorher | jetzt | Sharpe vorher | jetzt | max. DD vorher | jetzt |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+        jetzt = t[t.art == "nach Kosten"].set_index(["variante", "abschnitt"])
+        for r in vorher.itertuples():
+            if (r.variante, r.abschnitt) in jetzt.index:
+                j = jetzt.loc[(r.variante, r.abschnitt)]
+                text.append(f"| {r.variante} | {r.abschnitt} | {pz(r.cagr)} | {pz(j['cagr'])} | {zahl(r.sharpe)} | {zahl(j['sharpe'])} | {pz(r.max_dd)} | {pz(j['max_dd'])} |")
     text += ["", "Ablage der Läufe: " + ", ".join(f"`{l.pfad.relative_to(PROJEKT_WURZEL)}`" for l in [*laeufe.values(), lauf_bh] if l.pfad)]
     bericht = "\n".join(text)
     ordner = PROJEKT_WURZEL / "docs" / "berichte"
     ordner.mkdir(parents=True, exist_ok=True)
-    (ordner / f"{datetime.now():%Y-%m-%d}_technik_satellite.md").write_text(bericht, encoding="utf-8")
+    (ordner / f"{datetime.now():%Y-%m-%d_%H%M}_technik_satellite.md").write_text(bericht, encoding="utf-8")
     t.to_csv(ziel / "kriterien.csv", index=False)
     print(bericht)
     return 0

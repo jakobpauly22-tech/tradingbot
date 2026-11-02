@@ -91,3 +91,7 @@ erfolgskriterien:                      # je Strategie und Regime, nach Kosten, K
   # verwirft dann jeden Kauf. Mögliche Werte: kostenfrei | ohne_gebuehrenregel. Entscheidung Jakob vor dem Lauf.
   buy_and_hold_umsetzung: kostenfrei   # Entscheidung Jakob 03.11.2026: strengere Messlatte
   varianten: [crossover, momentum, price_channel, rsi2, regime]
+  # Entscheidung 03.11.2026: RSI(2) und Price Channel sind für den Satellite raus (Handelsfrequenz bei Mindestgebühr,
+  # strukturell begründet). Die fünf Varianten werden einmal als Modellkorrektur neu gerechnet (docs/TECHNIK.md).
+  satellite_strategien: [crossover, momentum]
+  entscheidungsbaum: docs/TECHNIK.md

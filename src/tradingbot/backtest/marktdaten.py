@@ -23,6 +23,9 @@ class Instrument:
     # Steuerart: aktie | aktienfonds | mischfonds | sonstiger_fonds | etc (backtest/steuern.py).
     # Ohne Angabe: ETF = Aktienfonds, sonst Aktie. Anleihe-ETFs als sonstiger_fonds, ETCs als etc angeben.
     steuerart: str | None = None
+    # Gebührenplan (Schlüssel in config/backtest.yaml `kosten.gebuehren`); ohne Angabe der Plan der Handelswährung.
+    # Beispiel: SXRM wird auf Xetra in USD gehandelt, die Gebühr folgt dem Xetra-Plan („EUR“), abgerechnet über die USD-Kasse.
+    gebuehrenplan: str | None = None
 
     def __post_init__(self):
         if self.steuerart is None:
