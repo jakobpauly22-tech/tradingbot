@@ -95,3 +95,15 @@ def test_kontrollportfolio_gleichgewichtet_quartalsweise():
     assert werte.loc["2024-03-29"] == pytest.approx(1000.0)                # (1,1 + 0,9) / 2
     assert werte.iloc[-1] == pytest.approx(1000.0)                          # Q2 nur A, Kurs flach
     assert list(stat["titel"]) == [2, 1]
+
+
+def test_signal_nicht_vor_us_feiertag():
+    # Stichtag Montag 03.07.2023: nächster Kalendertag 04.07. ist nur Xetra-Tag → Signal 04.07., Ausführung 05.07.
+    kal = pd.bdate_range("2023-06-28", "2023-07-07")
+    us = kal.drop(pd.Timestamp("2023-07-04"))
+    from tradingbot.engines.fundamental.schatten import signal_und_ausfuehrung
+    assert signal_und_ausfuehrung([pd.Timestamp("2023-07-03")], kal, us) == [
+        (pd.Timestamp("2023-07-03"), pd.Timestamp("2023-07-04"), pd.Timestamp("2023-07-05"))]
+    # Stichtag an einem Feiertag beider Börsen (01.01.): Signal nie vor dem Stichtag
+    kal2 = pd.DatetimeIndex(["2017-12-29", "2018-01-02", "2018-01-03"])
+    assert signal_und_ausfuehrung([pd.Timestamp("2018-01-01")], kal2, kal2)[0][1:] == (pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03"))

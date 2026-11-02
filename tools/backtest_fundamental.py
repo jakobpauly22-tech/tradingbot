@@ -129,9 +129,10 @@ def main() -> int:
 
     m = Marktdaten({**kurse, **benchmarks}, waehrungen, {"USD": fx}, delistings=delistings)
     instrumente = [Instrument(t, "aktie") for t in kurse]
+    us_tage = pd.DatetimeIndex(sorted(set().union(*[k.index for k in kurse.values()])))
 
     def definition():
-        return TeilportfolioDefinition(NAME, float(sp["kapital"]), FundamentalSchatten(ranglisten, konfig), instrumente,
+        return TeilportfolioDefinition(NAME, float(sp["kapital"]), FundamentalSchatten(ranglisten, konfig, m.kalender, us_tage), instrumente,
                                        art="schatten", steuergruppe=sp["steuergruppe"], rolle="core")
 
     # 1) mit Steuern (drei Ebenen, Ablage mit Konfiguration, Git- und Datenstand)
@@ -143,7 +144,7 @@ def main() -> int:
     vor = simuliere([d_vor], m, start, ende, steuern=Steuerregeln.ohne_steuern(), konfig=konfig_bt)[NAME]
     tage = vor.wert.index
 
-    kontroll, kontroll_stat = kontrollportfolio(ranglisten, kurse, m.kalender, delistings, float(sp["kapital"]), ende)
+    kontroll, kontroll_stat = kontrollportfolio(ranglisten, kurse, m.kalender, delistings, float(sp["kapital"]), ende, us_tage)
     sp_ex = lade_benchmark_sp500_ohne_finanzwerte()["index_eur"]
     reihen = {
         "Schattenportfolio nach Kosten, vor Steuern": vor.wert,

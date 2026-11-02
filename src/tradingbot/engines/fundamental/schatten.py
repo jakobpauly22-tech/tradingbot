@@ -9,6 +9,11 @@ Auswahl am Rebalancing-Stichtag (ausgeführt zur Eröffnung des nächsten Handel
 3. Auffüllen: freie Plätze (höchstens `titel` = 20) gehen in Rangfolge an die besten noch nicht gehaltenen Titel, solange
    ihre zweistellige SIC unter der Branchenobergrenze bleibt (25 % von 20 = 5 Positionen; gehaltene zählen mit).
 Die 125-€-Regel (Gebühr höchstens 1 %) prüft die Simulation zusätzlich.
+
+Zeitpunkt: Das Signal kommt am ersten Simulationstag ab dem Stichtag, dessen nächster Simulationstag ein US-Handelstag
+ist; ausgeführt wird dort zur Eröffnung. Grund: Der gemeinsame Kalender enthält Xetra-Tage, an denen die US-Börse
+geschlossen ist (z.B. 4. Juli); dort könnten die Orders nicht ausgeführt werden. Börsenkalender sind im Voraus bekannt,
+das ist kein Look-ahead.
 """
 from __future__ import annotations
 
@@ -20,14 +25,31 @@ import pandas as pd
 from tradingbot.kennzahlen.rendite import total_return_index
 
 
+def signal_und_ausfuehrung(stichtage, kalender: pd.DatetimeIndex, handelstage: pd.DatetimeIndex) -> list[tuple]:
+    """Je Stichtag (Stichtag, Signaltag, Ausführungstag): Signal am ersten Kalendertag ≥ Stichtag, dessen nächster
+    Kalendertag ein US-Handelstag ist; Ausführung an diesem nächsten Tag. Stichtage ohne solchen Tag entfallen."""
+    kal = pd.DatetimeIndex(kalender).sort_values()
+    us = set(pd.DatetimeIndex(handelstage))
+    ergebnis = []
+    for d in sorted(pd.Timestamp(x) for x in stichtage):
+        for i in kal.searchsorted(d) + pd.RangeIndex(0, 10):
+            if i + 1 >= len(kal):
+                break
+            if kal[i + 1] in us:
+                ergebnis.append((d, kal[i], kal[i + 1]))
+                break
+    return ergebnis
+
+
 class FundamentalSchatten:
     """Strategie für `backtest.simulation`: Zielgewichte je Stichtag aus den Gesamtscore-Ranglisten.
 
     `ranglisten`: Stichtag → gesamtscore()-Tabelle des gefilterten Universums mit Spalte `ticker` (bester zuerst) und
-    `sic`. Eine Rangliste wird am ersten Simulationstag ab ihrem Stichtag verwendet, nie vorher (kein Look-ahead).
+    `sic`. Eine Rangliste wird am Signaltag (`signal_und_ausfuehrung`) verwendet, nie vor ihrem Stichtag (kein Look-ahead).
+    Ohne Kalender gilt der erste Simulationstag ab dem Stichtag.
     """
 
-    def __init__(self, ranglisten: dict[pd.Timestamp, pd.DataFrame], konfig: dict):
+    def __init__(self, ranglisten: dict[pd.Timestamp, pd.DataFrame], konfig: dict, kalender=None, handelstage=None):
         sp = konfig["schattenportfolio"]
         self.titel = int(sp["titel"])
         self.puffer = int(sp["puffer_rang"])
@@ -35,12 +57,14 @@ class FundamentalSchatten:
         self.band = tuple(float(x) for x in sp["drift_band"])
         self.ranglisten = dict(sorted((pd.Timestamp(k), v) for k, v in ranglisten.items()))
         self._offen = list(self.ranglisten)
+        self._signal = ({d: sig for d, sig, _ in signal_und_ausfuehrung(self.ranglisten, kalender, handelstage)}
+                        if kalender is not None and handelstage is not None else {d: d for d in self.ranglisten})
         self.name = f"Fundamental-Schatten ({self.titel} Titel, Puffer {self.puffer}, Q)"
         self.protokoll: list[dict] = []
 
     def zielgewichte(self, stichtag, sicht):
         tag = pd.Timestamp(stichtag)
-        faellig = [d for d in self._offen if d <= tag]
+        faellig = [d for d in self._offen if d in self._signal and self._signal[d] <= tag]
         if not faellig:
             return None
         for d in faellig:
@@ -112,7 +136,7 @@ def auswahl(rangliste: pd.DataFrame, gewichte: pd.Series, *, titel: int, puffer:
 
 
 def kontrollportfolio(ranglisten: dict[pd.Timestamp, pd.DataFrame], kurse: dict[str, pd.DataFrame], kalender: pd.DatetimeIndex,
-                      delistings: dict, startkapital: float, ende) -> tuple[pd.Series, pd.DataFrame]:
+                      delistings: dict, startkapital: float, ende, handelstage: pd.DatetimeIndex | None = None) -> tuple[pd.Series, pd.DataFrame]:
     """Alle Titel des gefilterten Universums gleich gewichtet, quartalsweise, ohne Kosten, vor Steuern.
 
     Formel je Quartal q (Kauf zur Eröffnung des ersten Handelstags e_q nach dem Stichtag, wie das Schattenportfolio):
@@ -123,8 +147,9 @@ def kontrollportfolio(ranglisten: dict[pd.Timestamp, pd.DataFrame], kurse: dict[
     """
     ende = pd.Timestamp(ende)
     kal = kalender[kalender <= ende]
-    stichtage = sorted(pd.Timestamp(d) for d in ranglisten)
-    ausfuehrung = [kal[kal > d][0] for d in stichtage if (kal > d).any()]
+    plan = signal_und_ausfuehrung(ranglisten, kal, handelstage if handelstage is not None else kal)
+    stichtage = [d for d, _, _ in plan]
+    ausfuehrung = [e for _, _, e in plan]
     werte = pd.Series(np.nan, index=kal, dtype=float)
     werte.loc[kal[kal <= stichtage[0]][-1:]] = startkapital
     v = startkapital
