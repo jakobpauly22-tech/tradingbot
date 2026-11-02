@@ -1,0 +1,71 @@
+//@version=5
+// Gegenprobe Two MA Crossover 50/200 (Satellite, Technik-Engine) – Entscheidung Jakob 03.11.2026
+// Gleiche Regeln wie src/tradingbot/engines/technik/strategien.py (Crossover); Gegenstück im Bot:
+//   .venv\Scripts\python tools\gegenprobe_crossover.py
+//
+// Strategy Tester: Symbol XETR:SXR8, Tageskerzen, Zeitraum und Startkapital wie unten (Eingaben).
+// Gebühren (config/backtest.yaml, IBKR EUR-Börse): 0,05 % je Order, mindestens 1,25 EUR, höchstens 29 EUR.
+//   Bei 1.250 EUR Kapital und höchstens 25 % je Position liegt jede Order unter 2.500 EUR, die Gebühr ist also
+//   immer das Minimum von 1,25 EUR. Das bildet der Tester exakt ab: commission_type = cash_per_order, 1,25.
+// Spread und Slippage: im Tester nur in Ticks möglich, daher in BEIDEN Rechnungen auf 0 gesetzt (die Gegenprobe
+//   prüft die Regeln, nicht das Kostenmodell). Der Bot rechnet die Gegenprobe mit denselben Einstellungen.
+// Ausführung: Signal auf den Schlusskurs, Order zur Eröffnung des nächsten Tages (process_orders_on_close = false).
+// Positionsgröße: 1 % Risiko bei Stop 2 × ATR(20), höchstens 25 % des Depotwerts, ganze Stücke.
+// Stop: Einstiegskurs − 2 × ATR(20) vom Signaltag, geprüft auf den Tagesschluss, Ausstieg zur nächsten Eröffnung.
+//   Nach einem Stop erst wieder nach neuem Kreuzen von unten.
+// 1-%-Regel: Käufe nur, wenn die Gebühr höchstens 1 % des Orderwerts ist (Orderwert ab 125 EUR).
+
+strategy("Gegenprobe Crossover 50/200 (Bot)", overlay = true, initial_capital = 1250, currency = currency.EUR,
+     commission_type = strategy.commission.cash_per_order, commission_value = 1.25, slippage = 0,
+     process_orders_on_close = false, pyramiding = 0, calc_on_every_tick = false)
+
+schnell    = input.int(50, "SMA schnell")
+langsam    = input.int(200, "SMA langsam")
+atrTage    = input.int(20, "ATR-Tage")
+stopFakt   = input.float(2.0, "Stop × ATR")
+risiko     = input.float(0.01, "Risiko je Trade")
+maxPos     = input.float(0.25, "max. Positionsanteil")
+gebuehr    = input.float(1.25, "Gebühr je Order EUR")
+startDatum = input.time(timestamp("2013-01-02 00:00 +0000"), "Start")
+endDatum   = input.time(timestamp("2024-12-31 23:59 +0000"), "Ende")
+
+smaS = ta.sma(close, schnell)
+smaL = ta.sma(close, langsam)
+atrW = ta.rma(ta.tr(true), atrTage)            // Wilder-ATR wie im Bot
+imZeitraum = time >= startDatum and time <= endDatum
+
+var float stopKurs = na
+var float atrSignal = na
+var bool gesperrt = false
+
+ueber = smaS > smaL
+if not na(smaL) and not ueber
+    gesperrt := false
+
+// Ausstieg (Stop vor Signal), geprüft auf den Schluss
+if strategy.position_size > 0
+    if na(stopKurs)
+        stopKurs := strategy.position_avg_price - stopFakt * atrSignal
+    if close <= stopKurs
+        strategy.close("Long", comment = "Stop")
+        gesperrt := true
+        stopKurs := na
+    else if not ueber
+        strategy.close("Long", comment = "SMA50<SMA200")
+        stopKurs := na
+
+// Einstieg
+if strategy.position_size == 0 and imZeitraum and ueber and not gesperrt and atrW > 0
+    gewicht = math.min(risiko * close / (stopFakt * atrW), maxPos)
+    stueck = math.floor(gewicht * strategy.equity / close)
+    if stueck > 0 and gebuehr <= 0.01 * stueck * close
+        atrSignal := atrW
+        stopKurs := na
+        strategy.entry("Long", strategy.long, qty = stueck, comment = "SMA50>SMA200")
+
+if not imZeitraum and time > endDatum and strategy.position_size > 0
+    strategy.close("Long", comment = "Ende")
+
+plot(smaS, "SMA50", color = color.orange)
+plot(smaL, "SMA200", color = color.blue)
+plot(strategy.position_size > 0 ? stopKurs : na, "Stop", color = color.red, style = plot.style_linebr)

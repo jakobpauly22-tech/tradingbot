@@ -30,6 +30,11 @@ universum:
     - {klasse: Anleihen Schwellenländer, ticker: IUSP.DE, isin: IE00B5M4WH52, name: iShares J.P. Morgan EM Local Government Bond (Dist), steuerart: sonstiger_fonds, volumen_mio_eur: 4612, hinweis: "vor USD-EM-Bond IUS7 (3.672); Xetra ab 08/2011"}
     - {klasse: Gold,                    ticker: 8PSG.DE, isin: IE00B579F325, name: Invesco Physical Gold ETC,                   steuerart: etc,             volumen_mio_eur: 25438, hinweis: "ETC, kein UCITS-ETF; iShares Physical Gold erst ab 2021 auf Xetra"}
 
+  # Auffällige Kursreihen brauchen eine Entscheidung von Jakob (docs/DATENQUALITAET.md); tools/backtest_technik.py
+  # sperrt den Lauf, solange eine Reihe auffällig und hier nicht eingetragen ist. Eintrag je Ticker:
+  # {ticker: …, entscheidung: …, datum: …}; optional `kursquelle` am ETF (gleiches Produkt, andere Börse).
+  datenfreigaben: []                   # offen seit 03.11.2026: EUNH, EUN5 (Juni 2012), SXRM (USD, eingefroren), 8PSG (Sprünge, eingefroren)
+
 backtest:
   daten_ab: 2012-01-01                 # Projektentscheidung 01.11.2026 (Historie ab 2012)
   # Start des gewerteten Backtests: sobald alle ETFs 12 Monate Kurshistorie haben (ab daten_ab gerechnet)
@@ -71,4 +76,7 @@ erfolgskriterien:                      # je Strategie und Regime, nach Kosten, K
   sharpe_mindestens: buy_and_hold      # alle ETFs der Liste gleich gewichtet, quartalsweise, gleiche Kosten
   max_drawdown_mindestens: -0.20       # nicht schlechter als −20 %
   in_beiden_haelften: true             # wegen fünf getesteter Varianten
+  # OFFEN (03.11.2026): Mit 1.250 € und 11 ETFs ist jede Buy-&-Hold-Position 114 € < 125 €; die 1-%-Gebührenregel
+  # verwirft dann jeden Kauf. Mögliche Werte: kostenfrei | ohne_gebuehrenregel. Entscheidung Jakob vor dem Lauf.
+  buy_and_hold_umsetzung: offen
   varianten: [crossover, momentum, price_channel, rsi2, regime]

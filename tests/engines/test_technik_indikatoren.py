@@ -62,3 +62,25 @@ def test_donchian_ohne_heutigen_tag():
     h = pd.Series([1.0, 5, 3, 4, 2], index=TAGE)
     assert donchian_hoch(h, 3).tolist()[3:] == [5.0, 5.0]
     assert donchian_tief(h, 2).tolist()[2:] == [1.0, 3.0, 3.0]
+
+
+def test_datenpruefung_und_beginn():
+    from tradingbot.engines.technik.daten import gewerteter_beginn, haelften, pruefe_etf_kurse
+    tage = pd.bdate_range("2012-01-02", periods=300)
+    c = pd.Series(100 + np.arange(300) * 0.1, index=tage)
+    k = pd.DataFrame({"open": c, "high": c + 1, "low": c - 1, "close": c, "volume": 1.0, "dividende": 0.0, "split": 0.0})
+    k.attrs["waehrung"] = "EUR"
+    assert pruefe_etf_kurse(k) == []
+    kaputt = k.copy()
+    kaputt.loc[tage[100]:tage[120], ["open", "high", "low", "close"]] = 110.0
+    kaputt.loc[tage[200], ["open", "high", "close"]] = 200.0
+    befunde = " ".join(pruefe_etf_kurse(kaputt))
+    assert "eingefroren" in befunde and "sprung" in befunde
+    usd = k.copy()
+    usd.attrs["originalwaehrung"] = "USD"
+    assert any("währung" in b for b in pruefe_etf_kurse(usd))
+    spaet = k.loc[tage[30]:]
+    beginn = gewerteter_beginn({"A": k, "B": spaet}, "2012-01-01", monate=6)
+    assert beginn >= tage[30] + pd.DateOffset(months=6) and beginn in tage
+    h = haelften("2013-01-01", "2024-12-31")
+    assert h[0][0] == pd.Timestamp("2013-01-01") and h[1][1] == pd.Timestamp("2024-12-31") and h[0][1] == h[1][0]
