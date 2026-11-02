@@ -175,3 +175,12 @@ def test_streubesitz_ohne_brauchbare_aktienzahl_nutzt_vorjahresvergleich():
     gueltig, verworfen = streubesitz_pruefen(reihe, schluss, aktien)
     assert list(gueltig.index.year) == [2018, 2019]
     assert "außerhalb" in verworfen.loc["2020-06-30", "grund"]
+
+
+def test_streubesitz_pruefen_mit_doppelter_aktienzahl_von_vorgaenger_cik():
+    from tradingbot.daten.index_nachbau import streubesitz_pruefen
+
+    reihe = _reihe([("2019-06-28", 5.0e10, "2020-02-20")])
+    aktien = pd.Series([1.0e9, 1.0e9], index=pd.to_datetime(["2019-06-28", "2019-06-28"]))   # Firma und Vorgänger
+    gueltig, verworfen = streubesitz_pruefen(reihe, pd.Series([60.0], index=reihe.index), aktien)
+    assert len(gueltig) == 1 and verworfen.empty                                             # 50 / 60 = 83 %

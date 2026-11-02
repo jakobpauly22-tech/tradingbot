@@ -45,6 +45,7 @@ def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Seri
     gueltig, verworfen = [], []
     vorher = None                                           # (F, C) des letzten akzeptierten Werts
     aktien = aktien.dropna().sort_index()
+    aktien = aktien[~aktien.index.duplicated(keep="last")]      # gleiche Meldung bei Firma und Vorgänger-CIK
     for e, zeile in reihe.sort_index().iterrows():
         f = float(zeile["wert"])
         kurse_bis = schluss.loc[:e].dropna()
