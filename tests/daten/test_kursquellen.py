@@ -169,3 +169,15 @@ def test_luecken_und_fehlendes_ende():
     luecken = _reihe("2011-06-01", "2016-12-30").iloc[::2]
     assert "Werktage" in pruefe_abdeckung(luecken, pd.NaT, pd.Timestamp("2017-01-03"))["grund"]
     assert pruefe_abdeckung(None, pd.NaT, pd.Timestamp("2017-01-03"))["grund"] == "keine Kurse"
+
+
+def test_gefundene_fehler_vom_03_11():
+    from tradingbot.daten.kursquellen import name_passt
+
+    # Prudential: PRU ist die Stammaktie; PFH/PRH/PRS sind Anleihen derselben CIK
+    pru = kursquelle(_zeile("PRU", 1137774, None, None), {1137774: ["PRU", "PFH", "PRH", "PRS"]}, LISTE)
+    assert pru["symbol"] == "PRU"
+    assert kursquelle(_zeile("DD", 30554, None, "2017-09-01"), {30554: ["CTA-PB", "CTA-PA"]}, LISTE)["quelle"] is None
+    # Gattungszusatz darf die Namensprüfung nicht kippen, ein anderer Firmenname aber weiterhin schon
+    assert name_passt("Dish Network Corp - Class A", ["Dish Network", "DISH Network CORP"])
+    assert not name_passt("Beam Therapeutics Inc - Class A", ["BEAM INC"])

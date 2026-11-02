@@ -24,7 +24,15 @@ def yahoo_ticker(ticker: str) -> str:
 
 
 def _ist_stammaktie(ticker: str) -> bool:
-    return not re.search(r"-(P[A-Z]?|W[S]?|U|R)$|\bPR[A-Z]?$", ticker)
+    """Grobe Erkennung von Vorzugsaktien, Optionsscheinen, Units und Rechten an der Endung mit Trennzeichen
+    (z.B. CTA-PB, BRK-WS). Ohne Trennzeichen ist nichts erkennbar (PRU ist eine Stammaktie, PFH eine Anleihe);
+    deshalb hat der eigene Ticker der Mitgliedschaft immer Vorrang."""
+    return not re.search(r"-(P[A-Z]?|PR[A-Z]?|WS?|U|R)$", ticker)
+
+
+def _ohne_gattung(name: str) -> str:
+    """Gattungszusatz entfernen („dish network class a“ → „dish network“); sonst drückt er die Wortüberdeckung."""
+    return re.sub(r"\s*\b(class|series|cl)\s+[a-z]\b", "", name).strip()
 
 
 def kursquelle(zeile, sec_ticker: dict[int, list[str]], tiingo_liste: pd.DataFrame | None) -> dict:
@@ -75,18 +83,18 @@ def kursquelle(zeile, sec_ticker: dict[int, list[str]], tiingo_liste: pd.DataFra
 def name_passt(meta_name: str | None, kandidaten: list[str]) -> bool:
     """Passt der Name aus den Kurs-Metadaten zu einem der bekannten Namen der Firma?
 
-    Vergleich der normalisierten Namen (ohne Rechtsform-Zusätze, siehe universum.name_normalisieren): gleich, gleich
+    Vergleich der normalisierten Namen (ohne Rechtsform- und Gattungszusätze wie „Class A“): gleich, gleich
     ohne Leerzeichen, oder Wortmengen-Überdeckung (Jaccard) strikt über 50 %. Bewusst streng: „Beam Therapeutics“
     gegen „Beam“ ergibt genau 50 % und passt nicht. Ohne Namen in den Metadaten passt nichts.
     """
     from tradingbot.daten.universum import name_normalisieren
 
-    m = name_normalisieren(meta_name) if isinstance(meta_name, str) else ""
+    m = _ohne_gattung(name_normalisieren(meta_name)) if isinstance(meta_name, str) else ""
     if not m:
         return False
     worte_m = set(m.split())
     for k in kandidaten:
-        n = name_normalisieren(k)
+        n = _ohne_gattung(name_normalisieren(k))
         if not n:
             continue
         if n == m or n.replace(" ", "") == m.replace(" ", ""):
