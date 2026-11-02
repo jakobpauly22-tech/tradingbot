@@ -1,0 +1,70 @@
+"""Auswertung der Kursabdeckung im Universum (Rückmeldung Jakob 03.11.2026).
+
+Zwei Fälle werden getrennt:
+1. Nicht kaufbar: Ein Mitglied hat am Auswahltag (Rebalancing-Stichtag) keine gültige Kursreihe
+   (kursquellen.pruefe_kursreihe). Es kann nicht ins Portfolio. Ausgewiesen je Stichtag: Anzahl und Indexgewicht.
+2. Rückfall-Regel: Eine gehaltene Aktie verliert später ihre Kurse (gültige Reihe endet mit dem Indexabgang,
+   z.B. Übernahme oder Insolvenz). Dann greift delisting.delisting_rendite. Ausgewiesen je Jahr mit Grund.
+
+Indexgewicht: Börsenwert des Streubesitzes laut Deckblatt der SEC-Berichte (dei:EntityPublicFloat, point-in-time,
+jüngster bis zum Stichtag bekannte Wert). Er ist auch für Titel ohne gültige Kurse vorhanden und kommt der
+Streubesitz-Gewichtung des S&P 500 nahe. Abweichung: Wert zum Stichtag des Deckblatts (meist Ende Q2 des Vorjahres),
+nicht tagesaktuell.
+Schwelle: Liegt das Gewicht der nicht kaufbaren Titel im investierbaren Universum (ohne Finanzwerte) über 2 %, wird
+das vor dem ersten Backtest mit Jakob besprochen.
+"""
+from __future__ import annotations
+
+import pandas as pd
+
+SCHWELLE_GEWICHT = 0.02
+STREUBESITZ = {"art": "letzter", "einheit": "USD", "konzepte": ["dei:EntityPublicFloat"]}
+
+
+def rebalancing_stichtage(von="2012-01-01", bis="2024-12-31", haeufigkeit="QS") -> pd.DatetimeIndex:
+    """Erster Werktag je Quartal im Entwicklungszeitraum (Tresor ab 2025 bleibt zu)."""
+    anfaenge = pd.date_range(von, bis, freq=haeufigkeit)
+    return pd.DatetimeIndex([pd.bdate_range(a, a + pd.Timedelta(days=7))[0] for a in anfaenge])
+
+
+def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, finanzwert_fn, stichtage) -> pd.DataFrame:
+    """Je Stichtag Anzahl und Gewicht der Mitglieder ohne gültige Kursreihe.
+
+    mitglieder_fn(stichtag) → DataFrame der Mitgliedschaften (Index = Mitgliedschafts-Nr.)
+    gueltig: bool je Mitgliedschafts-Nr. (fehlend = nicht gültig)
+    gewicht_fn(nr, stichtag) → Streubesitz in USD oder None; finanzwert_fn(nr, stichtag) → True/False/None
+    """
+    zeilen = []
+    for tag in stichtage:
+        m = mitglieder_fn(tag)
+        nrn = list(m.index)
+        ok = pd.Series([bool(gueltig.get(n, False)) for n in nrn], index=nrn)
+        gewicht = pd.Series([gewicht_fn(n, tag) for n in nrn], index=nrn, dtype=float)
+        finanz = pd.Series([finanzwert_fn(n, tag) for n in nrn], index=nrn, dtype=object)
+        investierbar = finanz.map(lambda f: f is False)
+        zeile = {"stichtag": tag.date(), "mitglieder": len(nrn), "ohne_gueltige_kurse": int((~ok).sum()),
+                 "gewicht_ohne_kurse": _anteil(gewicht, ~ok), "ohne_streubesitzwert": int(gewicht.isna().sum()),
+                 "investierbar": int(investierbar.sum()), "investierbar_ohne_kurse": int((investierbar & ~ok).sum()),
+                 "gewicht_investierbar_ohne_kurse": _anteil(gewicht[investierbar], ~ok[investierbar])}
+        zeile["ueber_schwelle"] = zeile["gewicht_investierbar_ohne_kurse"] > SCHWELLE_GEWICHT
+        zeilen.append(zeile)
+    return pd.DataFrame(zeilen)
+
+
+def _anteil(gewicht: pd.Series, maske: pd.Series) -> float:
+    gesamt = gewicht.sum(skipna=True)
+    return float(gewicht[maske].sum(skipna=True) / gesamt) if gesamt > 0 else float("nan")
+
+
+def rueckfall_faelle(status: pd.DataFrame, gruende: dict) -> pd.DataFrame:
+    """Gültige Reihen, die vor dem Ende der Daten aufhören (Delisting nach Indexabgang): je Jahr und Grund.
+
+    status: Spalten index, gueltig, letzter_kurs (aus kursstatus.csv); gruende: Mitgliedschafts-Nr. → Grund.
+    """
+    s = status[status["gueltig"].astype(bool)].copy()
+    s["letzter_kurs"] = pd.to_datetime(s["letzter_kurs"])
+    datenende = s["letzter_kurs"].max()
+    endet = s[s["letzter_kurs"] < datenende - pd.Timedelta(days=30)].copy()
+    endet["jahr"] = endet["letzter_kurs"].dt.year
+    endet["grund"] = endet["index"].map(lambda n: gruende.get(n, "unbekannt"))
+    return endet.groupby(["jahr", "grund"]).size().unstack(fill_value=0)

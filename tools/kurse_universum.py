@@ -25,9 +25,15 @@ warnings.simplefilter("ignore")
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
 
 
+def _vorgaenger(zeile) -> list[int]:
+    """Vorgänger-CIKs; aus dem Parquet-Cache kommen sie als NumPy-Array (dessen Wahrheitswert ist mehrdeutig)."""
+    liste = zeile["vorgaenger_ciks"]
+    return [] if liste is None else [int(c) for c in list(liste)]
+
+
 def _bekannte_namen(zeile, sec_client) -> list[str]:
     namen = [zeile["name"]]
-    ciks = ([int(zeile["cik"])] if pd.notna(zeile["cik"]) else []) + [int(c) for c in list(zeile["vorgaenger_ciks"] or [])]
+    ciks = ([int(zeile["cik"])] if pd.notna(zeile["cik"]) else []) + _vorgaenger(zeile)
     for cik in ciks:
         try:
             namen += sec_namen_einer_cik(cik, sec_client)
