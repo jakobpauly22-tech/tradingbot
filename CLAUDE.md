@@ -30,6 +30,7 @@ Bei Widersprüchen gilt die neueste Entscheidung von Jakob. Weicht der Code von 
 | Freigaben | beim Rebalancing | feste Fenster morgens und abends |
 
 - **Nur long, ohne Hebel.** Keine Leerverkäufe, Futures, CFDs, Optionen oder Margin. Short-Signale bedeuten „nicht investiert“.
+- **Währungstausch (03.11.2026):** Fremdwährungskasse wird gehalten, getauscht wird nur der Netto-Saldo am Ausführungstag und bei Ein- und Auszahlungen, nicht je Order. Offener Steuerpunkt: § 23 EStG beim Rücktausch.
 - **Kosten:** Käufe und Aufstockungen nur, wenn die Gebühr höchstens 1 % des Orderwerts ausmacht (IBKR mindestens 1,25 € je Order, also ab 125 € Orderwert). Ausstiege (Stops, Zeit-Stops, These gebrochen) sind immer erlaubt, auch bei Gebühr über 1 % (Entscheidung 01.11.2026). Bruchteilsaktien gibt es über die IBKR-API nicht.
 - **Kapital:** 500 €, Aufteilung 70/30, Prozentregeln skalieren mit. Bis das Kapital wächst, bildet der Core die Streuung über breite ETFs ab; die Fundamental-Engine führt parallel ein bewertetes Schattenportfolio aus Einzelaktien.
 - **Satellite-Schattenbetrieb (Entscheidung 01.11.2026):** Echte Satellite-Trades erst ab 1.250 € Satellite-Kapital (10 % Position = 125 € Mindestorder). Bis dahin gehen die echten 150 € in den Core-ETF, und der Satellite läuft als Schattenportfolio mit virtuellen 1.250 € nach allen Regeln inklusive Kosten und Steuern, getrennt ausgewiesen (`config/backtest.yaml`, `kapital`).
@@ -110,6 +111,7 @@ Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nich
 - **Filter:** Piotroski ≤ 3 raus; Altman 1968 für Industrie, Z'' für übrige; Beneish > −1,78 raus; Banken und Versicherungen ohne Altman und Beneish.
 - **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
 - **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
+- **Erster Lauf (03.11.2026):** beide Erfolgskriterien verfehlt (Ergebnis und Diagnose in `docs/FUNDAMENTAL.md`). Der kombinierte Score geht nicht als Stockpicker ins Paper Trading; Score und Gewichte bleiben unverändert. Im Paper Trading laufen zwei Schattenportfolios vorwärts mit: (A) Originalscore, (B) nur Qualitätshälfte. DCF zurückgestellt. Gezählte Varianten: `daten/fundamental/varianten.csv`.
 
 ## Briefing-Archiv (Eingang der News-Engine)
 
