@@ -13,6 +13,12 @@ nur über `oeffne_tresor`, das sie im Protokoll (docs/TRESOR_PROTOKOLL.md, in Gi
 Zentrale Datumsgrenze (Jakob, 02.11.2026): Alle Datenlader (Kurse mit Dividenden und Splits, Tiingo, FRED,
 SEC-Fundamentaldaten) liefern nur Daten bis `datengrenze()` (Tag vor dem Sperrdatum, heute 31.12.2024). Aufgehoben
 wird die Grenze nur innerhalb von `with tresor_geoeffnet(freigabe):` mit einer im Protokoll eingetragenen Freigabe.
+
+Betriebsfreigabe (Jakob 02.11.2026): Der Tageslauf des Paper Tradings braucht aktuelle Kurse (Signale, Bücher). Innerhalb
+von `with betriebsmodus(zweck):` gilt keine Datumsgrenze; jeder Eintritt wird in daten/betrieb/betriebsfreigaben.log
+protokolliert. Im Betriebsmodus verweigern Backtest und Auswertung den Start (`pruefe_kein_betriebsmodus`), und der
+Betriebsbereich daten/betrieb ist nur im Betriebsmodus lesbar (tradingbot.betrieb.speicher). So kann kein Backtest-
+oder Auswertungswerkzeug Daten ab 2025 oder Betriebsdaten sehen.
 """
 from __future__ import annotations
 
@@ -98,6 +104,36 @@ def oeffne_tresor(phase: str, begruendung: str, *, konfig: dict | None = None, j
 
 
 _AKTIVE_FREIGABE: ContextVar["TresorFreigabe | None"] = ContextVar("tresor_freigabe", default=None)
+_BETRIEBSMODUS: ContextVar[str | None] = ContextVar("betriebsmodus", default=None)
+
+
+def im_betriebsmodus() -> bool:
+    return _BETRIEBSMODUS.get() is not None
+
+
+def pruefe_kein_betriebsmodus(was: str) -> None:
+    """Backtests und Auswertungen dürfen nicht im Betriebsmodus laufen (sie sähen sonst Daten ab 2025)."""
+    if im_betriebsmodus():
+        raise TresorGesperrt(f"{was} im Betriebsmodus verweigert (Betriebsfreigabe gilt nur für den Tageslauf)")
+
+
+@contextmanager
+def betriebsmodus(zweck: str, *, protokoll: Path | None = None, jetzt: datetime | None = None):
+    """Betriebsfreigabe für den Tageslauf: keine Datumsgrenze, Eintritt protokolliert."""
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    if not zweck.strip():
+        raise ValueError("Zweck der Betriebsfreigabe ist Pflicht")
+    datei = protokoll or PROJEKT_WURZEL / "daten" / "betrieb" / "betriebsfreigaben.log"
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    with datei.open("a", encoding="utf-8") as f:
+        zeile = [(jetzt or datetime.now()).isoformat(timespec="seconds"), zweck, _git_commit()]
+        f.write(" | ".join(zeile) + chr(10))
+    token = _BETRIEBSMODUS.set(zweck)
+    try:
+        yield
+    finally:
+        _BETRIEBSMODUS.reset(token)
 
 
 @lru_cache(maxsize=1)
@@ -109,6 +145,8 @@ def datengrenze(konfig: dict | None = None) -> pd.Timestamp | None:
     """Letzter Tag, bis zu dem Datenlader Daten liefern dürfen; None nur bei gültiger, aktiver Tresor-Öffnung."""
     gesperrt_ab, _ = _einstellungen(konfig) if konfig is not None else _standard_sperre()
     if _AKTIVE_FREIGABE.get() is not None:      # nur über tresor_geoeffnet() gesetzt, dort gegen das Protokoll geprüft
+        return None
+    if _BETRIEBSMODUS.get() is not None:        # Betriebsfreigabe des Tageslaufs (protokolliert)
         return None
     return pd.Timestamp(gesperrt_ab) - pd.Timedelta(days=1)
 

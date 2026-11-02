@@ -414,6 +414,9 @@ def simuliere(
     (Entscheidung 01.11.2026); sie wird den Teilportfolios nach ihrem positiven steuerpflichtigen Beitrag
     zugeordnet. `meta` enthält zusätzlich den Wert nach fiktivem Verkauf am Ende und dessen Steuer.
     """
+    from tradingbot.backtest.tresor import pruefe_kein_betriebsmodus
+
+    pruefe_kein_betriebsmodus("Backtest")
     if konfig is None:
         from tradingbot.konfiguration import lade_konfiguration
 

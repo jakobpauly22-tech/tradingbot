@@ -81,4 +81,23 @@ daten:
   # Betriebsfreigabe (Jakob 02.11.2026): Der Tageslauf darf Kurse ab 2025 lesen, nur für Signale und Bücher, protokolliert.
   # Betriebsdaten liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge technisch nicht lesen können.
   betriebsbereich: daten/betrieb
-  paper_start: null                    # wird beim ersten Tageslauf gesetzt; gemessen wird ab diesem Tag
+  kursquelle: yahoo                    # kein Xetra-Marktdaten-Abo bei IBKR (Jakob 02.11.2026)
+  # Messbeginn je Buch = Tag der ersten Freigabe, im Journal festgehalten (02.11.2026)
+
+datenpruefung:                         # vor jedem Tageslauf (Jakob 02.11.2026); bei Befund an diesem Tag keine Vorschläge
+  schluss_vom_letzten_handelstag: true # je Börse (Xetra, NYSE) die letzte abgeschlossene Sitzung
+  max_tagessprung: 0.15                # größere Sprünge ohne Kapitalmaßnahme (Split, Ausschüttung) melden
+  wirkung: buch                        # ein Befund sperrt die Vorschläge der Bücher, die den Wert brauchen
+
+start:                                 # Jakob 02.11.2026
+  fundamental: sofort_mit_aktuellem_signal_dann_quartalsweise
+  technik: ab_erstem_signal
+
+journal:
+  datei: daten/betrieb/journal.sqlite
+  backup_variable: JOURNAL_BACKUP_DIR  # Zielordner außerhalb des Repos (.env), Kopie nach jedem Tageslauf
+  konto_anzeige: gekuerzt              # Kontonummer nur gekürzt (z.B. „DUR3…“)
+
+bedienung:
+  start: Tageslauf.bat                 # Doppelklick, ohne Terminal: Tageslauf und Freigabe in einem Fenster
+  gateway_pruefen_vor_senden: true     # nicht verbunden → sauber abbrechen, Vorschläge bleiben bis 24 Uhr freigebbar
