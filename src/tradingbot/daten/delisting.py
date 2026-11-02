@@ -39,7 +39,7 @@ def delisting_grund(filings: pd.DataFrame, letzter_kurs, grund_text: str | None 
     pleite = acht_k[acht_k["items"].str.contains(r"\b1\.03\b")]
     if len(pleite):
         return "pleite", f"8-K Item 1.03 vom {pleite['datum'].iloc[0].date()}"
-    kontrolle = acht_k[acht_k["items"].str.contains(r"\b(5\.01|2\.01)\b")]
+    kontrolle = acht_k[acht_k["items"].str.contains(r"\b(?:5\.01|2\.01)\b")]
     if len(kontrolle):
         return "uebernahme", f"8-K Item {re.search(r'5\.01|2\.01', kontrolle['items'].iloc[-1]).group()} vom {kontrolle['datum'].iloc[-1].date()}"
     angebot = fenster[fenster["form"].isin(UEBERNAHME_FORMULARE)]
