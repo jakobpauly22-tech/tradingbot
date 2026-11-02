@@ -21,10 +21,12 @@ from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, la
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
 from tradingbot.engines.fundamental.multiples import marktwert_am, multiples, perzentil_raenge
-from tradingbot.engines.fundamental.scores import accruals_quote, altman, beneish, piotroski
+from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
+from tradingbot.engines.fundamental.scores import _w, accruals_quote, altman, beneish, piotroski
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
 warnings.simplefilter("ignore")
+Z2_GRUND = "Altman Z'' "
 
 
 def main() -> int:
@@ -77,7 +79,16 @@ def main() -> int:
                                         daten.streubesitz_gueltig.get(firma))
             industrie = industrie_von <= sic <= industrie_bis
             p, a, b, acc, m = piotroski(t), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t), multiples(t, mw)
+            try:
+                cfo_t = _w(t, "operativer_cashflow", 0)
+            except Exception:
+                cfo_t = None
+            cfo_t = None if cfo_t is None or pd.isna(cfo_t) else float(cfo_t)
+            fe = filter_anwenden(sic=sic, piotroski=p, altman=a, beneish=b, cfo_t=cfo_t, konfig=konfig)
             z.update({"piotroski": p["wert"], "piotroski_fehlend": ";".join(p["fehlend"]),
+                      "piotroski_n": p["anzahl_signale"], "piotroski_hochgerechnet": p["wert_hochgerechnet"] if p["hochgerechnet"] else None,
+                      "cfo_t": cfo_t, "ausgeschlossen": fe.ausgeschlossen, "filter_gruende": " | ".join(fe.gruende),
+                      "filter_hinweise": " | ".join(fe.hinweise),
                       "altman": a["wert"], "altman_variante": a["variante"], "altman_zone": a.get("zone"), "altman_fehlend": ";".join(a["fehlend"]),
                       "beneish": b["wert"], "beneish_fehlend": ";".join(b["fehlend"]), "accruals": acc["wert"],
                       "marktwert": mw, "marktwert_grund": mw_grund, "ep": m["ep"], "ebit_ev": m["ebit_ev"], "ev_negativ": m["ev_negativ"]})
@@ -107,12 +118,35 @@ def main() -> int:
         text.append(f"| {jahr} | {n:.0f} | {anteil(g['veraltet'], g)} | {anteil(gb['piotroski'].notna(), g)} | {anteil(gb['altman'].notna(), g)} | "
                     f"{anteil(gb['beneish'].notna(), g)} | {anteil(gb['marktwert'].notna(), g)} | {anteil(gb['rang_ep'].notna(), g)} | "
                     f"{anteil(gb['rang_ebit_ev'].notna(), g)} | {anteil(gb['abgeleitet'] > 0, g)} |")
-    text += ["", "## Anteil, den jeder Filter ausschließt (an den Firmen mit berechnetem Score)", "",
-             "| Jahr | Piotroski ≤ 3 | Altman Gefahrenzone | Beneish > −1,78 | mindestens ein Filter (an allen bewertbaren) |", "| --- | --- | --- | --- | --- |"]
+    text += ["", "## Ausschlussquoten mit der Regel vom 03.11.2026 (an allen bewertbaren Firmen je Jahr)", "",
+             "Piotroski: exakter Wert bei 9 Signalen, hochgerechnet bei 7–8, sonst übersprungen. Altman: Z hart im verarbeitenden Gewerbe "
+             "(SIC 2000–3999), Versorger (SIC 49) ohne Altman, übrige Z'' nur mit zweitem Signal (Piotroski ≤ 3 oder CFO < 0). "
+             "Beneish > −1,78 raus, fehlend übersprungen.", "",
+             "| Jahr | Piotroski ≤ 3 | Altman Z Industrie | Z'' + 2. Signal | Z'' nur Warnhinweis | Beneish > −1,78 | ausgeschlossen gesamt | "
+             "Piotroski hochgerechnet | Piotroski übersprungen | Beneish übersprungen |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for jahr, g in bewertbar.assign(jahr=bewertbar["stichtag"].dt.year).groupby("jahr"):
-        p = g["piotroski"].dropna(); a = g["altman_zone"].dropna(); m = g["beneish"].dropna()
-        raus = (g["piotroski"] <= 3) | (g["altman_zone"] == "gefahr") | (g["beneish"] > filt["beneish_max"])
-        text.append(f"| {jahr} | {(p <= 3).mean():.0%} | {(a == 'gefahr').mean():.0%} | {(m > filt['beneish_max']).mean():.0%} | {raus.mean():.0%} |")
+        gr, hw = g["filter_gruende"].fillna(""), g["filter_hinweise"].fillna("")
+        text.append(f"| {jahr} | {anteil(gr.str.contains('Piotroski'), g)} | {anteil(gr.str.contains('verarbeitendes Gewerbe'), g)} | "
+                    f"{anteil(gr.str.contains(Z2_GRUND, regex=False), g)} | {anteil(hw.str.contains('Warnhinweis'), g)} | "
+                    f"{anteil(gr.str.contains('Beneish'), g)} | {anteil(g['ausgeschlossen'].fillna(False).astype(bool), g)} | "
+                    f"{anteil(hw.str.contains('Piotroski hochgerechnet'), g)} | {anteil(hw.str.contains('Piotroski übersprungen'), g)} | "
+                    f"{anteil(hw.str.contains('Beneish übersprungen'), g)} |")
+    # Vergleich alte Regel (jeder Altman-Gefahrenzone raus) – damit die Wirkung der Entscheidung sichtbar bleibt
+    alt = (bewertbar["piotroski"] <= 3) | (bewertbar["altman_zone"] == "gefahr") | (bewertbar["beneish"] > filt["beneish_max"])
+    text += ["", f"Zum Vergleich alte Regel (jede Altman-Gefahrenzone raus, Piotroski nur bei 9 Signalen): {alt.mean():.0%} ausgeschlossen; "
+             f"neue Regel: {bewertbar['ausgeschlossen'].fillna(False).astype(bool).mean():.0%}.", "",
+             "## Je SIC-Division: Z''-Gefahrenzone nur Warnhinweis vs. ausgeschlossen (Firmen-Stichtage)", "",
+             "| Division | bewertbar | Z'' Warnhinweis | Z'' + 2. Signal | ausgeschlossen gesamt |", "| --- | --- | --- | --- | --- |"]
+    from tradingbot.engines.fundamental.multiples import sic_division
+    bd = bewertbar.assign(division=bewertbar["sic"].map(sic_division))
+    for div, g in bd.groupby("division"):
+        gr, hw = g["filter_gruende"].fillna(""), g["filter_hinweise"].fillna("")
+        text.append(f"| {div} | {len(g)} | {hw.str.contains('Warnhinweis').sum()} | {gr.str.contains(Z2_GRUND, regex=False).sum()} | "
+                    f"{int(g['ausgeschlossen'].fillna(False).astype(bool).sum())} |")
+    beispiele = bewertbar[bewertbar["filter_hinweise"].fillna("").str.contains("Warnhinweis")].sort_values("stichtag").groupby("firma").tail(1)
+    text += ["", f"Firmen mit Z''-Warnhinweis am letzten Stichtag ({stichtage[-1].date()}): "
+             f"{int((beispiele['stichtag'] == stichtage[-1]).sum())}"]
     fehlend = Counter(x.split("@")[0] for spalte in ("piotroski_fehlend", "altman_fehlend", "beneish_fehlend")
                       for v in bewertbar[spalte].dropna() for x in v.split(";") if x)
     gruende_mw = bewertbar["marktwert_grund"].dropna().str.replace(r"[\d.,]+", "x", regex=True).value_counts().head(5).to_dict()
