@@ -156,3 +156,70 @@ nicht als Variante gezählt.
   unterscheiden könnte; der Abstand beim Sharpe ist deutlich.
 
 Nächster Schritt laut Regel: mit Jakob besprechen. Keine Änderung ohne Fehler oder theoretische Begründung.
+
+## Entscheidungen nach dem ersten Lauf (Jakob, 03.11.2026)
+
+1. **Erkenntnis, keine Anpassung:** Der kombinierte Score geht nicht als Stockpicker ins Paper Trading. Gewichte und Score
+   bleiben unverändert.
+2. **Kostenmodell Währungstausch (framework-weit, Fehlerkorrektur, keine Variante):** USD-Kasse wird gehalten; getauscht
+   wird nur bei Ein- und Auszahlungen bzw. für den Netto-Saldo am Ausführungstag, nicht je Order
+   (`backtest/simulation.py`, `backtest/portfolio.py`). Offener Punkt im Steuermodul: Rücktausch von USD-Kasse kann ein
+   privates Veräußerungsgeschäft sein (§ 23 EStG, Freigrenze 1.000 €), noch nicht modelliert.
+3. **Keine Variante „nur Qualität“ auf 2016–2024** (Rückschaufehler: die Value-Schwäche des Zeitraums ist jetzt bekannt).
+   Stattdessen laufen im Paper Trading zwei Schattenportfolios ohne echtes Geld vorwärts mit, sonst identische Regeln
+   (20 Titel, Puffer 30, Drift-Band 2,5–7,5 %, SIC2 ≤ 25 %, Filter, quartalsweise):
+   - **(A) Originalscore:** Qualität 50 % + Bewertung 50 %.
+   - **(B) nur Qualitätshälfte:** Ränge Piotroski und Accruals, je gleich gewichtet.
+   Beide werden ab Start des Paper Tradings getrennt ausgewiesen; erst diese Vorwärtsdaten entscheiden über eine Rückkehr
+   der Engine als Stockpicker.
+4. **Diagnose der Filter als Variante 2** (siehe unten): Taugen Piotroski, Altman und Beneish als Veto im Risk-Manager?
+5. **DCF zurückgestellt.** Danach weiter mit der nächsten Engine laut Roadmap.
+
+## Neuberechnung Variante 1 mit korrigiertem Kostenmodell (03.11.2026, keine neue Variante)
+
+Lauf `daten/backtests/20261102T174450_fundamental_schatten/`, Git 4c967a7. Strategie unverändert.
+
+| | Kosten je Order (alt) | Netto-Tausch (neu) |
+| --- | --- | --- |
+| Kosten gesamt | 1.249 € (1,51 % p.a.) | 668 € (0,81 % p.a.) |
+| davon Währungstausch | 604 € (je Order) | 11 € (6 Tauschvorgänge) |
+| Rendite p.a. nach Kosten, vor Steuern | 10,24 % | 11,17 % |
+| Sharpe / max. Drawdown | 0,44 / −41,9 % | 0,48 / −41,8 % |
+| nach laufenden Steuern / nach Verkauf | 8,39 % / 7,91 % | 9,12 % / 8,66 % |
+
+Beide Kriterien bleiben verfehlt: (a) 11,17 % < 13,03 % (Kontrollportfolio); (b) Sharpe 0,48 < 0,79, Drawdown
+−41,8 % schlechter als die Grenze −36,6 %. Die Entscheidung oben (keine Anpassung) bleibt.
+
+## Diagnose der Filter (Variante 2, 03.11.2026)
+
+`tools/diagnose_filter.py`, Bericht `daten/fundamental/diagnose_filter.md`. Gleich gewichtet, quartalsweise, ohne Kosten,
+vor Steuern, 01.10.2016 bis 31.12.2024.
+
+| Portfolio | Titel je Stichtag | Rendite p.a. | Sharpe | max. Drawdown |
+| --- | --- | --- | --- | --- |
+| ohne Filter (alle bewertbaren) | 394 | 12,80 % | 0,62 | −37,1 % |
+| mit Filtern | 354 | 13,03 % | 0,64 | −37,3 % |
+| nur ausgeschlossene | 41 | 9,86 % | 0,39 | −35,4 % |
+| ausgeschlossen: Piotroski ≤ 3 | 17 | 4,84 % | 0,16 | −46,0 % |
+| ausgeschlossen: Altman Z (Industrie) | 18 | 10,68 % | 0,43 | −36,3 % |
+| ausgeschlossen: Z'' + zweites Signal | 4 | 5,39 % | 0,12 | −68,3 % |
+| ausgeschlossen: Beneish | 9 | 17,32 % | 0,59 | −36,7 % |
+
+Wertentwicklung je ausgeschlossenem Titel gegenüber dem Mittel aller bewertbaren (Überrendite, Mittel / Median):
+
+| Filter | 1 Quartal | 4 Quartale | Anteil schlechter (4 Q) |
+| --- | --- | --- | --- |
+| alle ausgeschlossenen | −0,5 % / −1,1 % | −1,7 % / −6,6 % | 58 % |
+| Piotroski ≤ 3 | −1,1 % / −2,1 % | −4,4 % / −10,7 % | 62 % |
+| Altman Z (Industrie) | −0,4 % / −0,8 % | −1,8 % / −5,1 % | 58 % |
+| Z'' + zweites Signal | −1,2 % / −3,2 % | −1,5 % / −19,5 % | 65 % |
+| Beneish | +0,8 % / +0,1 % | +3,6 % / −0,7 % | 51 % |
+
+Lesart (Claude, zur Entscheidung durch Jakob):
+- Gesamtwirkung klein: Die Filter heben das gleich gewichtete Universum um 0,2 Pp. p.a.; in 19 von 33 Quartalen liefen
+  die ausgeschlossenen schlechter, mittlerer Abstand −0,6 % je Quartal, t-Wert −0,9 (nicht signifikant).
+- Piotroski ≤ 3 und Z'' mit zweitem Signal trennen am deutlichsten: niedrige Rendite, hohe Schwankung, Median der
+  Überrendite über 4 Quartale −11 % bzw. −20 %. Altman Z (Industrie) wirkt schwächer, Beneish gar nicht (ausgeschlossene
+  Titel liefen im Mittel besser; einzelne Totalausfälle wie SolarEdge 2023 −91 %).
+- Insolvenzen kamen im Zeitraum kaum vor (1 Pleite-Delisting im ganzen Universum), daher ist der eigentliche Zweck von
+  Altman hier kaum prüfbar. Die 4-Quartals-Fenster überlappen sich, die Fälle sind nicht unabhängig.

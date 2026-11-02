@@ -107,3 +107,14 @@ def test_signal_nicht_vor_us_feiertag():
     # Stichtag an einem Feiertag beider Börsen (01.01.): Signal nie vor dem Stichtag
     kal2 = pd.DatetimeIndex(["2017-12-29", "2018-01-02", "2018-01-03"])
     assert signal_und_ausfuehrung([pd.Timestamp("2018-01-01")], kal2, kal2)[0][1:] == (pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03"))
+
+
+def test_haltefaktor_mit_dividende_und_delisting():
+    from tradingbot.engines.fundamental.schatten import haltefaktor
+    k = kerzen([100.0, 100.0, 110.0, 110.0, 110.0], eroeffnung=[100.0, 95.0, 100.0, 110.0, 110.0], dividende=[0, 0, 0, 2.2, 0])
+    tri = total_return_index(k)
+    tage = k.index
+    # Kauf zur Eröffnung 95 am Tag 2, Schluss Tag 4 = 110 plus Dividende 2,2 reinvestiert: 100/95 · 1,1 · 1,02
+    assert haltefaktor(k, tri, tage[1], tage[3]) == pytest.approx(100 / 95 * 1.1 * 1.02)
+    pleite = Delisting(tage[2], -0.30, "pleite")
+    assert haltefaktor(k, tri, tage[1], tage[4], pleite) == pytest.approx(100 / 95 * 1.1 * 0.7)

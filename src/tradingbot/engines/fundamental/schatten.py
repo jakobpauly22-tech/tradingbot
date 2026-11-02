@@ -187,3 +187,20 @@ def kontrollportfolio(ranglisten: dict[pd.Timestamp, pd.DataFrame], kurse: dict[
         if naechste is not None:
             v = v * float(np.mean(faktoren_offen))
     return werte.dropna(), pd.DataFrame(statistik)
+
+
+def haltefaktor(k: pd.DataFrame, tri: pd.Series, kauf, bis, delisting=None) -> float | None:
+    """Wertfaktor eines Titels von der Eröffnung am Kauftag bis zum Schluss am Tag `bis` (Dividenden reinvestiert).
+
+        Faktor = TRI(bis') / TRI(kauf) · Close(kauf) / Open(kauf),   bis' = min(bis, letzter Kurstag)
+    Endet die Kursreihe vor `bis` (Delisting), wird der Faktor mit (1 + Delisting-Rendite) multipliziert; danach Kasse
+    ohne Zins. None, wenn am Kauftag kein Eröffnungskurs vorliegt.
+    """
+    kauf, bis = pd.Timestamp(kauf), pd.Timestamp(bis)
+    if kauf not in k.index or not k.loc[kauf, "open"] > 0:
+        return None
+    ende = min(bis, delisting.letzter_tag) if delisting is not None else bis
+    faktor = float(tri.loc[:ende].iloc[-1] / tri.loc[kauf]) * float(k.loc[kauf, "close"]) / float(k.loc[kauf, "open"])
+    if delisting is not None and delisting.letzter_tag < bis:
+        faktor *= 1.0 + delisting.rendite
+    return faktor
