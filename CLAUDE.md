@@ -125,6 +125,10 @@ Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`. Details in `do
 - **Ergebnis (02.11.2026), Zweig a) des Entscheidungsbaums (`docs/TECHNIK.md`):** Ohne Kosten erreichen weder Crossover noch Momentum den Sharpe von Buy & Hold in beiden Hälften. Die Technik-Engine ist kein Renditebaustein; echtes Geld bleibt im Core, Crossover und Momentum laufen im Paper Trading als Schatten vorwärts mit. RSI(2) und Price Channel sind für den Satellite raus. Ohne Kosten senken Crossover und Momentum den maximalen Drawdown aber deutlich (Crossover −12,4 % gegen −17,1 % bei Buy & Hold); sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten.
 - **Berichte** zusätzlich als Datei unter `docs/berichte/`.
 
+## Paper Trading (Phase 2, Entscheidungen 02.11.2026)
+
+Parameter in `config/betrieb.yaml`. Realbuch: Core 500 € in SPYI (ganze Stücke), Strategien nur als Schatten. Skalierungsbücher mit je 10.000 € (Fundamental A und B, Crossover, Momentum) handeln im Paper-Konto, um Signalqualität ohne Kostenverzerrung zu messen; sie begründen nie echte Trades mit kleinerem Kapital. Tageslauf abends, Freigabe 18–24 Uhr, Senden sofort (Limit = Vortagesschluss + 2 %, gültig für den nächsten Handelstag). Senden nur bei Konto „DU…“, Port 4002, `TRADING_MODE=paper` und ohne Datei `STOP`. Betriebsdaten ab 2025 liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge nicht lesen können.
+
 ## Briefing-Archiv (Eingang der News-Engine)
 
 Eine geplante Aufgabe in Claude speichert täglich um 22:40 den Bot-Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv` (Schema 1.1, siehe `docs/BOT_ANHANG.md`, Prüfung mit `tools/pruefe_bot_anhang.py`). Lokal gehören die Dateien nach `daten/briefings/`. Nachrichten erst ab `erstellt_um` verwenden. Bekannte Einschränkung: In den Dateien vom 28. bis 30.10.2026 ist `quelle` bei Einträgen aus Sammelmeldungen (item_key mit `-b`) teils falsch; ab 31.10.2026 korrigiert.

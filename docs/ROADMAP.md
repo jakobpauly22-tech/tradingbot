@@ -359,10 +359,11 @@ Technische Indikatoren wie bei TradingView werden selbst in Python berechnet und
 | Core-ETF | SPYI.DE (MSCI ACWI IMI); ganze Stücke, Rest bleibt Kasse und wird mit dem nächsten Betrag investiert |
 | Daten im Betrieb | Betriebsfreigabe für Kurse ab 2025 nur für Signale und Bücher, protokolliert; eigener Datenbereich, den Backtest- und Auswertungswerkzeuge technisch nicht lesen können; Paper Trading wird ab seinem Startdatum gemessen |
 | Budget | eigenes Bot-Budget (500 €) im Paper-Konto; täglicher Abgleich der Bot-Bestände mit IBKR, bei Abweichung stoppt der Tageslauf |
-| Ordertyp | Käufe als Limit mit Vortagesschluss + 2 %, vor 09:00 gesendet (Xetra-Eröffnungsauktion); Verkäufe ohne Limit; nicht ausgeführte Orders verfallen und stehen im Journal |
+| Ordertyp | Käufe als Limit mit Vortagesschluss + 2 %, Verkäufe ohne Limit; gesendet sofort nach der Abendfreigabe, gültig für den nächsten Handelstag (Xetra-Eröffnungsauktion); nicht ausgeführte Orders verfallen und stehen im Journal |
 | Bibliothek | ib_async; bei Problemen mit Python 3.15 eine ältere Python-Version im venv |
-| Freigabefenster | abends 18–24 Uhr, Ausführung am nächsten Morgen |
-| Sicherheit | Senden nur bei Konto-ID „DU…“, Port 4002 und TRADING_MODE=paper; Not-Aus-Datei STOP; Schutz gegen Doppel-Orders; Plausibilitätsgrenzen (Orderwert ≤ Bot-Budget, Orders je Tag, Limit ≤ 2 % über dem letzten Kurs) |
+| Freigabefenster | Tageslauf abends nach Börsenschluss, Freigabe 18–24 Uhr, Senden sofort; das Gateway läuft nur während der Freigabe |
+| Bücher im Paper-Konto | Realbuch: Core 500 € in SPYI, Satellite-Anteil im Core, Strategien nur als Schatten. Skalierungsbücher mit je 10.000 € für Fundamental A, Fundamental B, Crossover und Momentum, die im Paper-Konto tatsächlich handeln. Zweck: Signalqualität ohne Kostenverzerrung und Prüfung, ab welchem Kapital ein Satellite sinnvoll wäre; Ergebnisse begründen nie echte Trades mit kleinerem Kapital. Vergleich je Buch: SPYI mit gleichem Kapital (rechnerisch). Je Buch eigenes Budget, eigene Höchststände, eigener Abgleich, eigenes Journal. Sammelfreigabe je Buch nur im Paper-Konto, bei echtem Geld einzeln je Order. Orders je Tag: Realbuch 5, Skalierungsbücher 25 |
+| Sicherheit | Senden nur bei Konto-ID „DU…“, Port 4002 und TRADING_MODE=paper; Not-Aus-Datei STOP; Schutz gegen Doppel-Orders; Plausibilitätsgrenzen je Buch (Orderwert ≤ Budget des Buchs, Orders je Tag, Limit ≤ 2 % über dem letzten Kurs) |
 
 ## Strategie-Bibliothek
 

@@ -6,8 +6,45 @@ core:
   ganze_stuecke: true                  # Rest unter einem Anteil bleibt Kasse und wird mit dem nächsten Betrag investiert
 
 bot_budget:
-  betrag_eur: 500.0                    # eigenes Budget im Paper-Konto; der Rest des Kontos wird ignoriert
-  abgleich: taeglich                   # Bot-Bestände gegen IBKR; bei Abweichung stoppt der Tageslauf mit Meldung
+  betrag_eur: 500.0                    # Budget des Realbuchs im Paper-Konto; der Rest des Kontos wird ignoriert
+  abgleich: taeglich                   # je Buch: Bestände gegen IBKR; bei Abweichung stoppt der Tageslauf mit Meldung
+
+# Bücher im Paper-Konto (Entscheidung Jakob 02.11.2026). Jedes Buch hat eigenes Budget, eigene Höchststände für die
+# Satellite-Limits, eigenen Abgleich und eigenes Journal; Orders tragen das Buch als Kennung (IBKR orderRef).
+# Zweck der Skalierungsbücher (vorab festgeschrieben): Signalqualität ohne Kostenverzerrung messen und prüfen, ab welchem
+# Kapital ein Satellite sinnvoll wäre. Ergebnisse der Skalierungsbücher begründen NIE echte Trades mit kleinerem Kapital.
+# Vergleich je Buch: SPYI mit gleichem Kapital, rechnerisch (Buy & Hold ab Buchstart).
+buecher:
+  real:
+    art: real
+    budget_eur: 500.0
+    rolle: core                        # Core 500 € in SPYI; Satellite-Anteil fließt in den Core; Strategien nur als Schatten
+    max_orders_pro_tag: 5
+    freigabe: einzeln                  # bei echtem Geld immer einzeln je Order
+  fundamental_a:
+    art: skalierung
+    budget_eur: 10000.0                # entspricht dem Fundamental-Backtest
+    rolle: core                        # 20 Einzelaktien, Originalscore (docs/FUNDAMENTAL.md)
+    max_orders_pro_tag: 25
+    freigabe: sammel                   # Sammelfreigabe je Buch, nur im Paper-Konto
+  fundamental_b:
+    art: skalierung
+    budget_eur: 10000.0
+    rolle: core                        # nur Qualitätshälfte
+    max_orders_pro_tag: 25
+    freigabe: sammel
+  crossover:
+    art: skalierung
+    budget_eur: 10000.0                # ab hier wirkt die Mindestgebühr nicht mehr (Orders ≥ 2.500 €)
+    rolle: satellite
+    max_orders_pro_tag: 25
+    freigabe: sammel
+  momentum:
+    art: skalierung
+    budget_eur: 10000.0
+    rolle: satellite
+    max_orders_pro_tag: 25
+    freigabe: sammel
 
 ibkr:
   host: 127.0.0.1                      # nur lokal
@@ -18,20 +55,23 @@ ibkr:
   bibliothek: ib_async                 # bei Problemen mit Python 3.15: ältere Python-Version im venv, nicht die Bibliothek wechseln
 
 orders:
-  kauf: {typ: limit, aufschlag_vortagesschluss: 0.02, senden_vor: "09:00"}   # geht in die Xetra-Eröffnungsauktion
+  kauf: {typ: limit, aufschlag_vortagesschluss: 0.02}   # gesendet sofort nach der Abendfreigabe, geht in die Xetra-Eröffnungsauktion
   verkauf: {typ: market}               # ohne Limit
-  gueltigkeit: tag                     # nicht ausgeführte Orders verfallen und werden im Journal vermerkt
+  gueltigkeit: naechster_handelstag    # gültig für den nächsten Handelstag; nicht ausgeführte verfallen und stehen im Journal
 
 freigabe:
-  fenster: {von: "18:00", bis: "24:00"}   # abends; Ausführung am nächsten Morgen
+  # Tageslauf abends nach Börsenschluss; Freigabe 18–24 Uhr; Orders werden sofort nach der Freigabe gesendet, gültig für
+  # den nächsten Handelstag. Das IB Gateway muss nur während der Freigabe laufen, morgens ist nichts nötig (02.11.2026).
+  tageslauf: abends_nach_boersenschluss
+  fenster: {von: "18:00", bis: "24:00"}
+  senden: sofort_nach_freigabe
   ohne_freigabe: verfaellt             # verpasste Freigabe = verpasster Trade
 
 sicherheit:
   not_aus_datei: STOP                  # existiert die Datei STOP im Projektordner, wird nichts gesendet
   doppel_orders: pruefen               # vor dem Senden offene Orders prüfen; jeder Vorschlag nur einmal
   plausibilitaet:
-    max_orderwert_eur: 500.0           # höchstens das Bot-Budget
-    max_orders_pro_tag: 5              # VORLÄUFIG (Claude), bitte bestätigen: Core braucht 1 Order, Schatten senden nichts
+    # Orderwert höchstens das Budget des Buchs; Orders je Tag je Buch (buecher.*.max_orders_pro_tag, 02.11.2026)
     max_limit_abstand: 0.02            # Kauflimit höchstens 2 % über dem letzten Kurs
 
 daten:
