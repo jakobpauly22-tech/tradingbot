@@ -69,8 +69,11 @@ def test_abnahme_verfehlt_bei_drift_und_bei_einem_ausreisserjahr():
     drift = abnahme_gegenprobe(_index(r + 0.0001), referenz)         # +0,01 % je Tag ≈ +2,5 Pp. p.a.
     assert not drift["kriterien"]["annualisiert_abweichung"]["bestanden"] and not drift["bestanden"]
     ausreisser = r.copy()
-    ausreisser[1000] += 0.03                                         # ein Tag mit +3 % zusätzlich (2015)
+    tag = 1600                                                       # ein Tag mit +3 % zusätzlich, im Abnahmezeitraum
+    ausreisser[tag] += 0.03
+    jahr = referenz.index[tag].year
+    assert 2016 < jahr < 2024
     einzel = abnahme_gegenprobe(_index(ausreisser), referenz)
     assert not einzel["kriterien"]["jahresabweichung_max"]["bestanden"]
-    assert einzel["jahre"]["abweichung"].abs().idxmax() == 2015
+    assert einzel["jahre"]["abweichung"].abs().idxmax() == jahr
     assert einzel["kriterien"]["korrelation"]["bestanden"]          # Korrelation allein hätte es nicht bemerkt
