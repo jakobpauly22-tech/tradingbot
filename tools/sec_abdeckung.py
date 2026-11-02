@@ -1,4 +1,4 @@
-"""Prüft, wie gut die Kennzahlen-Zuordnung (config/fundamental.yaml) echte SEC-Daten abdeckt.
+r"""Prüft, wie gut die Kennzahlen-Zuordnung (config/fundamental.yaml) echte SEC-Daten abdeckt.
 
 Aufruf:  .venv\\Scripts\\python tools\\sec_abdeckung.py 2019-12-31 320193 789019 19617
          (Stichtag, danach CIKs). Ausgabe: Tabelle Firma × Kennzahl und Abdeckung je Kennzahl.

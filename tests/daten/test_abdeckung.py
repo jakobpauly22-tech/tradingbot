@@ -39,3 +39,19 @@ def test_rueckfall_faelle_je_jahr_und_grund():
     t = rueckfall_faelle(status, {1: "uebernahme", 2: "pleite"})
     assert t.loc[2017, "uebernahme"] == 1 and t.loc[2020, "pleite"] == 1
     assert t.values.sum() == 2                                   # weiterlaufende und ungültige Reihen zählen nicht
+
+
+def test_zwei_gattungen_zaehlen_beim_gewicht_einmal():
+    # GOOGL und GOOG (gleiche CIK) plus Firma X; Streubesitz gilt je Firma
+    mitglieder = pd.DataFrame({"ticker": ["GOOGL", "GOOG", "X"]}, index=[1, 2, 3])
+    firma = {1: 1652044, 2: 1652044, 3: 99}
+    streubesitz = {1652044: 900.0, 99: 100.0}
+    def lauf(gueltig):
+        return nicht_kaufbar_je_stichtag(lambda tag: mitglieder, pd.Series(gueltig), lambda n, tag: streubesitz[firma[n]],
+                                         lambda n, tag: False, [pd.Timestamp("2016-01-04")], firma_fn=firma.get).iloc[0]
+    t = lauf({1: True, 2: False, 3: False})
+    assert t.firmen == 2 and t.mitglieder == 3
+    assert t.gattungen_ohne_gueltige_kurse == 2 and t.ohne_gueltige_kurse == 1          # Alphabet über GOOGL kaufbar
+    assert t.gewicht_investierbar_ohne_kurse == pytest.approx(0.10)                     # 100 / (900 + 100), nicht / 1900
+    t = lauf({1: False, 2: False, 3: True})
+    assert t.ohne_gueltige_kurse == 1 and t.gewicht_investierbar_ohne_kurse == pytest.approx(0.90)

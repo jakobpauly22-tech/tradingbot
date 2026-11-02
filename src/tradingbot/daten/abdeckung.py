@@ -1,8 +1,9 @@
 """Auswertung der Kursabdeckung im Universum (Rückmeldung Jakob 03.11.2026).
 
 Zwei Fälle werden getrennt:
-1. Nicht kaufbar: Ein Mitglied hat am Auswahltag (Rebalancing-Stichtag) keine gültige Kursreihe
-   (kursquellen.pruefe_kursreihe). Es kann nicht ins Portfolio. Ausgewiesen je Stichtag: Anzahl und Indexgewicht.
+1. Nicht kaufbar: Eine Firma hat am Auswahltag (Rebalancing-Stichtag) keine gültige Kursreihe
+   (kursquellen.pruefe_kursreihe) für keine ihrer Aktiengattungen. Sie kann nicht ins Portfolio. Ausgewiesen je
+   Stichtag: Anzahl (Firmen und Gattungen) und Indexgewicht; Gattungen einer Firma zählen beim Gewicht einmal.
 2. Rückfall-Regel: Eine gehaltene Aktie verliert später ihre Kurse (gültige Reihe endet mit dem Indexabgang,
    z.B. Übernahme oder Insolvenz). Dann greift delisting.delisting_rendite. Ausgewiesen je Jahr mit Grund.
 
@@ -27,23 +28,29 @@ def rebalancing_stichtage(von="2012-01-01", bis="2024-12-31", haeufigkeit="QS") 
     return pd.DatetimeIndex([pd.bdate_range(a, a + pd.Timedelta(days=7))[0] for a in anfaenge])
 
 
-def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, finanzwert_fn, stichtage) -> pd.DataFrame:
+def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, finanzwert_fn, stichtage, firma_fn=None) -> pd.DataFrame:
     """Je Stichtag Anzahl und Gewicht der Mitglieder ohne gültige Kursreihe.
 
-    mitglieder_fn(stichtag) → DataFrame der Mitgliedschaften (Index = Mitgliedschafts-Nr.)
+    mitglieder_fn(stichtag) → DataFrame der Mitgliedschaften (Index = Mitgliedschafts-Nr., eine je Aktiengattung)
     gueltig: bool je Mitgliedschafts-Nr. (fehlend = nicht gültig)
-    gewicht_fn(nr, stichtag) → Streubesitz in USD oder None; finanzwert_fn(nr, stichtag) → True/False/None
+    gewicht_fn(nr, stichtag) → Streubesitz der Firma in USD oder None; finanzwert_fn(nr, stichtag) → True/False/None
+    firma_fn(nr) → Firmenschlüssel (CIK). Gattungen derselben Firma (GOOG/GOOGL, FOX/FOXA …) zählen beim Gewicht
+    einmal; die Firma gilt als kaufbar, wenn mindestens eine Gattung eine gültige Reihe hat (Jakob, 03.11.2026).
     """
+    firma_fn = firma_fn or (lambda nr: nr)
     zeilen = []
     for tag in stichtage:
-        m = mitglieder_fn(tag)
-        nrn = list(m.index)
-        ok = pd.Series([bool(gueltig.get(n, False)) for n in nrn], index=nrn)
-        gewicht = pd.Series([gewicht_fn(n, tag) for n in nrn], index=nrn, dtype=float)
-        finanz = pd.Series([finanzwert_fn(n, tag) for n in nrn], index=nrn, dtype=object)
+        nrn = list(mitglieder_fn(tag).index)
+        gattungen = pd.DataFrame({"firma": [firma_fn(n) for n in nrn], "ok": [bool(gueltig.get(n, False)) for n in nrn]}, index=nrn)
+        firmen = gattungen.groupby("firma", sort=False).agg(ok=("ok", "any"), nr=("ok", lambda x: x.index[0]))
+        gewicht = pd.Series([gewicht_fn(n, tag) for n in firmen["nr"]], index=firmen.index, dtype=float)
+        finanz = pd.Series([finanzwert_fn(n, tag) for n in firmen["nr"]], index=firmen.index, dtype=object)
+        ok = firmen["ok"]
         investierbar = finanz.map(lambda f: f is False)
-        zeile = {"stichtag": tag.date(), "mitglieder": len(nrn), "ohne_gueltige_kurse": int((~ok).sum()),
-                 "gewicht_ohne_kurse": _anteil(gewicht, ~ok), "ohne_streubesitzwert": int(gewicht.isna().sum()),
+        zeile = {"stichtag": tag.date(), "mitglieder": len(nrn), "firmen": len(firmen),
+                 "gattungen_ohne_gueltige_kurse": int((~gattungen["ok"]).sum()),
+                 "ohne_gueltige_kurse": int((~ok).sum()), "gewicht_ohne_kurse": _anteil(gewicht, ~ok),
+                 "ohne_streubesitzwert": int(gewicht.isna().sum()),
                  "investierbar": int(investierbar.sum()), "investierbar_ohne_kurse": int((investierbar & ~ok).sum()),
                  "gewicht_investierbar_ohne_kurse": _anteil(gewicht[investierbar], ~ok[investierbar])}
         zeile["ueber_schwelle"] = zeile["gewicht_investierbar_ohne_kurse"] > SCHWELLE_GEWICHT
