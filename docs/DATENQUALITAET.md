@@ -27,6 +27,7 @@ Alle Regeln hat Jakob festgelegt. Sie gelten vor dem ersten Backtest der Fundame
 - **Plausibilität des Streubesitzes (03.11.2026):** Die SEC-Rohdaten enthalten grob falsche Werte (z.B. eBay 3·10¹⁹ USD, Werte in Tausend statt USD, Nullen bei Tochtergesellschaften); 262 von 11.297 Meldungen (2,3 %). Werte außerhalb 0,5 Mrd. bis 10 Bio. USD gelten als fehlend; es zählt der jüngste plausible, zum Stichtag bekannte Wert. Nichts wird umgerechnet. Code: `abdeckung.streubesitz_am`.
 - **Schwelle:** Liegt das Gewicht der nicht kaufbaren Firmen im investierbaren Universum (ohne Finanzwerte) an einem Stichtag **über 2 %**, wird das vor dem ersten Backtest mit Jakob besprochen.
 - Auswertung: `tools/auswertung_abdeckung.py` → `daten/universum/auswertung_abdeckung.md`.
+- **Ergebnis und Entscheidung (03.11.2026):** Von 2012-Q1 bis 2016-Q1 lag das Gewicht an 17 von 52 Stichtagen über 2 % (3,7–6,7 %), danach immer darunter. Deshalb wird der Backtest erst ab **01.04.2016** gewertet (bis 31.12.2024); 2012 bis März 2016 läuft nur als nicht gewerteter Vorlauf für Indikatoren. WRDS/CRSP als Ersatzquelle entfällt (Lizenz nur für akademische, nicht-kommerzielle Forschung).
 
 ## Fehlerschwelle der Datenwerkzeuge
 
@@ -34,7 +35,7 @@ Liegt der Anteil an Lade- oder Prüffehlern **über 5 %**, bricht das Werkzeug a
 
 ## Gegenprobe des Index-Nachbaus
 
-Der Nachbau des S&P 500 aus dem point-in-time-Universum (Börsenwert-gewichtet, Total Return, ohne Ausschluss von Finanzwerten) wird gegen den offiziellen S&P 500 Total Return (`^SP500TR`) geprüft, beide in USD, an gemeinsamen Handelstagen, Zeitraum 2012 bis 2024. Erst wenn die Gegenprobe besteht, dient derselbe Nachbau ohne Finanzwerte als Benchmark „S&P 500 ohne Finanzwerte“.
+Der Nachbau des S&P 500 aus dem point-in-time-Universum (Börsenwert-gewichtet, Total Return, ohne Ausschluss von Finanzwerten) wird gegen den offiziellen S&P 500 Total Return (`^SP500TR`) geprüft, beide in USD, an gemeinsamen Handelstagen, Zeitraum 01.04.2016 bis 31.12.2024 (gewerteter Backtest, Entscheidung 03.11.2026). Erst wenn die Gegenprobe besteht, dient derselbe Nachbau ohne Finanzwerte als Benchmark „S&P 500 ohne Finanzwerte“.
 
 **Abnahmekriterien (festgelegt 03.11.2026):**
 
@@ -42,6 +43,6 @@ Der Nachbau des S&P 500 aus dem point-in-time-Universum (Börsenwert-gewichtet, 
 | --- | --- |
 | Korrelation der Tagesrenditen Nachbau vs. S&P 500 Total Return | ≥ 0,99 |
 | Abweichung der Jahresrenditen, je Kalenderjahr | ≤ 1 Prozentpunkt |
-| Abweichung der annualisierten Rendite 2012–2024 | ≤ 0,5 Prozentpunkte |
+| Abweichung der annualisierten Rendite 01.04.2016–31.12.2024 | ≤ 0,5 Prozentpunkte |
 
 Code: `index_nachbau.abnahme_gegenprobe` mit den Konstanten `ABNAHME_*`. Bekannte, erwartbare Abweichungsquelle: S&P gewichtet nach Streubesitz, der Nachbau nach allen ausstehenden Aktien.

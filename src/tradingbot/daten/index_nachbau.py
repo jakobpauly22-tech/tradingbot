@@ -52,8 +52,9 @@ def marktwert_index(renditen: pd.DataFrame, marktwerte: pd.DataFrame, mitglied: 
 # Wird ein Kriterium verfehlt: erst Ursachen suchen und mit Jakob besprechen, NICHT nachjustieren.
 ABNAHME_KORRELATION_MIN = 0.99          # Korrelation der Tagesrenditen
 ABNAHME_JAHRESABWEICHUNG_MAX = 0.01     # Abweichung der Jahresrenditen je Kalenderjahr (1 Prozentpunkt)
-ABNAHME_ANNUALISIERT_MAX = 0.005        # Abweichung der annualisierten Rendite 2012–2024 (0,5 Prozentpunkte)
-ABNAHME_ZEITRAUM = ("2012-01-01", "2024-12-31")
+ABNAHME_ANNUALISIERT_MAX = 0.005        # Abweichung der annualisierten Rendite im Abnahmezeitraum (0,5 Prozentpunkte)
+# Zeitraum = gewerteter Backtest (Entscheidung Jakob 03.11.2026); die Kriterien selbst sind unverändert.
+ABNAHME_ZEITRAUM = ("2016-04-01", "2024-12-31")
 
 
 def abnahme_gegenprobe(nachbau: pd.Series, referenz: pd.Series, zeitraum=ABNAHME_ZEITRAUM) -> dict:

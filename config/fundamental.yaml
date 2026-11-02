@@ -44,6 +44,14 @@ filter:
     uebrige: z_zwei_strich             # Z'' für Nicht-Industrieunternehmen
   beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
 
+backtest:
+  # Entscheidung 03.11.2026: gewerteter Backtest ab 01.04.2016 bis 31.12.2024 (ab April 2016 liegt das Gewicht der
+  # nicht kaufbaren Firmen an jedem Stichtag unter 2 %). 2012 bis März 2016 läuft als nicht gewerteter Vorlauf für
+  # Indikatoren mit. WRDS/CRSP entfällt: nur für akademische, nicht-kommerzielle Forschung lizenziert.
+  vorlauf_ab: 2012-01-01
+  gewertet_ab: 2016-04-01
+  gewertet_bis: 2024-12-31              # Tresor ab 2025 bleibt zu
+
 score:
   erster_lauf: [qualitaet, multiples]  # Piotroski und Accruals; E/P und EBIT/EV gegen den Branchenmedian
   dcf_erst_nach_erstem_lauf: true

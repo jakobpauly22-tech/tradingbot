@@ -52,12 +52,12 @@ def test_abnahme_bestanden_bei_nahezu_gleichem_verlauf():
     from tradingbot.daten.index_nachbau import abnahme_gegenprobe
 
     rng = np.random.default_rng(3)
-    r = rng.normal(0.0005, 0.01, 3270)                              # ca. 2012–2024
+    r = rng.normal(0.0005, 0.01, 3270)                              # ca. 2012–2024, gewertet ab 01.04.2016
     referenz = _index(r)
     nachbau = _index(r + rng.normal(0, 0.0002, len(r)))              # 0,02 % Rauschen je Tag (≈ 0,3 Pp. p.a.), keine Drift
     a = abnahme_gegenprobe(nachbau, referenz)
     assert a["kriterien"]["korrelation"]["wert"] > 0.99 and a["bestanden"]
-    assert list(a["jahre"].index) == list(range(2012, 2025))
+    assert list(a["jahre"].index) == list(range(2016, 2025)) and a["zeitraum"][0] >= pd.Timestamp("2016-04-01").date()
 
 
 def test_abnahme_verfehlt_bei_drift_und_bei_einem_ausreisserjahr():
