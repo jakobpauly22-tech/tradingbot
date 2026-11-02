@@ -433,7 +433,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Paper Trading | Ausführung | 2 | Hoch | Idee |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
-| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | In Arbeit (Sitzung 5) |
+| Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; erster gewerteter Lauf: alle 5 Varianten verfehlt (docs/berichte/2026-11-02_technik_satellite.md) |
 | Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | Idee |
 | Schattenportfolio Einzelaktien | Fundamental | 2 | Mittel | Idee |
 | Briefing-Auswertung | News | 3 | Mittel | Idee |

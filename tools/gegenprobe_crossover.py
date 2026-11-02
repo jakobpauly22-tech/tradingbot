@@ -26,7 +26,7 @@ def main(ticker: str = "SXR8.DE") -> int:
     k = lade_konfiguration("technik")
     bt = lade_konfiguration("backtest")
     kurse = lade_kurse_eur(ticker, str(k["backtest"]["daten_ab"]), str(k["backtest"]["gewertet_bis"]))
-    start = pd.Timestamp(str(k["backtest"].get("gewertet_ab") or "2013-01-02"))
+    start = pd.Timestamp("2013-01-03")   # gewerteter Beginn laut tools/backtest_technik.py (alle ETFs 12 Monate Historie)
     kosten = Kostenmodell(gebuehren={"EUR": {"satz": 0.0, "minimum": 1.25, "maximum": 1.25}}, spread={}, slippage=0.0)
     s = SatelliteStrategie(["crossover"], {ticker: kurse}, k)
     d = TeilportfolioDefinition("gegenprobe", float(k["backtest"]["kapital"]), s, [Instrument(ticker, "etf")], rolle="satellite")
