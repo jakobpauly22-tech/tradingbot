@@ -35,22 +35,61 @@ VARIANTEN = {"crossover": (["crossover"], False), "momentum": (["momentum"], Fal
              "rsi2": (["rsi2"], False), "regime": (list(REGELN), True)}
 
 
-def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict]:
-    """Kurse in EUR je ETF (optional über eine freigegebene Ersatzquelle desselben Produkts), Währungen, Befunde."""
+def korrigiere(kurse: pd.DataFrame, korrekturen: list[dict]) -> tuple[pd.DataFrame, list[str]]:
+    """Dokumentierte Korrekturen (config/technik.yaml `universum.korrekturen`): Regel „vortagesschluss“ setzt alle
+    Preise des Tages auf den Schlusskurs des Vortags."""
+    k, protokoll = kurse.copy(), []
+    for c in korrekturen:
+        tag = pd.Timestamp(str(c["datum"]))
+        if c["regel"] != "vortagesschluss" or tag not in k.index:
+            raise SystemExit(f"Korrektur nicht anwendbar: {c}")
+        vortag = float(k.loc[k.index < tag, "close"].iloc[-1])
+        alt = k.loc[tag, ["open", "high", "low", "close"]].round(3).tolist()
+        k.loc[tag, ["open", "high", "low", "close"]] = vortag
+        protokoll.append(f"{c['ticker']} {tag.date()}: O/H/T/S {alt} → {vortag:.3f} (Vortagesschluss; {c['grund']})")
+    return k, protokoll
+
+
+def plausibilitaet_ersatzquelle(original: str, ersatz_eur: pd.DataFrame, von, bis) -> dict:
+    """Median der Abweichung |Ersatz / Original − 1| an Tagen mit Umsatz im Original, beide Reihen in EUR."""
+    orig = lade_kurse_eur(original, von, bis)
+    tage = orig.index[orig["volume"] > 0]
+    j = pd.concat([orig["close"], ersatz_eur["close"]], axis=1, keys=["orig", "ersatz"]).loc[tage].dropna()
+    abw = (j["ersatz"] / j["orig"] - 1).abs()
+    return {"tage": len(j), "median": float(abw.median()), "p95": float(abw.quantile(0.95)),
+            "je_jahr": {int(y): float(v) for y, v in abw.groupby(abw.index.year).median().items()},
+            "originalwaehrung": orig.attrs.get("originalwaehrung")}
+
+
+def lade_universum_kurse(k: dict) -> tuple[dict, dict, dict, dict]:
+    """Kurse in EUR je ETF (optional über eine freigegebene Ersatzquelle desselben Produkts), Währungen, Befunde und
+    Prüfprotokoll (Korrekturen, Plausibilität der Ersatzquellen)."""
     von, bis = str(k["backtest"]["daten_ab"]), str(k["backtest"]["gewertet_bis"])
-    kurse, waehrungen, befunde = {}, {}, {}
+    korrekturen = k["universum"].get("korrekturen") or []
+    kurse, waehrungen, befunde, protokoll = {}, {}, {}, {"korrekturen": [], "ersatzquellen": {}}
     for e in k["universum"]["etfs"]:
-        quelle = e.get("kursquelle") or e["ticker"]
-        if quelle != e["ticker"]:
+        t = e["ticker"]
+        quelle = e.get("kursquelle") or t
+        if quelle != t:
             roh = lade_kurse_eur(quelle, von, bis)            # Ersatzquelle desselben Produkts, in EUR umgerechnet
+            p = plausibilitaet_ersatzquelle(t, roh, von, bis)
+            protokoll["ersatzquellen"][t] = {"quelle": quelle, **p}
+            if p["median"] > 0.005:
+                befunde.setdefault(t, []).append(f"[ersatzquelle] Median-Abweichung {p['median']:.2%} > 0,5 % gegenüber {t}")
+        elif e.get("handelswaehrung", "EUR") != "EUR":
+            roh = lade_kurse_eur(t, von, bis)
         else:
-            roh = lade_kurse(e["ticker"], von, bis)
-        kurse[e["ticker"]] = roh
-        waehrungen[e["ticker"]] = "EUR"
-        b = pruefe_etf_kurse(roh) if quelle == e["ticker"] else [x for x in pruefe_etf_kurse(roh) if "währung" not in x]
+            roh = lade_kurse(t, von, bis)
+        eigene = [c for c in korrekturen if c["ticker"] == t]
+        if eigene:
+            roh, log = korrigiere(roh, eigene)
+            protokoll["korrekturen"] += log
+        kurse[t] = roh
+        waehrungen[t] = "EUR"
+        b = [x for x in pruefe_etf_kurse(roh) if not (quelle != t or e.get("handelswaehrung", "EUR") != "EUR") or "währung" not in x]
         if b:
-            befunde[e["ticker"]] = b
-    return kurse, waehrungen, befunde
+            befunde.setdefault(t, []).extend(b)
+    return kurse, waehrungen, befunde, protokoll
 
 
 def main() -> int:
@@ -59,7 +98,7 @@ def main() -> int:
     a = arg.parse_args()
     k = lade_konfiguration("technik")
     bt = lade_konfiguration("backtest")
-    kurse, waehrungen, befunde = lade_universum_kurse(k)
+    kurse, waehrungen, befunde, pruefprotokoll = lade_universum_kurse(k)
     freigaben = {f["ticker"]: f for f in k["universum"].get("datenfreigaben") or []}
     offen = {t: b for t, b in befunde.items() if t not in freigaben}
     start = gewerteter_beginn(kurse, k["backtest"]["daten_ab"], 12)
@@ -73,6 +112,12 @@ def main() -> int:
             print("   ", x)
         if len(b) > 8:
             print(f"    … {len(b) - 8} weitere")
+    for t, p in pruefprotokoll["ersatzquellen"].items():
+        print(f"Ersatzquelle {p['quelle']} für {t}: {p['tage']} Tage mit Umsatz, Median-Abweichung {p['median']:.3%}, 95-%-Quantil {p['p95']:.3%}")
+    for z in pruefprotokoll["korrekturen"]:
+        print("Korrektur:", z)
+    ersatz_fehler = {t: b for t, b in befunde.items() if any("ersatzquelle" in x for x in b)}
+    offen = {**offen, **ersatz_fehler}
     if offen:
         print(f"\nSPERRE: {len(offen)} Kursreihe(n) auffällig ohne dokumentierte Entscheidung – mit Jakob besprechen.")
         return 2
@@ -148,7 +193,19 @@ def main() -> int:
     text = [f"# Satellite-Strategien der Technik-Engine – gewertete Backtests", "",
             f"Stand {datetime.now():%d.%m.%Y %H:%M}. Zeitraum {start.date()} bis {ende.date()}, Kapital {sp['kapital']:,.0f} € (Schatten), "
             f"{len(instrumente)} ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: {varianten['variante'].nunique()}.", "",
-            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise, gleiche Kosten (Umsetzung: {umsetzung}).", "",
+            f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise (Umsetzung: {umsetzung}; Entscheidung Jakob 03.11.2026: "
+            "kostenfrei als strengere Messlatte, weil 114 € je Position unter der 125-€-Grenze lägen).", "",
+            "## Daten", ""]
+    for t, pp in pruefprotokoll["ersatzquellen"].items():
+        text.append(f"- **{t} über Ersatzquelle {pp['quelle']}** (gleicher Fonds, gleiche Anteilsklasse, in EUR umgerechnet): an {pp['tage']} Tagen "
+                    f"mit Xetra-Umsatz Median-Abweichung {pz(pp['median'])} (Grenze 0,5 %, bestanden), 95-%-Quantil {pz(pp['p95'])}. "
+                    "SXRM wird auf Xetra in USD gehandelt; der Backtest rechnet den ETF wie einen EUR-Wert ohne Währungstausch "
+                    "(Vereinfachung, die Tauschkosten wären mit Netto-Tausch gering).")
+    for z in pruefprotokoll["korrekturen"]:
+        text.append(f"- Korrektur: {z}")
+    text += ["- Xetra-Gold (4GLD) statt Invesco Physical Gold (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss "
+             "über dem Tageshoch (0,14 % und 0,45 %) unverändert übernommen – offen, bitte bestätigen. Steuer konservativ mit "
+             "Abgeltungsteuer, ohne Steuerfreiheit nach einem Jahr (§ 23 EStG als offener Punkt im Steuermodul).", "",
             "## Ergebnis je Variante (Kriterien in beiden Hälften)", "", "| Variante | bestanden |", "| --- | --- |"]
     text += [f"| {n} | {'**ja**' if b else 'nein'} |" for n, b in bewertung.items()]
     text += ["", "## Kennzahlen nach Kosten, vor Steuern", "",

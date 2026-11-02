@@ -26,14 +26,24 @@ universum:
     - {klasse: Anleihen Euro-Staaten,   ticker: EUNH.DE, isin: IE00B4WXJJ64, name: iShares Core Euro Government Bond (Dist),    steuerart: sonstiger_fonds, volumen_mio_eur: 5383,  hinweis: "vor Xtrackers Eurozone Govt 1C (2.476), iShares € Govt 1-3yr (1.742)"}
     - {klasse: Anleihen Euro-Unternehmen, ticker: EUN5.DE, isin: IE00B3F81R35, name: iShares Core EUR Corporate Bond (Dist),   steuerart: sonstiger_fonds, volumen_mio_eur: 9519,  hinweis: ""}
     - {klasse: Anleihen Euro inflationsindexiert, ticker: IBCI.DE, isin: IE00B0M62X26, name: iShares Euro Inflation Linked Govt Bond (Acc), steuerart: sonstiger_fonds, volumen_mio_eur: 1817, hinweis: "vor Amundi (1.424)"}
-    - {klasse: Anleihen US-Staaten,     ticker: SXRM.DE, isin: IE00B3VWN518, name: iShares USD Treasury Bond 7-10yr (Acc),      steuerart: sonstiger_fonds, volumen_mio_eur: 4625,  hinweis: "vor Dist-Klasse (3.482) und 1-3yr (2.359); 2012 kaum Xetra-Umsatz"}
+    - {klasse: Anleihen US-Staaten,     ticker: SXRM.DE, isin: IE00B3VWN518, name: iShares USD Treasury Bond 7-10yr (Acc),      steuerart: sonstiger_fonds, volumen_mio_eur: 4625,  hinweis: "vor Dist-Klasse (3.482) und 1-3yr (2.359); Xetra-Handel in USD, 2012 kaum Umsatz", kursquelle: CSBGU0.SW, handelswaehrung: USD}
     - {klasse: Anleihen Schwellenländer, ticker: IUSP.DE, isin: IE00B5M4WH52, name: iShares J.P. Morgan EM Local Government Bond (Dist), steuerart: sonstiger_fonds, volumen_mio_eur: 4612, hinweis: "vor USD-EM-Bond IUS7 (3.672); Xetra ab 08/2011"}
-    - {klasse: Gold,                    ticker: 8PSG.DE, isin: IE00B579F325, name: Invesco Physical Gold ETC,                   steuerart: etc,             volumen_mio_eur: 25438, hinweis: "ETC, kein UCITS-ETF; iShares Physical Gold erst ab 2021 auf Xetra"}
+    - {klasse: Gold,                    ticker: 4GLD.DE, isin: DE000A0S9GB0, name: Xetra-Gold,                                  steuerart: etc,             volumen_mio_eur: 20485, hinweis: "Nächster der Rangfolge (Jakob 03.11.2026): Invesco Physical Gold (8PSG, 25.438) mit fehlerhaften Yahoo-Kursen; iShares Physical Gold erst ab 2021 auf Xetra"}
 
   # Auffällige Kursreihen brauchen eine Entscheidung von Jakob (docs/DATENQUALITAET.md); tools/backtest_technik.py
   # sperrt den Lauf, solange eine Reihe auffällig und hier nicht eingetragen ist. Eintrag je Ticker:
   # {ticker: …, entscheidung: …, datum: …}; optional `kursquelle` am ETF (gleiches Produkt, andere Börse).
-  datenfreigaben: []                   # offen seit 03.11.2026: EUNH, EUN5 (Juni 2012), SXRM (USD, eingefroren), 8PSG (Sprünge, eingefroren)
+  datenfreigaben:                      # Entscheidungen Jakob 03.11.2026
+    - {ticker: SXRM.DE, entscheidung: "Ersatzquelle CSBGU0.SW (gleicher Fonds und gleiche Anteilsklasse an der SIX, USD), in EUR umgerechnet; Plausibilität: an Tagen mit Xetra-Umsatz Median-Abweichung höchstens 0,5 % (Ergebnis im Bericht)", datum: 2026-11-03}
+    - {ticker: 4GLD.DE, entscheidung: "Ersatz für 8PSG (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % bzw. 0,45 %) unverändert übernommen, im Bericht als offen markiert (Claude)", datum: 2026-11-03}
+    - {ticker: EUNH.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-03}
+    - {ticker: EUN5.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-03}
+  # Dokumentierte Korrekturen (Jakob 03.11.2026): alle Preise des Tages = Schlusskurs des Vortags. Wirkung über
+  # SMA200 bis Anfang 2013 (Beginn des gewerteten Zeitraums).
+  korrekturen:
+    - {ticker: EUNH.DE, datum: 2012-06-11, regel: vortagesschluss, grund: "Hoch unter Tief, Schluss außerhalb der Spanne"}
+    - {ticker: EUN5.DE, datum: 2012-06-12, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
+    - {ticker: EUN5.DE, datum: 2012-06-13, regel: vortagesschluss, grund: "Schluss außerhalb der Spanne"}
 
 backtest:
   daten_ab: 2012-01-01                 # Projektentscheidung 01.11.2026 (Historie ab 2012)
@@ -57,7 +67,7 @@ satellite:
     crossover: 63                      # nur verkaufen, wenn das Einstiegssignal nicht mehr gilt (kein Zwangsverkauf mit Rückkauf)
     momentum: 63                       # wie crossover
   # Stop und Zeit-Stop werden auf den Tagesschluss geprüft, ausgeführt zur Eröffnung des nächsten Handelstags
-  # (wie alle Signale; Freigabe morgens). Vereinfachung, zur Prüfung durch Jakob.
+  # (wie alle Signale; Freigabe morgens). Freigegeben 03.11.2026.
   stop_pruefung: schlusskurs_ausfuehrung_folgetag
 
 strategien:
@@ -70,7 +80,8 @@ strategien:
   # Mehr Signale als Plätze: Vergabe nach Stärke. Momentum: 12−1-Wert (Entscheidung Jakob). Übrige (Claude, zur
   # Prüfung): Crossover SMA50/SMA200 − 1; Price Channel (Schluss − 55-Tage-Hoch) / ATR; RSI(2): niedrigster RSI zuerst.
   # Regime: gilt für Einstiege; Ausstiege folgen immer der Regel der Strategie, die den Einstieg erzeugt hat.
-  # Nach einem Stop: Crossover erst nach neuem Kreuzen von unten, Momentum erst nach der nächsten Monatsprüfung.
+  # Nach einem Stop (Jakob 03.11.2026): Crossover wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt
+  # (kein neues Kreuzen nötig); Momentum zur nächsten Monatsprüfung. Umsetzungsdetails freigegeben 03.11.2026.
 
 erfolgskriterien:                      # je Strategie und Regime, nach Kosten, Kapital 1.250 €
   sharpe_mindestens: buy_and_hold      # alle ETFs der Liste gleich gewichtet, quartalsweise, gleiche Kosten
@@ -78,5 +89,5 @@ erfolgskriterien:                      # je Strategie und Regime, nach Kosten, K
   in_beiden_haelften: true             # wegen fünf getesteter Varianten
   # OFFEN (03.11.2026): Mit 1.250 € und 11 ETFs ist jede Buy-&-Hold-Position 114 € < 125 €; die 1-%-Gebührenregel
   # verwirft dann jeden Kauf. Mögliche Werte: kostenfrei | ohne_gebuehrenregel. Entscheidung Jakob vor dem Lauf.
-  buy_and_hold_umsetzung: offen
+  buy_and_hold_umsetzung: kostenfrei   # Entscheidung Jakob 03.11.2026: strengere Messlatte
   varianten: [crossover, momentum, price_channel, rsi2, regime]

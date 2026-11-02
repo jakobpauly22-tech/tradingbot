@@ -83,15 +83,19 @@ def test_regime_sperrt_rsi_bei_starkem_trend():
     assert not s._regime_erlaubt(rsi_regel, "A", tag) and s._regime_erlaubt(cross, "A", tag)
 
 
-def test_crossover_nach_stop_gesperrt_bis_neues_kreuzen():
+def test_crossover_wiedereinstieg_nach_stop_ueber_sma50():
     from tradingbot.engines.technik.strategien import Crossover
-    k = _kerzen(np.linspace(100, 150, 260))
+    # Aufwärtstrend (SMA50 > SMA200), dann Rücksetzer unter SMA50, danach wieder darüber
+    schluss = list(np.linspace(100, 150, 250)) + [140.0, 138.0, 139.0, 160.0]
+    k = _kerzen(schluss)
     ind = {"A": berechne_indikatoren(k, KONFIG)}
     c = Crossover(ind)
-    tag = k.index[-1]
-    assert c.einstieg("A", tag) is not None
-    c.nach_stop("A", tag)
-    assert c.einstieg("A", tag) is None
+    stop_tag = k.index[251]
+    c.nach_stop("A", stop_tag)
+    assert c.einstieg("A", stop_tag) is None                       # nicht am Stop-Tag selbst
+    assert c.einstieg("A", k.index[252]) is None                   # Schluss 139 unter SMA50
+    assert ind["A"].loc[k.index[253], "close"] > ind["A"].loc[k.index[253], "sma_schnell"]
+    assert c.einstieg("A", k.index[253]) is not None               # Schluss über SMA50, SMA50 > SMA200: wieder frei
 
 
 def test_score_schnittstelle():

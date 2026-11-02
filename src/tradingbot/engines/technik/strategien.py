@@ -62,23 +62,28 @@ class Regel:
 
 class Crossover(Regel):
     """Two MA Crossover: investiert, solange SMA50 > SMA200; Ausstieg beim Kreuzen nach unten.
-    Nach einem Stop erst wieder nach neuem Kreuzen von unten. Stärke = SMA50/SMA200 − 1."""
+    Nach einem Stop wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt (Jakob 03.11.2026; der Schluss
+    am Stop-Tag zählt nicht). Stärke = SMA50/SMA200 − 1 (prozentualer Abstand)."""
 
     name, familie = "crossover", TREND
 
     def __init__(self, ind, zeit_stop=63):
         super().__init__(ind)
         self.zeit_stop, self.zeit_stop_art = zeit_stop, "bedingt"
-        self.gesperrt: set[str] = set()
+        self.gesperrt: dict[str, pd.Timestamp] = {}
 
     def _ueber(self, t, tag):
         z = self.ind[t].loc[tag]
         return pd.notna(z["sma_schnell"]) and pd.notna(z["sma_langsam"]) and z["sma_schnell"] > z["sma_langsam"]
 
     def einstieg(self, t, tag):
-        if t in self.gesperrt or not self._ueber(t, tag):
+        if not self._ueber(t, tag):
             return None
         z = self.ind[t].loc[tag]
+        if t in self.gesperrt:
+            if tag <= self.gesperrt[t] or not z["close"] > z["sma_schnell"]:
+                return None
+            del self.gesperrt[t]
         return z["sma_schnell"] / z["sma_langsam"] - 1
 
     def ausstieg(self, t, tag):
@@ -86,11 +91,7 @@ class Crossover(Regel):
         return "SMA50 unter SMA200" if pd.notna(z["sma_langsam"]) and not self._ueber(t, tag) else None
 
     def nach_stop(self, t, tag):
-        self.gesperrt.add(t)
-
-    def tag_ende(self, t, tag):
-        if t in self.gesperrt and pd.notna(self.ind[t].loc[tag, "sma_langsam"]) and not self._ueber(t, tag):
-            self.gesperrt.discard(t)
+        self.gesperrt[t] = tag
 
 
 class Momentum(Regel):

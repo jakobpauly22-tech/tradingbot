@@ -12,7 +12,7 @@
 // Ausführung: Signal auf den Schlusskurs, Order zur Eröffnung des nächsten Tages (process_orders_on_close = false).
 // Positionsgröße: 1 % Risiko bei Stop 2 × ATR(20), höchstens 25 % des Depotwerts, ganze Stücke.
 // Stop: Einstiegskurs − 2 × ATR(20) vom Signaltag, geprüft auf den Tagesschluss, Ausstieg zur nächsten Eröffnung.
-//   Nach einem Stop erst wieder nach neuem Kreuzen von unten.
+//   Nach einem Stop wieder, sobald der Kurs über SMA50 schließt und SMA50 > SMA200 gilt (nicht am Stop-Tag selbst).
 // 1-%-Regel: Käufe nur, wenn die Gebühr höchstens 1 % des Orderwerts ist (Orderwert ab 125 EUR).
 
 strategy("Gegenprobe Crossover 50/200 (Bot)", overlay = true, initial_capital = 1250, currency = currency.EUR,
@@ -37,9 +37,10 @@ imZeitraum = time >= startDatum and time <= endDatum
 var float stopKurs = na
 var float atrSignal = na
 var bool gesperrt = false
+var int stopBar = na
 
 ueber = smaS > smaL
-if not na(smaL) and not ueber
+if gesperrt and bar_index > stopBar and close > smaS and ueber
     gesperrt := false
 
 // Ausstieg (Stop vor Signal), geprüft auf den Schluss
@@ -49,6 +50,7 @@ if strategy.position_size > 0
     if close <= stopKurs
         strategy.close("Long", comment = "Stop")
         gesperrt := true
+        stopBar := bar_index
         stopKurs := na
     else if not ueber
         strategy.close("Long", comment = "SMA50<SMA200")
