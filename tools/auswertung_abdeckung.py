@@ -1,6 +1,6 @@
 r"""Auswertung „Kursabdeckung je Stichtag“ (Rückmeldung Jakob 03.11.2026) auf Basis von daten/universum/kursstatus.csv.
 
-Aufruf:  .venv\\Scripts\\python tools\\auswertung_abdeckung.py [--stichtage N]
+Aufruf:  .venv\Scripts\python tools\auswertung_abdeckung.py [--stichtage N]
 Ergebnis: daten/universum/auswertung_abdeckung.md und .csv
 1. Nicht kaufbar: Mitglieder ohne gültige Kursreihe am Rebalancing-Stichtag (Anzahl, Indexgewicht nach Streubesitz).
 2. Rückfall-Regel: gültige Reihen, die mit dem Delisting enden, je Jahr und Grund.

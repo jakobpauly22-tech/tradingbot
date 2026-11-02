@@ -1,6 +1,6 @@
 r"""Lädt und prüft die Kurse aller Universums-Mitgliedschaften ab 2012 (yfinance und Tiingo).
 
-Aufruf:  .venv\\Scripts\\python tools\\kurse_universum.py
+Aufruf:  .venv\Scripts\python tools\kurse_universum.py
 Dauert wegen des Tiingo-Stundenlimits mehrere Stunden; kann jederzeit abgebrochen und neu gestartet werden,
 bereits geladene Kurse und Namen kommen aus dem Cache. Status je Mitgliedschaft: daten/universum/kursstatus.csv
 
