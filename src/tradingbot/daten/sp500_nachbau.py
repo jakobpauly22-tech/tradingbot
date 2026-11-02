@@ -139,3 +139,16 @@ def baue_nachbau(daten: Firmendaten, *, ohne_finanzwerte: bool = False, von=STAR
     marktwerte = marktwerte_aus_streubesitz(schluss_voll, daten.streubesitz_gueltig).reindex(tage)
     nachbau = marktwert_index(renditen.where(mitglied), marktwerte, mitglied)
     return {"nachbau": nachbau, "tage": tage, "mitglied": mitglied}
+
+
+BENCHMARK_SCHLUESSEL = "SP500_ohne_finanzwerte"
+
+
+def lade_benchmark_sp500_ohne_finanzwerte() -> pd.DataFrame:
+    """Benchmark „S&P 500 ohne Finanzwerte“ aus dem Cache (Spalten index_usd, index_eur, abdeckung); gebaut von
+    tools/nachbau_sp500_ohne_finanzwerte.py, erst nachdem die Gegenprobe bestanden ist (docs/DATENQUALITAET.md)."""
+    tabelle, meta = standard_cache().lesen("benchmarks", BENCHMARK_SCHLUESSEL)
+    if tabelle is None:
+        raise LookupError("Benchmark fehlt im Cache: .venv/Scripts/python tools/nachbau_sp500_ohne_finanzwerte.py ausführen")
+    tabelle.attrs.update(meta)
+    return tabelle

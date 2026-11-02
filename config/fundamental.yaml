@@ -34,8 +34,8 @@ schattenportfolio:
   max_branchenanteil: 0.25
   steuergruppe: schatten
   # MSCI ACWI IMI (Haupt), S&P 500 in Euro (Universum) und S&P 500 ohne Finanzwerte (macht den Sektoreffekt
-  # des Ausschlusses sichtbar; Quelle wird in Sitzung 2 festgelegt)
-  benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]
+  # des Ausschlusses sichtbar; Nachbau aus dem Universum, gebaut von tools/nachbau_sp500_ohne_finanzwerte.py nach bestandener Gegenprobe)
+  benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]   # letzterer: daten.sp500_nachbau.lade_benchmark_sp500_ohne_finanzwerte (EUR-Spalte)
 
 filter:
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
