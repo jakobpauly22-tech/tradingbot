@@ -53,6 +53,7 @@ ibkr:
   konto_praefix_paper: DU              # Senden nur, wenn die Konto-ID damit beginnt
   modus_variable: TRADING_MODE         # aus .env; nur „paper“ erlaubt
   bibliothek: ib_async                 # bei Problemen mit Python 3.15: ältere Python-Version im venv, nicht die Bibliothek wechseln
+  senden_freigeschaltet: false        # Phase 6b: nur lesen; Freischalten erst nach dem Verbindungstest und Jakobs Okay
 
 orders:
   kauf: {typ: limit, aufschlag_vortagesschluss: 0.02}   # gesendet sofort nach der Abendfreigabe, geht in die Xetra-Eröffnungsauktion

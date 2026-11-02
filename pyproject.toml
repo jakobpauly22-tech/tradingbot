@@ -19,6 +19,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=9.0"]
+# Broker (Phase 2). ib_async 2.1 pinnt tzdata<2026; installiert mit --no-deps plus aeventkit und nest-asyncio,
+# damit tzdata 2026 bleibt: pip install --no-deps ib_async==2.1.0 aeventkit==2.1.0 nest-asyncio==1.6.0
+broker = ["ib_async>=2.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

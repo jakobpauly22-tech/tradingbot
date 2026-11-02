@@ -448,7 +448,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
 | Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; Zweig a): kein Renditebaustein, Crossover und Momentum als Schatten im Paper Trading und als mögliche Risikosignale (docs/TECHNIK.md) |
-| Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | Idee |
+| Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | In Arbeit (6b: Adapter lesend, Riegel getestet; Verbindungstest mit Gateway offen) |
 | Schattenportfolio Einzelaktien | Fundamental | 2 | Mittel | Idee |
 | Briefing-Auswertung | News | 3 | Mittel | Idee |
 | Makro-Kalender | News | 3 | Mittel | Idee |
