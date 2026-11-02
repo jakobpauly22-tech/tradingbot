@@ -56,3 +56,10 @@ def test_fundamentalbuch_sofortaufbau_dann_quartal():
     v2, _, grund2 = fundamentalbuch("fundamental_a", "A", "2026-11-03", rl, kurse, 1.10, 500.0, bestand, z, kf, 0.02, GEB)
     assert v2 == [] and grund2 == "kein Quartalsstichtag"
     assert quartalsstichtag("2027-01-04") and not quartalsstichtag("2027-01-05") and not quartalsstichtag("2026-11-02")
+
+
+
+def test_limit_abgerundet_nie_ueber_zwei_prozent():
+    from tradingbot.betrieb.buecher import limit_preis
+    assert limit_preis(11.67, 0.02) == 11.90 and 11.90 <= 11.67 * 1.02          # 11,9034 → 11,90
+    assert limit_preis(67.87, 0.02) == 69.22 and 69.22 <= 67.87 * 1.02          # vorher gerundet 69,23 > 2 %

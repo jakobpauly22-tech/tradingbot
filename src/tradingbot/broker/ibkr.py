@@ -24,7 +24,7 @@ def kontrakt(ticker: str, art: str = "etf", waehrung: str | None = None):
 
     if ticker.endswith(".DE"):
         return Stock(ticker[:-3], XETRA_ETF if art in ("etf", "etc") else XETRA_AKTIE, waehrung or "EUR")
-    return Stock(ticker, "SMART", "USD")
+    return Stock(ticker.replace("-", " "), "SMART", "USD")      # Yahoo „BF-B“ = IBKR „BF B“
 
 
 def ticker_aus(kontrakt_) -> str:

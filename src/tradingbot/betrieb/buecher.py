@@ -31,12 +31,17 @@ class BuchVorschlag:
     limit_order: float | None     # Limit in der Handelswährung
 
 
+def limit_preis(kurs: float, aufschlag: float) -> float:
+    """Kauflimit = Vortagesschluss · (1 + Aufschlag), auf Cent ABGERUNDET (nie über der 2-%-Grenze des Risk-Managers)."""
+    return math.floor(kurs * (1 + aufschlag) * 100 + 1e-9) / 100
+
+
 def vorschlag_id(buch: str, tag, ticker: str, richtung: int) -> str:
     return f"{buch}-{pd.Timestamp(tag):%Y%m%d}-{ticker}-{'K' if richtung > 0 else 'V'}"
 
 
 def _kauf(buch, tag, ticker, stueck, kurs_eur, kurs_order, waehrung, aufschlag, art, these, *, stop=None, fx=1.0, plan="EUR"):
-    limit_order = round(kurs_order * (1 + aufschlag), 2)
+    limit_order = limit_preis(kurs_order, aufschlag)
     v = OrderVorschlag(vorschlag_id(buch, tag, ticker, 1), pd.Timestamp(tag), buch, ticker, 1, int(stueck), float(kurs_eur), art,
                        limit=limit_order / fx if waehrung != "EUR" else limit_order, stop=stop, gebuehrenplan=plan,
                        eur_kurs=fx if plan != "EUR" else 1.0, these=these)
@@ -59,7 +64,7 @@ def stueck_fuer(zielwert: float, kasse: float, limit_eur: float, gebuehr) -> int
 
 # --- Realbuch ---------------------------------------------------------------------------------------------------
 def realbuch(tag, ticker: str, kurs_eur: float, kasse: float, aufschlag: float, gebuehr) -> list[BuchVorschlag]:
-    limit = round(kurs_eur * (1 + aufschlag), 2)
+    limit = limit_preis(kurs_eur, aufschlag)
     n = stueck_fuer(kasse, kasse, limit, gebuehr)
     if n <= 0:
         return []
@@ -131,7 +136,7 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                 these = f"{regel}: Ausstieg {t} – {grund}."
                 vorschlaege.append(_verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f))
             elif w > 0:
-                limit_eur = round(orderkurs[t] * (1 + aufschlag), 2) / (f if w_ccy != "EUR" else 1.0)
+                limit_eur = limit_preis(orderkurs[t], aufschlag) / (f if w_ccy != "EUR" else 1.0)
                 n = stueck_fuer(w * wert, frei, limit_eur, gebuehr)
                 if n <= 0:
                     continue
@@ -170,7 +175,7 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
                               band=tuple(float(x) for x in sp["drift_band"]))
     zeilen = rangliste.set_index("ticker")
     gruende = {p["ticker"]: p for p in protokoll}
-    vorschlaege, frei = [], kasse
+    vorschlaege, frei, nicht_kaufbar = [], kasse, []
     for t, w in sorted(ziel.items(), key=lambda x: x[1] if not math.isnan(x[1]) else 1):   # Verkäufe zuerst
         if math.isnan(w):
             continue
@@ -181,9 +186,11 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
             frei += bestand[t] * kurs_eur
         elif w > 0:
             ist = bestand.get(t, 0) * kurs_eur
-            limit_eur = round(kurse_usd[t] * (1 + aufschlag), 2) / eurusd
+            limit_eur = limit_preis(kurse_usd[t], aufschlag) / eurusd
             n = stueck_fuer(max(w * wert - ist, 0), frei, limit_eur, gebuehr)
             if n <= 0:
+                if bestand.get(t, 0) == 0:
+                    nicht_kaufbar.append(f"{t} ({kurse_usd[t]:.0f} USD je Anteil)")
                 continue
             z = zeilen.loc[t]
             these = (f"Fundamental {variante}: Rang {gruende[t].get('rang')} im gefilterten S&P 500, Gesamtscore {z['gesamt']:.2f} "
@@ -192,4 +199,7 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
                      + ". Widerlegt bei Ausschluss durch einen Filter oder Rang über 30 am nächsten Quartalsstichtag.")
             vorschlaege.append(_kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD"))
             frei -= n * limit_eur + gebuehr(n, n * limit_eur)
-    return vorschlaege, {"letzter_signaltag": str(tag.date())}, "Aufbau" if not aufgebaut else "Quartalsstichtag"
+    grund = "Aufbau" if not aufgebaut else "Quartalsstichtag"
+    if nicht_kaufbar:
+        grund += "; nicht kaufbar, ein Anteil teurer als die Zielposition (Platz bleibt Kasse): " + ", ".join(nicht_kaufbar)
+    return vorschlaege, {"letzter_signaltag": str(tag.date())}, grund

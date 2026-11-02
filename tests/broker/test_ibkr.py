@@ -100,5 +100,6 @@ def test_orderaufbau(tmp_path):
 def test_kontrakte_xetra_aktie_und_us():
     from tradingbot.broker.ibkr import kontrakt
     assert kontrakt("SAP.DE", "aktie").exchange == "IBIS"
+    assert kontrakt("BF-B", "aktie").symbol == "BF B"
     us = kontrakt("AAPL", "aktie")
     assert (us.exchange, us.currency) == ("SMART", "USD")

@@ -445,7 +445,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Bilanz-Scores (Piotroski, Altman, Beneish) | Fundamental | 1 | Hoch | Idee |
 | Strategie-Bibliothek | Basis | 1 | Mittel | Idee |
 | Risk-Manager mit Vetorecht | Qualität | 2 | Hoch | In Arbeit (6a: Regeln und Tests fertig) |
-| Paper Trading | Ausführung | 2 | Hoch | Idee |
+| Paper Trading | Ausführung | 2 | Hoch | 6c gebaut (Tageslauf, Freigabe, Journal, Abgleich); Probelauf ohne Senden am 02.11.2026; Senden noch aus |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
 | Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; Zweig a): kein Renditebaustein, Crossover und Momentum als Schatten im Paper Trading und als mögliche Risikosignale (docs/TECHNIK.md) |
