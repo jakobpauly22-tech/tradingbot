@@ -74,3 +74,8 @@ vorgaenger:
   - {ticker: FTI,   name: TechnipFMC,              ciks: [1135152], erwartet: [FMC TECH], quelle: "nicht gefunden; FMC Technologies"}
   - {ticker: XOM,   name: ExxonMobil,              ciks: [34088],   erwartet: [EXXON],    quelle: "neue Holding-CIK 2026 ohne 10-K; Exxon Mobil Corp"}
   - {ticker: AGN,   name: Allergan,  cik_aktuell: 1578845, ciks: [884629],  erwartet: [WATSON],   quelle: "automatisch mehrdeutig; Watson → Actavis Inc. → Actavis plc/Allergan plc (2013)"}
+
+# Delisting-Gründe, die die SEC-Einreichungen nicht belegen (Rückfall-Regel: Übernahme → letzter Kurs, sonst −30 %).
+delisting:
+  - {ticker: TFCF,  grund: uebernahme, quelle: "Disney übernahm 21st Century Fox (Abschluss 20.03.2019)"}
+  - {ticker: TFCFA, grund: uebernahme, quelle: "Disney übernahm 21st Century Fox (Abschluss 20.03.2019)"}
