@@ -78,3 +78,48 @@ Bericht mit Tabellen je Division: `daten/fundamental/auswertung_scores.md` (`too
 
 Rundung: 43 Firmen-Stichtage (3 von 7 Signalen → 4) bleiben gegenüber der ungerundeten Grenze „unter 4“ im Universum;
 keiner fällt zusätzlich heraus (1.342 statt 1.385 Ausschlüsse von 13.011 bewertbaren Firmen-Stichtagen).
+
+## Sitzung 4: Entscheidungen (Jakob, 03.11.2026)
+
+Parameter in `config/fundamental.yaml` (`score`, `schattenportfolio`, `erfolgskriterien`), vor dem ersten Lauf festgelegt.
+
+1. **Gesamtscore:** Qualität 50 % (Ränge Piotroski und Accruals, je gleich), Bewertung 50 % (Ränge E/P und EBIT/EV, je
+   gleich). Der DCF kommt später in die Bewertungshälfte. Ein fehlender Rang zählt mit dem Median der Vergleichsgruppe und
+   wird markiert; EBIT/EV bei negativem EV gilt als fehlend.
+2. **Branchenobergrenze:** höchstens 25 % der Positionen (5 von 20) je zweistelliger SIC. Im Bericht zusätzlich die Anteile
+   je Division gegenüber dem Universum.
+3. **Puffer 30:** Ein gehaltener Titel bleibt, solange er im gefilterten Universum unter den besten 30 ist. Durch Filter
+   ausgeschlossene oder aus dem S&P 500 ausgeschiedene Titel werden am nächsten Stichtag immer verkauft. Freie Plätze gehen
+   an die besten noch nicht gehaltenen Titel, höchstens 20 Positionen.
+4. **Drift:** Gehaltene Titel nur am Stichtag zurück auf 5 %, und nur wenn sie über 7,5 % oder unter 2,5 % liegen. Die
+   125-€-Regel gilt zusätzlich.
+5. **Austritt aus dem S&P 500 unter dem Quartal:** halten bis zum Stichtag, außer bei Delisting. Erlöse aus Übernahmen
+   bleiben bis zum Stichtag als Kasse ohne Zins.
+6. **Benchmarks:** MSCI ACWI IMI Value Weighted fehlt im ersten Lauf (kein ETF; Lücke im Bericht vermerkt). Zusatzbenchmark
+   US-Value: iShares S&P 500 Value (IVE, USD, in Euro), weil auf Xetra ab 10/2016 nur Small-Cap- (ZPRV) oder
+   Welt-Value-ETFs (XDEV) Kurse haben. S&P 500 ohne Finanzwerte in Euro. Sharpe mit EUR-Geldmarktzins (FRED ECBDFR).
+7. **Kontrollportfolio:** alle Titel des gefilterten Universums gleich gewichtet, quartalsweise, ohne Kosten und vor Steuern.
+8. **Bericht:** je Stichtag, wie viele der gehaltenen Titel mindestens einen Median-Ersatz haben.
+
+Begriffe, wie im Code umgesetzt (Claude, zur Prüfung): *Gefiltertes Universum* = Mitglied am Stichtag, kein Finanzwert,
+gültige Kursreihe, aktueller Jahresabschluss (höchstens 15 Monate alt) und von keinem Filter ausgeschlossen. Die Ränge
+werden innerhalb des gefilterten Universums gebildet, Vergleichsgruppe wie bei den Multiples (zweistellige SIC mit
+mindestens 5 Firmen, sonst Division). *Vor Steuern* heißt auch ohne US-Quellensteuer (sie ist auf die deutsche Steuer
+anrechenbar); dafür wird das Schattenportfolio ein zweites Mal mit Kosten, aber ohne Steuern simuliert. Der Lauf mit
+Steuern wird auf allen drei Ebenen berichtet.
+
+## Erfolgskriterien des ersten Laufs (vor dem Lauf festgeschrieben, 03.11.2026)
+
+Zeitraum 01.10.2016 bis 31.12.2024 (gewerteter Backtest), Tresor bleibt zu.
+
+| Kriterium | Bedingung |
+| --- | --- |
+| (a) Auswahl | Rendite p.a. nach Kosten und vor Steuern ≥ Kontrollportfolio |
+| (b) Risiko | Sharpe nach Kosten ≥ Sharpe des S&P 500 ohne Finanzwerte (EUR) **und** maximaler Drawdown höchstens 5 Prozentpunkte schlechter |
+
+- Die Rendite gegenüber SXR8 (S&P 500), SPYI (MSCI ACWI IMI) und IVE (S&P 500 Value) wird berichtet, ist aber kein Kriterium.
+- Beide bestanden → die Engine geht wie geplant ins Paper Trading. Eines verfehlt → Ergebnis dokumentieren und mit Jakob
+  besprechen.
+- Änderungen nur bei einem Fehler oder mit theoretischer Begründung, nie weil eine Variante besser abschneidet. Jede
+  getestete Variante wird im Bericht gezählt (`daten/fundamental/varianten.csv`).
+- Aussagekraft: 33 Quartale; Vorsprünge unter etwa 5 Prozentpunkten p.a. sind statistisch nicht von Zufall zu unterscheiden.

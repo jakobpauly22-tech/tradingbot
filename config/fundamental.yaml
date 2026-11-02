@@ -27,16 +27,34 @@ universum:
     im_bericht_markieren: true
 
 schattenportfolio:
+  # Entscheidungen Sitzung 4 (Jakob, 03.11.2026); Code: engines/fundamental/schatten.py
   kapital: 10000.0
-  titel: 20
-  gewichtung: gleich                   # höchstens 5 % je Aktie (Core-Regel)
+  titel: 20                            # höchstens 20 Positionen
+  gewichtung: gleich                   # Ziel 5 % je Titel (Core-Regel: höchstens 5 % je Einzelaktie beim Kauf)
   rebalancing: Q
-  max_branchenanteil: 0.25
+  max_branchenanteil: 0.25             # höchstens 25 % der Positionen (5 von 20) je Branche
+  branchen_ebene: sic2                 # zweistellige SIC (Division D wäre ~45 % des Universums, Divisionsgrenze erzwänge feste Untergewichtung)
+  puffer_rang: 30                      # gehaltener Titel bleibt, solange er im gefilterten Universum unter den besten 30 ist
+  # Ausgeschlossene (Filter) oder aus dem S&P 500 ausgeschiedene Titel werden am nächsten Stichtag immer verkauft.
+  # Freie Plätze gehen an die besten noch nicht gehaltenen Titel.
+  drift_band: [0.025, 0.075]           # gehaltene Titel nur am Stichtag zurück auf 5 %, und nur außerhalb des Bands; 125-€-Regel gilt zusätzlich
+  austritt_unter_quartal: halten_bis_stichtag   # außer Delisting; Erlöse aus Übernahmen bis zum Stichtag als Kasse ohne Zins
   steuergruppe: schatten
-  # MSCI ACWI IMI (Haupt), S&P 500 in Euro (Universum) und S&P 500 ohne Finanzwerte (macht den Sektoreffekt
+  # MSCI ACWI IMI (Haupt), S&P 500 in Euro (Universum) und S&P 500 ohne Finanzwerte in Euro (macht den Sektoreffekt
   # des Ausschlusses sichtbar; Nachbau aus dem Universum, gebaut von tools/nachbau_sp500_ohne_finanzwerte.py nach bestandener Gegenprobe)
-  benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]   # letzterer: daten.sp500_nachbau.lade_benchmark_sp500_ohne_finanzwerte (EUR-Spalte)
+  benchmarks: [SPYI.DE, SXR8.DE, SP500_ohne_finanzwerte]   # letzterer: daten.sp500_nachbau.lade_benchmark_sp500_ohne_finanzwerte (Spalte index_eur)
+  # MSCI ACWI IMI Value Weighted: kein ETF verfügbar, im ersten Lauf weggelassen (Lücke im Bericht vermerkt).
+  # Zusatzbenchmark US-Value: iShares S&P 500 Value (IVE, USD, in Euro umgerechnet), Kurse ab 2000; nur berichtet.
+  # Auf Xetra gibt es ab 10/2016 nur Small-Cap- (ZPRV) oder Welt-Value-ETFs (XDEV), die das Universum schlechter abbilden.
+  zusatzbenchmarks: [IVE]
+  kontrollportfolio: alle Titel des gefilterten Universums gleich gewichtet, quartalsweise, ohne Kosten, vor Steuern
+  risikofreier_zins: ECBDFR            # Sharpe mit EUR-Geldmarktzins (FRED)
 
+erfolgskriterien:                      # vor dem ersten Lauf festgeschrieben (03.11.2026), docs/FUNDAMENTAL.md
+  auswahl: Rendite p.a. nach Kosten und vor Steuern >= Kontrollportfolio
+  risiko_sharpe: Sharpe nach Kosten >= Sharpe S&P 500 ohne Finanzwerte (EUR)
+  risiko_max_drawdown_pp: 5.0          # maximaler Drawdown höchstens 5 Prozentpunkte schlechter als S&P 500 ohne Finanzwerte (EUR)
+  nur_berichtet: [SXR8.DE, SPYI.DE, IVE]
 filter:                                # Code: engines/fundamental/filter.py
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
   # Entscheidung 03.11.2026: bei 7 oder 8 von 9 Signalen auf 9 Punkte hochrechnen und markieren; darunter Filter überspringen
@@ -78,11 +96,17 @@ backtest:
 
 score:
   erster_lauf: [qualitaet, multiples]  # Piotroski und Accruals; E/P und EBIT/EV gegen den Branchenmedian
-  # Entscheidung 03.11.2026 für Sitzung 4: ein fehlender Score zählt im Gesamtscore neutral (Median der Vergleichsgruppe),
-  # nie als gut
+  # Entscheidungen Sitzung 4 (03.11.2026): Qualität 50 %, Bewertung 50 %, je Hälfte beide Ränge gleich.
+  # Der DCF kommt später in die Bewertungshälfte. Code: engines/fundamental/gesamtscore.py
+  gewichte:
+    qualitaet: 0.5
+    bewertung: 0.5
+  qualitaet: [piotroski, accruals]     # Piotroski gerundet (wie im Filter); Accruals: niedriger ist besser
+  bewertung: [ep, ebit_ev]
+  # Ein fehlender Score zählt neutral (Median der Vergleichsgruppe), nie als gut; markiert.
+  # EBIT/EV bei negativem EV gilt als fehlend (Median, markiert).
   fehlender_score: median_der_vergleichsgruppe
   dcf_erst_nach_erstem_lauf: true
-
 dcf:                                   # für später, Annahmen schon festgelegt
   marktrisikopraemie: 0.05
   langfristiges_wachstum: 0.02         # muss immer kleiner als die Kapitalkosten sein
