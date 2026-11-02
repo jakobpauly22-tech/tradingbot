@@ -41,25 +41,31 @@ class Kostenmodell:
         aufschlag = (self.spread.get(klasse, 0.0) if self.spread else 0.0) + self.slippage
         return kurs * (1.0 + richtung * aufschlag)
 
-    def gebuehren_eur(self, waehrung: str, stueck: float, orderwert_eur: float, eur_kurs: float) -> tuple[float, float]:
-        """(Ordergebühr, Währungstausch) in EUR.
+    def gebuehren_eur(self, waehrung: str, stueck: float, orderwert_eur: float, eur_kurs: float) -> float:
+        """Ordergebühr in EUR.
 
         EUR-Börsen: max(Minimum, Satz · Orderwert), höchstens Maximum.
-        USD-Börsen: max(Minimum, je Stück · Stückzahl), höchstens max_anteil · Orderwert; dazu Währungstausch
-        max(Minimum, Satz · Orderwert) in USD. Umrechnung mit `eur_kurs` (USD je 1 EUR).
+        USD-Börsen: max(Minimum, je Stück · Stückzahl), höchstens max_anteil · Orderwert, umgerechnet mit `eur_kurs`
+        (USD je 1 EUR). Der Währungstausch ist seit 03.11.2026 keine Orderkost mehr (siehe `tauschkosten_eur`).
         """
         if self.ohne_gebuehren:
-            return 0.0, 0.0
+            return 0.0
         if waehrung not in self.gebuehren:
             raise KeyError(f"Gebührenmodell für {waehrung} fehlt in config/backtest.yaml")
         g = self.gebuehren[waehrung]
         if waehrung == "EUR":
-            gebuehr = max(g["minimum"], g["satz"] * orderwert_eur)
-            return min(gebuehr, g.get("maximum", float("inf"))), 0.0
+            return min(max(g["minimum"], g["satz"] * orderwert_eur), g.get("maximum", float("inf")))
         orderwert_fw = orderwert_eur * eur_kurs
-        gebuehr_fw = min(max(g["minimum"], g["je_stueck"] * stueck), g["max_anteil"] * orderwert_fw)
-        if waehrung == "USD":
-            tausch_fw = max(self.fx_minimum_usd, self.fx_satz * orderwert_fw)
-        else:
+        return min(max(g["minimum"], g["je_stueck"] * stueck), g["max_anteil"] * orderwert_fw) / eur_kurs
+
+    def tauschkosten_eur(self, waehrung: str, betrag_fw: float, eur_kurs: float) -> float:
+        """Kosten eines Währungstauschs in EUR: max(Minimum, Satz · Betrag) in USD (IBKR), umgerechnet mit `eur_kurs`.
+
+        Entscheidung Jakob 03.11.2026: Die Fremdwährungskasse wird gehalten; getauscht wird nur bei Ein- und Auszahlungen
+        bzw. für den Netto-Saldo am Ausführungstag, nicht je Order.
+        """
+        if self.ohne_gebuehren or betrag_fw <= 0:
+            return 0.0
+        if waehrung != "USD":
             raise KeyError(f"Währungstausch für {waehrung} ist noch nicht modelliert")
-        return gebuehr_fw / eur_kurs, tausch_fw / eur_kurs
+        return max(self.fx_minimum_usd, self.fx_satz * betrag_fw) / eur_kurs

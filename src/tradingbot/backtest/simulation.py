@@ -12,6 +12,11 @@ nächsten Handelstag zum letzten Schluss · (1 + Delisting-Rendite) ohne Gebühr
 Regeln der Ausführung (config/backtest.yaml):
 - Nur long, keine Margin: Käufe nur aus vorhandenem Cash, Verkäufe höchstens bis zum Bestand.
 - Ganze Stücke (IBKR-API bietet keine Bruchteile).
+- Währungen (Jakob, 03.11.2026): Fremdwährungswerte werden über eine Fremdwährungskasse abgerechnet; Dividenden und
+  Verkaufserlöse bleiben dort. Getauscht wird am Ausführungstag nur der Netto-Fehlbetrag je Währung (eine Tauschorder,
+  Kosten `Kostenmodell.tauschkosten_eur`) und beim fiktiven Verkauf am Ende (Auszahlung). Die Tauschkosten mindern
+  vereinfachend nicht den Veräußerungsgewinn (vorsichtig); Kursgewinne der Fremdwährungskasse sind steuerlich nicht
+  abgebildet (offener Punkt, § 23 EStG, backtest/steuern.py).
 - Käufe und Aufstockungen nur, wenn Gebühr plus Währungstausch höchstens `max_gebuehr_anteil` (1 %) des
   Orderwerts sind; sonst wird die Order verworfen und protokolliert. Verkäufe (Ausstiege, Stops, Zeit-Stops,
   gebrochene These, Reduzierungen) sind immer erlaubt (Jakob, 01.11.2026).
@@ -87,6 +92,7 @@ class Ergebnis:
     steuerereignisse: pd.DataFrame = field(default_factory=pd.DataFrame)
     steuern: pd.DataFrame = field(default_factory=pd.DataFrame)          # je Jahr: diesem Teilportfolio zugeordnete Steuer
     steuern_gruppe: pd.DataFrame = field(default_factory=pd.DataFrame)   # je Jahr: Steuerrechnung der ganzen Steuergruppe
+    waehrungstausche: pd.DataFrame = field(default_factory=pd.DataFrame) # je Tausch: datum, von, nach, betrag_eur, kosten
     meta: dict = field(default_factory=dict)
 
     @property
@@ -98,10 +104,17 @@ class Ergebnis:
     def wert_nach_steuern(self) -> pd.Series:
         return self.werte["wert_nach_steuern"]
 
+    @property
+    def kosten_gesamt(self) -> float:
+        """Ordergebühren, Spread und Slippage sowie Währungstausch in EUR."""
+        orders = float((self.trades.gebuehr + self.trades.spread_slippage).sum()) if len(self.trades) else 0.0
+        tausch = float(self.waehrungstausche["kosten"].sum()) if len(self.waehrungstausche) else 0.0
+        return orders + tausch
+
 
 _TRADE_SPALTEN = [
     "datum", "ticker", "richtung", "stueck", "eroeffnung", "ausfuehrungspreis", "kurswert",
-    "gebuehr", "waehrungstausch", "spread_slippage", "einstand_fifo", "gewinn_realisiert",
+    "gebuehr", "spread_slippage", "einstand_fifo", "gewinn_realisiert",
 ]
 
 
@@ -122,6 +135,7 @@ class _Lauf:
         self.dividenden: list[dict] = []
         self.steuerereignisse: list[Steuerereignis] = []
         self.delisting_faelle: list[dict] = []
+        self.tausche: list[dict] = []
 
     def _ereignis(self, datum, ticker, art, betrag, quellensteuer=0.0):
         self.steuerereignisse.append(Steuerereignis(pd.Timestamp(datum), self.d.name, ticker, art, self.steuerarten[ticker], betrag, quellensteuer))
@@ -130,15 +144,67 @@ class _Lauf:
     def _stueck_runden(self, stueck: float) -> float:
         return math.floor(stueck + 1e-9) if self.regeln.ganze_stuecke else stueck
 
-    def _gebuehren(self, tag, ticker, stueck, kurswert) -> tuple[float, float]:
+    def _gebuehren(self, tag, ticker, stueck, kurswert) -> float:
         waehrung = self.m.waehrungen[ticker]
         return self.kosten.gebuehren_eur(waehrung, stueck, kurswert, self.m.eur_kurs(waehrung, tag))
+
+    def _w(self, tag, ticker) -> tuple[str, float]:
+        w = self.m.waehrungen[ticker]
+        return w, self.m.eur_kurs(w, tag)
+
+    def eur_kurse(self, tag) -> dict[str, float]:
+        return {w: self.m.eur_kurs(w, tag) for w in self.portfolio.fremdkasse}
+
+    def _tauschen(self, tag, von, nach, betrag_eur, kosten, portfolio=None) -> float:
+        """Ein Tausch über `betrag_eur` (in EUR bewertet); Kosten gehen von der EUR-Kasse ab."""
+        portfolio = portfolio or self.portfolio
+        fw = nach if von == "EUR" else von
+        kurs = self.m.eur_kurs(fw, tag)
+        if kosten is None:
+            kosten = self.kosten.tauschkosten_eur(fw, betrag_eur * kurs, kurs)
+        portfolio.tauschen(von, nach, betrag_eur if von == "EUR" else betrag_eur * kurs, kurs, kosten)
+        if portfolio is self.portfolio:
+            self.tausche.append({"datum": tag, "von": von, "nach": nach, "betrag_eur": betrag_eur, "kosten": kosten})
+        return kosten
+
+    def tausch_fuer_kaeufe(self, tag, kaeufe: list[tuple[str, float, float]]):
+        """Netto-Tausch vor den Käufen: Fehlbeträge je Währung aus dem Überschuss der anderen Kasse decken
+        (höchstens eine Tauschorder je Währung und Richtung)."""
+        bedarf: dict[str, float] = {}
+        for ticker, delta, kurs in kaeufe:
+            preis = self.kosten.ausfuehrungspreis(kurs, +1, self.klassen[ticker])
+            stueck = self._stueck_runden(delta * kurs / preis)
+            if stueck > TOLERANZ:
+                w = self.m.waehrungen[ticker]
+                bedarf[w] = bedarf.get(w, 0.0) + stueck * preis + self._gebuehren(tag, ticker, stueck, stueck * preis)
+        if not bedarf:
+            return
+        kurse = {w: self.m.eur_kurs(w, tag) for w in set(bedarf) | set(self.portfolio.fremdkasse)}
+        fehl = {w: b - self.portfolio.verfuegbar_eur(w, kurse.get(w, 1.0)) for w, b in bedarf.items()}
+        # Fremdwährung fehlt: aus der EUR-Kasse tauschen, soweit sie nicht für EUR-Käufe gebraucht wird
+        for w, f in fehl.items():
+            if w == "EUR" or f <= TOLERANZ:
+                continue
+            frei = self.portfolio.cash - max(bedarf.get("EUR", 0.0), 0.0)
+            betrag = min(f, frei - self.kosten.tauschkosten_eur(w, f * kurse[w], kurse[w]))
+            if betrag > TOLERANZ:
+                self._tauschen(tag, "EUR", w, betrag, None)
+        # EUR fehlt: aus Fremdwährungskassen zurücktauschen, soweit nicht für eigene Käufe gebraucht
+        f_eur = fehl.get("EUR", 0.0)
+        for w in list(self.portfolio.fremdkasse):
+            if f_eur <= TOLERANZ:
+                break
+            frei = self.portfolio.verfuegbar_eur(w, kurse[w]) - max(bedarf.get(w, 0.0), 0.0)
+            betrag = min(f_eur + self.kosten.tauschkosten_eur(w, f_eur * kurse[w], kurse[w]), frei)
+            if betrag > TOLERANZ:
+                kosten = self._tauschen(tag, w, "EUR", betrag, None)
+                f_eur -= betrag - kosten
 
     def _verwerfen(self, tag, ticker, richtung, stueck, grund):
         self.verworfen.append({"datum": tag, "ticker": ticker, "richtung": richtung, "stueck": stueck, "grund": grund})
 
-    def _gebuehrenregel_ok(self, gebuehr, tausch, kurswert) -> bool:
-        return kurswert > 0 and gebuehr + tausch <= self.regeln.max_gebuehr_anteil * kurswert + 1e-12
+    def _gebuehrenregel_ok(self, gebuehr, kurswert) -> bool:
+        return kurswert > 0 and gebuehr <= self.regeln.max_gebuehr_anteil * kurswert + 1e-12
 
     # --- Tagesschritte ----------------------------------------------------------------------------
     def dividenden_gutschreiben(self, tag):
@@ -150,7 +216,8 @@ class _Lauf:
                 ist_aktie = self.steuerarten[ticker] == "aktie"
                 satz = self.steuerregeln.quellensteuer.get(self.m.waehrungen[ticker], 0.0) if (ist_aktie and self.steuerregeln.aktiv) else 0.0
                 quellensteuer = brutto * satz
-                self.portfolio.cash += brutto - quellensteuer
+                w, kurs = self._w(tag, ticker)
+                self.portfolio._buchen(w, kurs, brutto - quellensteuer)
                 self.dividenden.append({"datum": tag, "ticker": ticker, "stueck": stueck, "je_stueck": float(kerze["dividende"]),
                                         "betrag": brutto, "quellensteuer": quellensteuer})
                 self._ereignis(tag, ticker, "dividende" if ist_aktie else "ausschuettung", brutto, quellensteuer)
@@ -182,16 +249,20 @@ class _Lauf:
                 self._ereignis(erster_werktag(jahr + 1), ticker, "vorabpauschale", summe)
 
     def liquidation(self, tag) -> tuple[float, list[Steuerereignis]]:
-        """Fiktiver Verkauf aller Positionen zum Schlusskurs inklusive Kosten (für den fairen Vergleich am Ende)."""
+        """Fiktiver Verkauf aller Positionen zum Schlusskurs inklusive Kosten und Rücktausch der Fremdwährungskassen
+        (Auszahlung; für den fairen Vergleich am Ende)."""
         kopie = copy.deepcopy(self.portfolio)
         ereignisse = []
         schluss = self.m.schluss.loc[tag]
         for ticker, stueck in kopie.bestand().items():
             preis = self.kosten.ausfuehrungspreis(float(schluss[ticker]), -1, self.klassen[ticker])
-            gebuehr, tausch = self._gebuehren(tag, ticker, stueck, stueck * preis)
-            ergebnis = kopie.verkaufen(tag, ticker, stueck, preis, min(gebuehr + tausch, stueck * preis))
+            gebuehr = self._gebuehren(tag, ticker, stueck, stueck * preis)
+            ergebnis = kopie.verkaufen(tag, ticker, stueck, preis, min(gebuehr, stueck * preis), *self._w(tag, ticker))
             vp = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
             ereignisse.append(Steuerereignis(pd.Timestamp(tag), self.d.name, ticker, "veraeusserung", self.steuerarten[ticker], ergebnis.gewinn - vp))
+        for w, betrag in list(kopie.fremdkasse.items()):
+            if betrag > TOLERANZ:
+                self._tauschen(tag, w, "EUR", betrag / self.m.eur_kurs(w, tag), None, portfolio=kopie)
         return kopie.cash, ereignisse
 
     def delistings_schliessen(self, tag):
@@ -202,11 +273,11 @@ class _Lauf:
                 continue
             kurs = float(self.m.kurse[ticker]["close"].loc[: d.letzter_tag].iloc[-1])
             preis = kurs * (1.0 + d.rendite)
-            ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, 0.0)
+            ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, 0.0, *self._w(tag, ticker))
             vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
             self._ereignis(tag, ticker, "veraeusserung", ergebnis.gewinn - vorabpauschalen)
             self.trades.append(dict(zip(_TRADE_SPALTEN, [
-                tag, ticker, -1, stueck, kurs, preis, stueck * preis, 0.0, 0.0, 0.0, ergebnis.einstand, ergebnis.gewinn,
+                tag, ticker, -1, stueck, kurs, preis, stueck * preis, 0.0, 0.0, ergebnis.einstand, ergebnis.gewinn,
             ])))
             self.delisting_faelle.append({"datum": tag, "ticker": ticker, "letzter_tag": d.letzter_tag, "grund": d.grund,
                                           "rendite": d.rendite, "erloes": stueck * preis})
@@ -240,7 +311,7 @@ class _Lauf:
             if s_h > TOLERANZ:
                 kerze = self.m.kerze(t, tag)
                 gehalten_wert += s_h * (float(kerze["open"]) if kerze is not None and kerze["open"] > 0 else float(schluss_vortag.get(t, 0.0)))
-        gesamtwert = self.portfolio.cash + sum(s * bewertung[t] for t, s in bestand.items()) + gehalten_wert
+        gesamtwert = self.portfolio.kasse_eur(self.eur_kurse(tag)) + sum(s * bewertung[t] for t, s in bestand.items()) + gehalten_wert
 
         plan = {}
         for ticker in betroffen:
@@ -264,6 +335,7 @@ class _Lauf:
 
         # Käufe, größte Lücke zuerst
         kaeufe = sorted(((t, d) for t, d in plan.items() if d > TOLERANZ), key=lambda x: -x[1] * eroeffnung[x[0]])
+        self.tausch_fuer_kaeufe(tag, [(t, d, eroeffnung[t]) for t, d in kaeufe])
         for ticker, delta in kaeufe:
             self._kaufen(tag, ticker, delta, eroeffnung[ticker])
 
@@ -275,15 +347,15 @@ class _Lauf:
         # Ausstiege und Reduzierungen sind immer erlaubt, auch wenn die Gebühr über 1 % liegt (Jakob, 01.11.2026)
         preis = self.kosten.ausfuehrungspreis(kurs, -1, self.klassen[ticker])
         kurswert = stueck * preis
-        gebuehr, tausch = self._gebuehren(tag, ticker, stueck, kurswert)
-        if gebuehr + tausch > kurswert:
-            self._verwerfen(tag, ticker, -1, stueck, f"Gebühren {gebuehr + tausch:.2f} € übersteigen den Erlös {kurswert:.2f} €")
+        gebuehr = self._gebuehren(tag, ticker, stueck, kurswert)
+        if gebuehr > kurswert:
+            self._verwerfen(tag, ticker, -1, stueck, f"Gebühren {gebuehr:.2f} € übersteigen den Erlös {kurswert:.2f} €")
             return
-        ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, gebuehr + tausch)
+        ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, gebuehr, *self._w(tag, ticker))
         vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
         self._ereignis(tag, ticker, "veraeusserung", ergebnis.gewinn - vorabpauschalen)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
-            tag, ticker, -1, stueck, kurs, preis, kurswert, gebuehr, tausch, stueck * (kurs - preis), ergebnis.einstand, ergebnis.gewinn,
+            tag, ticker, -1, stueck, kurs, preis, kurswert, gebuehr, stueck * (kurs - preis), ergebnis.einstand, ergebnis.gewinn,
         ])))
 
     def _kaufen(self, tag, ticker, delta, kurs):
@@ -291,28 +363,30 @@ class _Lauf:
         stueck = self._stueck_runden(delta * kurs / preis)  # Zielwert durch den teureren Ausführungspreis
         if stueck <= TOLERANZ:
             return  # Abweichung vom Ziel kleiner als ein Stück: keine Order nötig
-        # So weit reduzieren, bis Kurswert plus Gebühren ins Cash passen
+        # So weit reduzieren, bis Kurswert plus Gebühren in die Kasse der Handelswährung passen
+        w, fx = self._w(tag, ticker)
         for _ in range(3):
             if stueck <= TOLERANZ:
                 break
-            gebuehr, tausch = self._gebuehren(tag, ticker, stueck, stueck * preis)
-            if stueck * preis + gebuehr + tausch <= self.portfolio.cash + 1e-9:
+            gebuehr = self._gebuehren(tag, ticker, stueck, stueck * preis)
+            kasse = self.portfolio.verfuegbar_eur(w, fx)
+            if stueck * preis + gebuehr <= kasse + 1e-9:
                 break
-            stueck = self._stueck_runden(max(self.portfolio.cash - gebuehr - tausch, 0.0) / preis)
+            stueck = self._stueck_runden(max(kasse - gebuehr, 0.0) / preis)
         if stueck <= TOLERANZ:
             self._verwerfen(tag, ticker, +1, 0, "zu wenig Cash für ein Stück")
             return
         kurswert = stueck * preis
-        gebuehr, tausch = self._gebuehren(tag, ticker, stueck, kurswert)
-        if stueck * preis + gebuehr + tausch > self.portfolio.cash + 1e-9:
+        gebuehr = self._gebuehren(tag, ticker, stueck, kurswert)
+        if stueck * preis + gebuehr > self.portfolio.verfuegbar_eur(w, fx) + 1e-9:
             self._verwerfen(tag, ticker, +1, stueck, "zu wenig Cash")
             return
-        if not self._gebuehrenregel_ok(gebuehr, tausch, kurswert):
-            self._verwerfen(tag, ticker, +1, stueck, f"Gebühren {gebuehr + tausch:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {kurswert:.2f} €")
+        if not self._gebuehrenregel_ok(gebuehr, kurswert):
+            self._verwerfen(tag, ticker, +1, stueck, f"Gebühren {gebuehr:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {kurswert:.2f} €")
             return
-        self.portfolio.kaufen(tag, ticker, stueck, preis, gebuehr + tausch)
+        self.portfolio.kaufen(tag, ticker, stueck, preis, gebuehr, w, fx)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
-            tag, ticker, +1, stueck, kurs, preis, kurswert, gebuehr, tausch, stueck * (preis - kurs), None, None,
+            tag, ticker, +1, stueck, kurs, preis, kurswert, gebuehr, stueck * (preis - kurs), None, None,
         ])))
 
 
@@ -364,9 +438,11 @@ def simuliere(
                 lauf.ausfuehren(tag, offen)
                 offen = None
             schluss = marktdaten.schluss.loc[tag]
-            werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss), "cash": lauf.portfolio.cash})
+            kurse_fx = lauf.eur_kurse(tag)
+            kasse = lauf.portfolio.kasse_eur(kurse_fx)
+            werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss, kurse_fx), "cash": kasse})
             bestaende.append({"datum": tag, **lauf.portfolio.bestand()})
-            ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag, lauf.portfolio.bestand(), lauf.portfolio.cash))
+            ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag, lauf.portfolio.bestand(), kasse))
             if ziel is not None:
                 offen = pd.Series(ziel, dtype=float)
             vorher = tag
@@ -424,6 +500,7 @@ def simuliere(
                                           columns=["datum", "teilportfolio", "ticker", "art", "steuerart", "betrag", "quellensteuer"]),
             steuern=pd.Series(zuordnung[n], name="steuer", dtype=float).rename_axis("jahr").to_frame(),
             steuern_gruppe=gruppen_tabellen[definition.steuergruppe],
+            waehrungstausche=pd.DataFrame(lauf.tausche, columns=["datum", "von", "nach", "betrag_eur", "kosten"]),
             meta={"start": str(tage[0].date()), "ende": str(tage[-1].date()), "startkapital": definition.startkapital,
                   "delistings": pd.DataFrame(lauf.delisting_faelle, columns=["datum", "ticker", "letzter_tag", "grund", "rendite", "erloes"]),
                   "art": definition.art, "steuergruppe": definition.steuergruppe, "rolle": definition.rolle, "kosten": kosten, "regeln": regeln,

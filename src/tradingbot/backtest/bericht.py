@@ -72,7 +72,8 @@ def kennzahlen_teilportfolio(e: Ergebnis, zwilling: Ergebnis, benchmark_tr: pd.S
         "benchmark_cagr_nach_verkauf_und_steuern": _cagr_aus(start, zw_verkauf, jahre),
         "steuern_gezahlt": float(e.meta["steuern_gezahlt"]),
         "steuer_bei_verkauf": float(e.meta["liquidationssteuer"]),
-        "kosten": float((e.trades.gebuehr + e.trades.waehrungstausch + e.trades.spread_slippage).sum()) if len(e.trades) else 0.0,
+        "kosten": e.kosten_gesamt,
+        "kosten_waehrungstausch": float(e.waehrungstausche["kosten"].sum()) if len(e.waehrungstausche) else 0.0,
         "trades": int(len(e.trades)),
         "verworfen": int(len(e.verworfen)),
     })

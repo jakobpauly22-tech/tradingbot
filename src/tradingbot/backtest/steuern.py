@@ -23,6 +23,11 @@ Quellen sind Gesetze, nicht wissen/ (dort gibt es noch keine Steuerdatei):
   steuerfrei sind (Jakob, 01.11.2026). Vorsichtig wird der Pauschbetrag zuerst den ausländischen Erträgen
   zugerechnet, damit möglichst wenig Quellensteuer angerechnet wird.
 
+Offener Punkt (Jakob, 03.11.2026): Seit dem Kostenmodell mit Fremdwährungskasse (backtest/simulation.py) wird
+USD-Kasse gehalten. Der Rücktausch von Fremdwährungsguthaben kann als privates Veräußerungsgeschäft zählen
+(§ 23 Abs. 1 S. 1 Nr. 2 EStG, Haltedauer unter einem Jahr; Freigrenze 1.000 € je Jahr, § 23 Abs. 3 S. 5 EStG).
+Diese Währungsgewinne und -verluste sind noch nicht modelliert; die Tauschkosten mindern vereinfachend keinen Gewinn.
+
 Vereinfachungen (bewusst, von Jakob am 01.11.2026 akzeptiert):
 - Quellensteuer: Anrechnung je Jahr über alle ausländischen Erträge, nicht je einzelnem Ertrag.
 - Die Vorabpauschale des letzten simulierten Jahres fließt erst nach Simulationsende zu und wird nicht erfasst.

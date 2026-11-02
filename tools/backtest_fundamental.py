@@ -42,6 +42,8 @@ from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
 warnings.simplefilter("ignore")
 NAME = "fundamental_schatten"
+# Neuberechnung derselben Variante (zählt nicht als neue Variante, Jakob 03.11.2026)
+ANLASS = "Kostenmodell Währungstausch: USD-Kasse, Netto-Tausch statt je Order"
 VARIANTE = "Variante 1: Regeln vom 03.11.2026 (Gesamtscore 50/50, Puffer 30, Drift 2,5–7,5 %, SIC2 ≤ 25 %)"
 
 
@@ -171,8 +173,8 @@ def main() -> int:
     ziel = PROJEKT_WURZEL / "daten" / "fundamental"
     ziel.mkdir(parents=True, exist_ok=True)
     varianten_datei = ziel / "varianten.csv"
-    alt = pd.read_csv(varianten_datei) if varianten_datei.exists() else pd.DataFrame(columns=["datum", "variante", "git", "lauf", "kriterium_a", "kriterium_b"])
-    zeile = {"datum": datetime.now().isoformat(timespec="seconds"), "variante": VARIANTE, "git": lauf.meta["git"].get("commit"),
+    alt = pd.read_csv(varianten_datei) if varianten_datei.exists() else pd.DataFrame(columns=["datum", "variante", "anlass", "git", "lauf", "kriterium_a", "kriterium_b"])
+    zeile = {"datum": datetime.now().isoformat(timespec="seconds"), "variante": VARIANTE, "anlass": ANLASS, "git": lauf.meta["git"].get("commit"),
              "lauf": str(lauf.pfad.name if lauf.pfad else ""), "kriterium_a": bool(krit_a), "kriterium_b": bool(krit_b)}
     varianten = pd.concat([alt, pd.DataFrame([zeile])], ignore_index=True)
     varianten.to_csv(varianten_datei, index=False)
@@ -216,12 +218,15 @@ def main() -> int:
 
     # Umschlag, Kosten, verworfene Orders
     trades = vor.trades
-    kosten = float((trades.gebuehr + trades.waehrungstausch + trades.spread_slippage).sum())
+    kosten = vor.kosten_gesamt
+    tausch = float(vor.waehrungstausche["kosten"].sum()) if len(vor.waehrungstausche) else 0.0
     jahre_anzahl = (tage[-1] - tage[0]).days / 365.25
     umschlag = float(trades.loc[trades.richtung < 0, "kurswert"].sum()) / float(vor.wert.mean()) / jahre_anzahl
     verworfen = Counter(vor.verworfen["grund"].str.replace(r"[\d.,]+", "x", regex=True)) if len(vor.verworfen) else Counter()
     text += ["", "## Umschlag und Kosten (Lauf vor Steuern)", "",
-             f"{len(trades)} Trades, Kosten {kosten:,.0f} € ({kosten / float(sp['kapital']) / jahre_anzahl:.2%} des Startkapitals p.a.), "
+             f"{len(trades)} Trades, Kosten {kosten:,.0f} € ({kosten / float(sp['kapital']) / jahre_anzahl:.2%} des Startkapitals p.a.; "
+             f"Gebühren {trades.gebuehr.sum():,.0f} €, Spread und Slippage {trades.spread_slippage.sum():,.0f} €, "
+             f"Währungstausch {tausch:,.0f} € in {len(vor.waehrungstausche)} Tauschvorgängen), "
              f"Umschlag (Verkäufe / mittlerer Wert) {umschlag:.0%} p.a.; verworfene Orders: {dict(verworfen) or 'keine'}."]
 
     # Positionen je Stichtag: Anzahl, Median-Ersatz, Käufe/Verkäufe
