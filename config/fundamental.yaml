@@ -40,9 +40,21 @@ schattenportfolio:
 filter:
   piotroski_min: 4                     # F-Score <= 3 wird ausgeschlossen
   altman:
-    industrie: original_1968           # Z < 1,81 Gefahrenzone (wissen/04, Abschnitt 8)
-    uebrige: z_zwei_strich             # Z'' für Nicht-Industrieunternehmen
+    # Entscheidung 03.11.2026: Original 1968 für das verarbeitende Gewerbe (SIC 2000–3999), X4 mit Marktwert point-in-time;
+    # Z'' (Buchwert) für alle übrigen. Finanzwerte sind ohnehin ausgeschlossen.
+    industrie_sic: [2000, 3999]
+    industrie: original_1968           # Gefahrenzone Z < 1,81, sicher Z > 2,99 (wissen/04, Abschnitt 8)
+    uebrige: z_zwei_strich             # Gefahrenzone Z'' < 1,10, sicher Z'' > 2,60 (Altman 2000)
   beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
+
+kennzahlen_regeln:
+  aktualitaet_monate: 15               # letztes Geschäftsjahr höchstens 15 Monate vor dem Stichtag, sonst nicht bewertbar
+
+multiples:
+  # Entscheidung 03.11.2026: Vergleichsgruppe zweistellige SIC (Major Group) mit mindestens 5 Firmen, sonst SIC-Division.
+  # Multiples als Perzentil-Rang innerhalb der Gruppe; Ausreißer vorher auf 1./99. Perzentil gekappt; negativer EV markiert.
+  gruppe_min_firmen: 5
+  kappung_perzentile: [0.01, 0.99]
 
 backtest:
   # Regel (Jakob 03.11.2026): Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden
@@ -147,7 +159,7 @@ kennzahlen:
   forderungen:
     art: stichtag
     einheit: USD
-    konzepte: [us-gaap:AccountsReceivableNetCurrent]
+    konzepte: [us-gaap:AccountsReceivableNetCurrent, us-gaap:ReceivablesNetCurrent]
   sachanlagen_netto:
     art: stichtag
     einheit: USD
@@ -162,6 +174,35 @@ kennzahlen:
     einheit: USD
     konzepte: [us-gaap:MarketableSecuritiesCurrent, us-gaap:AvailableForSaleSecuritiesDebtSecuritiesCurrent,
                us-gaap:ShortTermInvestments]
+  ergebnis_vor_steuern:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest,
+               us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments]
+  vertriebskosten:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:SellingAndMarketingExpense]
+  verwaltungskosten:
+    art: dauer
+    einheit: USD
+    konzepte: [us-gaap:GeneralAndAdministrativeExpense]
+  kurzfristige_finanzschulden:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:DebtCurrent]
+  langfristige_schulden_kurzfristiger_teil:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:LongTermDebtCurrent]
+  kurzfristige_kredite:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:ShortTermBorrowings, us-gaap:CommercialPaper]
+  eigenkapital_inkl_minderheiten:
+    art: stichtag
+    einheit: USD
+    konzepte: [us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest, us-gaap:StockholdersEquity]
   aktien_ausstehend:
     art: letzter
     einheit: shares
