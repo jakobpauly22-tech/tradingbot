@@ -1,0 +1,173 @@
+"""Journal des Paper Tradings je Buch (SQLite im Betriebsbereich, Entscheidungen Jakob 02.11.2026).
+
+Inhalt: Bücher (Startkapital, Messbeginn = Tag der ersten Freigabe), Vorschläge mit Investment-These und Urteil des
+Risk-Managers, Freigabe- und Sendestatus, Ausführungen (aus IBKR über orderRef „<Buch>:<Vorschlag-ID>“), Dividenden,
+Ereignisse (Datenprüfung, Abgleich, „hätte gesperrt“, Sicherung) und Strategiezustände (JSON).
+Bestand und Kasse je Buch werden aus Ausführungen und Dividenden berechnet, nie aus dem Kontostand: Das Paper-Konto
+enthält mehrere Bücher und viel Fantasiekapital. Kontonummern nur gekürzt („DUR3…“).
+
+Status eines Vorschlags: vorgeschlagen → freigegeben → gesendet → ausgefuehrt | verfallen; oder veto / abgelaufen.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS buecher (buch TEXT PRIMARY KEY, startkapital REAL NOT NULL, messbeginn TEXT);
+CREATE TABLE IF NOT EXISTS vorschlaege (
+    id TEXT PRIMARY KEY, erstellt TEXT NOT NULL, signaltag TEXT NOT NULL, buch TEXT NOT NULL, ticker TEXT NOT NULL,
+    art TEXT NOT NULL, waehrung TEXT NOT NULL, richtung INTEGER NOT NULL, stueck INTEGER NOT NULL, limit_preis REAL,
+    letzter_kurs_eur REAL NOT NULL, stop REAL, these TEXT, frei INTEGER NOT NULL, gruende TEXT, hinweise TEXT,
+    status TEXT NOT NULL, freigabe_bis TEXT NOT NULL, order_id TEXT, aktualisiert TEXT);
+CREATE TABLE IF NOT EXISTS ausfuehrungen (
+    exec_id TEXT PRIMARY KEY, order_ref TEXT NOT NULL, buch TEXT NOT NULL, ticker TEXT NOT NULL, richtung INTEGER NOT NULL,
+    stueck REAL NOT NULL, preis_eur REAL NOT NULL, gebuehr_eur REAL NOT NULL, zeit TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS dividenden (buch TEXT, ticker TEXT, ex_tag TEXT, stueck REAL, betrag_eur REAL, PRIMARY KEY (buch, ticker, ex_tag));
+CREATE TABLE IF NOT EXISTS ereignisse (zeit TEXT NOT NULL, art TEXT NOT NULL, buch TEXT, text TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS zustand (buch TEXT PRIMARY KEY, json TEXT NOT NULL, aktualisiert TEXT NOT NULL);
+"""
+
+
+def konto_kurz(konto_id: str) -> str:
+    return f"{konto_id[:4]}…" if konto_id else ""
+
+
+class Journal:
+    def __init__(self, datei: Path):
+        self.datei = Path(datei)
+        self.datei.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(self.datei)
+        self.db.row_factory = sqlite3.Row
+        self.db.executescript(SCHEMA)
+        self.db.commit()
+
+    def schliessen(self):
+        self.db.close()
+
+    # --- Bücher --------------------------------------------------------------------------------------------
+    def buch_anlegen(self, buch: str, startkapital: float):
+        self.db.execute("INSERT OR IGNORE INTO buecher (buch, startkapital) VALUES (?, ?)", (buch, startkapital))
+        self.db.commit()
+
+    def messbeginn(self, buch: str) -> str | None:
+        z = self.db.execute("SELECT messbeginn FROM buecher WHERE buch=?", (buch,)).fetchone()
+        return z["messbeginn"] if z else None
+
+    def startkapital(self, buch: str) -> float:
+        return float(self.db.execute("SELECT startkapital FROM buecher WHERE buch=?", (buch,)).fetchone()["startkapital"])
+
+    # --- Bestand und Kasse ---------------------------------------------------------------------------------
+    def bestand(self, buch: str) -> dict[str, float]:
+        zeilen = self.db.execute("SELECT ticker, SUM(richtung * stueck) AS s FROM ausfuehrungen WHERE buch=? GROUP BY ticker", (buch,))
+        return {z["ticker"]: z["s"] for z in zeilen if abs(z["s"]) > 1e-9}
+
+    def kasse(self, buch: str) -> float:
+        handel = self.db.execute("SELECT COALESCE(SUM(-richtung * stueck * preis_eur - gebuehr_eur), 0) AS k FROM ausfuehrungen WHERE buch=?",
+                                 (buch,)).fetchone()["k"]
+        div = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
+        return self.startkapital(buch) + handel + div
+
+    # --- Vorschläge ----------------------------------------------------------------------------------------
+    def vorschlag_speichern(self, v, urteil, *, waehrung: str, freigabe_bis: str, limit_order: float | None = None,
+                            jetzt: datetime | None = None):
+        """Speichert Vorschlag und Urteil; `limit_order` = Limit in der Handelswährung (sonst das EUR-Limit)."""
+        jetzt = (jetzt or datetime.now()).isoformat(timespec="seconds")
+        status = "vorgeschlagen" if urteil.frei else "veto"
+        self.db.execute(
+            "INSERT OR REPLACE INTO vorschlaege VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (v.id, jetzt, str(v.datum.date()), v.buch, v.ticker, v.art, waehrung, v.richtung, v.stueck,
+             limit_order if limit_order is not None else v.limit, v.letzter_kurs,
+             v.stop, v.these, int(urteil.frei), json.dumps(urteil.gruende, ensure_ascii=False), json.dumps(urteil.hinweise, ensure_ascii=False),
+             status, freigabe_bis, None, jetzt))
+        for hinweis in urteil.hinweise:
+            if hinweis.startswith("hätte gesperrt"):
+                self.ereignis("haette_gesperrt", hinweis, v.buch)
+        self.db.commit()
+
+    def vorschlaege(self, *, status: tuple[str, ...] | None = None, buch: str | None = None) -> list[sqlite3.Row]:
+        sql, par = "SELECT * FROM vorschlaege WHERE 1=1", []
+        if status:
+            sql += f" AND status IN ({','.join('?' * len(status))})"
+            par += list(status)
+        if buch:
+            sql += " AND buch=?"
+            par.append(buch)
+        return self.db.execute(sql + " ORDER BY buch, richtung, ticker", par).fetchall()
+
+    def status_setzen(self, vorschlag_id: str, status: str, *, order_id: str | None = None, jetzt: datetime | None = None):
+        self.db.execute("UPDATE vorschlaege SET status=?, order_id=COALESCE(?, order_id), aktualisiert=? WHERE id=?",
+                        (status, order_id, (jetzt or datetime.now()).isoformat(timespec="seconds"), vorschlag_id))
+        self.db.commit()
+
+    def freigeben(self, vorschlag_id: str, *, jetzt: datetime | None = None):
+        """Freigabe durch Jakob; setzt beim ersten Mal den Messbeginn des Buchs."""
+        jetzt = jetzt or datetime.now()
+        z = self.db.execute("SELECT buch, status, freigabe_bis FROM vorschlaege WHERE id=?", (vorschlag_id,)).fetchone()
+        if z is None or z["status"] != "vorgeschlagen":
+            raise ValueError(f"Vorschlag {vorschlag_id} ist nicht freigebbar (Status {z['status'] if z else 'unbekannt'})")
+        if jetzt.isoformat(timespec="seconds") > z["freigabe_bis"]:
+            self.status_setzen(vorschlag_id, "abgelaufen", jetzt=jetzt)
+            raise ValueError(f"Freigabefenster für {vorschlag_id} ist abgelaufen ({z['freigabe_bis']})")
+        self.status_setzen(vorschlag_id, "freigegeben", jetzt=jetzt)
+        if self.messbeginn(z["buch"]) is None:
+            self.db.execute("UPDATE buecher SET messbeginn=? WHERE buch=?", (jetzt.date().isoformat(), z["buch"]))
+            self.ereignis("messbeginn", f"Messbeginn {jetzt.date():%d.%m.%Y} (erste Freigabe)", z["buch"])
+            self.db.commit()
+
+    def gesendete_refs(self) -> set[str]:
+        return {f"{z['buch']}:{z['id']}" for z in self.db.execute("SELECT buch, id FROM vorschlaege WHERE order_id IS NOT NULL OR status IN ('gesendet','ausgefuehrt','verfallen')")}
+
+    def abgelaufene_markieren(self, jetzt: datetime):
+        self.db.execute("UPDATE vorschlaege SET status='abgelaufen', aktualisiert=? WHERE status IN ('vorgeschlagen','freigegeben') AND freigabe_bis < ?",
+                        (jetzt.isoformat(timespec="seconds"), jetzt.isoformat(timespec="seconds")))
+        self.db.commit()
+
+    # --- Ausführungen und Dividenden --------------------------------------------------------------------------
+    def ausfuehrung(self, exec_id, order_ref, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit) -> bool:
+        buch, _, vid = order_ref.partition(":")
+        neu = self.db.execute("INSERT OR IGNORE INTO ausfuehrungen VALUES (?,?,?,?,?,?,?,?,?)",
+                              (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, str(zeit))).rowcount > 0
+        if neu:
+            self.status_setzen(vid, "ausgefuehrt")
+        self.db.commit()
+        return neu
+
+    def dividende(self, buch, ticker, ex_tag, stueck, betrag_eur) -> bool:
+        neu = self.db.execute("INSERT OR IGNORE INTO dividenden VALUES (?,?,?,?,?)", (buch, ticker, str(ex_tag), stueck, betrag_eur)).rowcount > 0
+        self.db.commit()
+        return neu
+
+    # --- Ereignisse und Zustände ----------------------------------------------------------------------------
+    def ereignis(self, art: str, text: str, buch: str | None = None, *, jetzt: datetime | None = None):
+        self.db.execute("INSERT INTO ereignisse VALUES (?,?,?,?)", ((jetzt or datetime.now()).isoformat(timespec="seconds"), art, buch, text))
+        self.db.commit()
+
+    def zustand(self, buch: str) -> dict:
+        z = self.db.execute("SELECT json FROM zustand WHERE buch=?", (buch,)).fetchone()
+        return json.loads(z["json"]) if z else {}
+
+    def zustand_speichern(self, buch: str, daten: dict):
+        self.db.execute("INSERT OR REPLACE INTO zustand VALUES (?,?,?)", (buch, json.dumps(daten, ensure_ascii=False, default=str),
+                                                                          datetime.now().isoformat(timespec="seconds")))
+        self.db.commit()
+
+    # --- Sicherung ----------------------------------------------------------------------------------------------
+    def sichern(self, ziel_ordner: str | None, *, jetzt: datetime | None = None) -> Path | None:
+        """Kopie außerhalb des Repos (JOURNAL_BACKUP_DIR); konsistent über die SQLite-Backup-Schnittstelle."""
+        ziel_ordner = ziel_ordner if ziel_ordner is not None else os.getenv("JOURNAL_BACKUP_DIR")
+        if not ziel_ordner:
+            self.ereignis("sicherung", "JOURNAL_BACKUP_DIR nicht gesetzt – keine Sicherung")
+            return None
+        ordner = Path(ziel_ordner)
+        ordner.mkdir(parents=True, exist_ok=True)
+        ziel = ordner / f"{self.datei.stem}_{(jetzt or datetime.now()):%Y-%m-%d_%H%M%S}.sqlite"
+        kopie = sqlite3.connect(ziel)
+        with kopie:
+            self.db.backup(kopie)
+        kopie.close()
+        self.ereignis("sicherung", f"Kopie nach {ziel.name}")
+        return ziel
