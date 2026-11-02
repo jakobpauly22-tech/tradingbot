@@ -9,11 +9,18 @@ Regeln (Jakob, 01.11.2026):
 Technik: Jeder Zugriff auf Daten ab dem Sperrdatum braucht eine `TresorFreigabe`. Eine Freigabe entsteht
 nur über `oeffne_tresor`, das sie im Protokoll (docs/TRESOR_PROTOKOLL.md, in Git) einträgt. Eine zweite
 Öffnung für dieselbe Phase wird verweigert.
+
+Zentrale Datumsgrenze (Jakob, 03.11.2026): Alle Datenlader (Kurse mit Dividenden und Splits, Tiingo, FRED,
+SEC-Fundamentaldaten) liefern nur Daten bis `datengrenze()` (Tag vor dem Sperrdatum, heute 31.12.2024). Aufgehoben
+wird die Grenze nur innerhalb von `with tresor_geoeffnet(freigabe):` mit einer im Protokoll eingetragenen Freigabe.
 """
 from __future__ import annotations
 
 import subprocess
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import date, datetime
 from pathlib import Path
 
@@ -88,6 +95,44 @@ def oeffne_tresor(phase: str, begruendung: str, *, konfig: dict | None = None, j
     with protokoll.open("a", encoding="utf-8") as datei:
         datei.write(f"| {zeitpunkt} | {phase} | {begruendung} | {_git_commit()} |\n")
     return TresorFreigabe(phase, begruendung)
+
+
+_AKTIVE_FREIGABE: ContextVar["TresorFreigabe | None"] = ContextVar("tresor_freigabe", default=None)
+
+
+@lru_cache(maxsize=1)
+def _standard_sperre() -> tuple[date, Path]:
+    return _einstellungen(None)
+
+
+def datengrenze(konfig: dict | None = None) -> pd.Timestamp | None:
+    """Letzter Tag, bis zu dem Datenlader Daten liefern dürfen; None nur bei gültiger, aktiver Tresor-Öffnung."""
+    gesperrt_ab, _ = _einstellungen(konfig) if konfig is not None else _standard_sperre()
+    if _AKTIVE_FREIGABE.get() is not None:      # nur über tresor_geoeffnet() gesetzt, dort gegen das Protokoll geprüft
+        return None
+    return pd.Timestamp(gesperrt_ab) - pd.Timedelta(days=1)
+
+
+@contextmanager
+def tresor_geoeffnet(freigabe: "TresorFreigabe", *, konfig: dict | None = None):
+    """Hebt die Datumsgrenze für diesen Block auf; nur mit einer im Tresor-Protokoll eingetragenen Freigabe."""
+    _, protokoll = _einstellungen(konfig)
+    if freigabe is None or freigabe.phase not in geoeffnete_phasen(protokoll):
+        raise TresorGesperrt("Datumsgrenze aufheben nur mit einer Freigabe aus oeffne_tresor() (Tresor-Protokoll)")
+    token = _AKTIVE_FREIGABE.set(freigabe)
+    try:
+        yield
+    finally:
+        _AKTIVE_FREIGABE.reset(token)
+
+
+def begrenze(daten, spalte: str | None = None, konfig: dict | None = None):
+    """Entfernt Zeilen nach der Datumsgrenze (Index oder Datumsspalte `spalte`)."""
+    grenze = datengrenze(konfig)
+    if grenze is None or daten is None or len(daten) == 0:
+        return daten
+    datum = daten.index if spalte is None else daten[spalte]
+    return daten[pd.to_datetime(datum) <= grenze]
 
 
 def pruefe_zeitraum(ende, *, freigabe: TresorFreigabe | None = None, konfig: dict | None = None) -> None:

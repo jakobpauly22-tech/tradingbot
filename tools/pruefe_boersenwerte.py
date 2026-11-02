@@ -14,6 +14,8 @@ import warnings
 
 import pandas as pd
 
+from tradingbot.backtest.tresor import begrenze
+
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
 from tradingbot.daten.index_nachbau import aktien_splitbereinigt
@@ -31,6 +33,7 @@ def kurse_aus_cache(quelle: str, symbol: str, cache, tiingo) -> pd.DataFrame | N
     """Kurse nur aus dem Cache (kein Netzabruf)."""
     if quelle == "yfinance":
         k, _ = cache.lesen("kurse", symbol)
+        k = begrenze(k)                     # Tresor: nur bis zur Datumsgrenze
         return k
     return tiingo.historie(symbol)
 

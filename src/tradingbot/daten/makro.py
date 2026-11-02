@@ -209,12 +209,18 @@ def lade_makro_tabelle(
 
 def makro_am_stichtag(serie: str, stichtag, **kwargs) -> pd.Series:
     """Für Backtests: die Serie mit dem Wissensstand des Stichtags (kein Look-ahead)."""
-    werte = stand_am(lade_makro_tabelle(serie, **kwargs), stichtag)
+    from tradingbot.backtest.tresor import begrenze
+
+    werte = begrenze(stand_am(lade_makro_tabelle(serie, **kwargs), stichtag))   # Tresor: nur bis zur Datumsgrenze
     werte.name = serie
     return werte
 
 
 def lade_makro(serie: str, start=None, ende=None, **kwargs) -> pd.Series:
     """Aktueller Datenstand einer Serie, optional auf [start, ende] begrenzt."""
-    werte = makro_am_stichtag(serie, date.today(), **kwargs)
+    from tradingbot.backtest.tresor import begrenze, datengrenze
+
+    grenze = datengrenze()
+    stichtag = date.today() if grenze is None else min(date.today(), grenze.date())   # Tresor: Wissensstand höchstens bis zur Grenze
+    werte = begrenze(makro_am_stichtag(serie, stichtag, **kwargs))
     return werte.loc[pd.Timestamp(start) if start else None : pd.Timestamp(ende) if ende else None]

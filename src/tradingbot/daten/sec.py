@@ -181,7 +181,9 @@ def fakten_tabelle(companyfacts: dict) -> pd.DataFrame:
     for spalte in ("start", "ende", "filed"):
         tabelle[spalte] = pd.to_datetime(tabelle[spalte])
     tabelle["wert"] = pd.to_numeric(tabelle["wert"], errors="coerce")
-    return tabelle
+    from tradingbot.backtest.tresor import begrenze
+
+    return begrenze(tabelle, "filed")            # Tresor: nur Einreichungen bis zur Datumsgrenze
 
 
 def verfuegbar_ab(filed: pd.Series) -> pd.Series:
@@ -229,7 +231,10 @@ def kennzahl_jahreswerte(erst: pd.DataFrame, definition: dict, stichtag, jahresd
     Kandidat in `konzepte`, der einen Wert hat (Unternehmen wechseln über die Jahre die Begriffe).
     Ergebnis: Index = Geschäftsjahresende, Spalten wert, konzept, filed.
     """
+    from tradingbot.backtest.tresor import begrenze
+
     stichtag = pd.Timestamp(stichtag)
+    erst = begrenze(erst, "filed")               # Tresor: auch Erstmeldungen aus dem Cache nur bis zur Datumsgrenze
     bekannt = erst[(erst["verfuegbar_ab"] <= stichtag) & (erst["einheit"] == definition["einheit"])]
     art = definition["art"]
     enden = geschaeftsjahresenden(erst, stichtag, jahresdauer) if art == "stichtag" else None

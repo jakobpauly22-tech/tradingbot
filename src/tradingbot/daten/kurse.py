@@ -173,7 +173,9 @@ def lade_kurse(
                 "abgerufen_um": abgerufen_um,
             },
         )
-    auswahl = daten.loc[pd.Timestamp(start) : pd.Timestamp(ende)].copy()
+    from tradingbot.backtest.tresor import begrenze
+
+    auswahl = begrenze(daten.loc[pd.Timestamp(start) : pd.Timestamp(ende)]).copy()   # Tresor: nur bis zur Datumsgrenze
     auswahl = _mit_attrs(auswahl, ticker, waehrung)
     auswahl.attrs["abgerufen_um"] = abgerufen_um  # Datenstand, für die Ablage je Backtest-Lauf
     return auswahl

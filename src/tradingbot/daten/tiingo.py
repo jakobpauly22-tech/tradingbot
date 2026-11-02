@@ -90,14 +90,14 @@ class TiingoClient:
             alter = datetime.now(timezone.utc) - datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc)
             if max_alter is None or alter < max_alter:
                 with gzip.open(datei, "rt", encoding="utf-8") as f:
-                    return normalisieren(json.load(f))
+                    return _begrenzt(normalisieren(json.load(f)))
         roh = self._holen(f"{TIINGO_API}/{ticker.lower()}/prices", {"startDate": "1990-01-01", "resampleFreq": "daily"})
         datei.parent.mkdir(parents=True, exist_ok=True)
         temporaer = datei.with_suffix(".tmp")
         with gzip.open(temporaer, "wt", encoding="utf-8") as f:
             json.dump(roh, f)
         os.replace(temporaer, datei)
-        return normalisieren(roh)
+        return _begrenzt(normalisieren(roh))
 
 
     def metadaten(self, ticker: str, *, max_alter: timedelta = timedelta(days=30)) -> dict:
@@ -111,6 +111,13 @@ class TiingoClient:
         datei.parent.mkdir(parents=True, exist_ok=True)
         datei.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return meta
+
+
+def _begrenzt(kurse: pd.DataFrame) -> pd.DataFrame:
+    """Tresor: nur Kurse bis zur zentralen Datumsgrenze (backtest/tresor.py)."""
+    from tradingbot.backtest.tresor import begrenze
+
+    return begrenze(kurse)
 
 
 def normalisieren(roh: list[dict]) -> pd.DataFrame:

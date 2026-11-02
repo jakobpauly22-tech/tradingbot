@@ -38,6 +38,9 @@ def jahreswerte_firma(erst: pd.DataFrame, definitionen: dict) -> pd.DataFrame:
     vorrangige Begriff. So zählt z.B. bei Walmart das Ergebnis vor Steuern 2019 aus dem 10-K vom März 2020, auch wenn ein
     vorrangiger Begriff erst im 10-K von 2022 auftaucht.
     """
+    from tradingbot.backtest.tresor import begrenze
+
+    erst = begrenze(erst, "filed")               # Tresor: nur Einreichungen bis zur Datumsgrenze
     zeilen = []
     for name, d in definitionen.items():
         if d["art"] == "letzter" or erst is None or len(erst) == 0:

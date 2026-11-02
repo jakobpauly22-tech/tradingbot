@@ -10,6 +10,8 @@ import warnings
 
 import pandas as pd
 
+from tradingbot.backtest.tresor import begrenze
+
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma
@@ -105,6 +107,7 @@ def main() -> int:
             mw, mw_text = None, ""
             if industrie:
                 kurse, _ = cache.lesen("kurse", fall["symbol"])
+                kurse = begrenze(kurse)                     # Tresor: nur bis zur Datumsgrenze
                 a = kennzahl_jahreswerte(erst, K["aktien_ausstehend"], fall["stichtag"])
                 from tradingbot.daten.index_nachbau import aktien_splitbereinigt
                 aktien = aktien_splitbereinigt(a["wert"], kurse["split"])

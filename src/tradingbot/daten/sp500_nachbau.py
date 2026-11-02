@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from tradingbot.backtest.tresor import begrenze
+
 from tradingbot.daten.abdeckung import STREUBESITZ
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
@@ -69,6 +71,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
         fehler = None
         try:
             k = cache.lesen("kurse", s["symbol"])[0] if s["quelle"] == "yfinance" else tiingo.historie(s["symbol"])
+            k = begrenze(k)                                   # Tresor: Cache-Kurse nur bis zur Datumsgrenze
             if k is None or k.empty:
                 raise LookupError("Kurse nicht im Cache")
             k = k.sort_index().loc[pd.Timestamp(von):bis]
