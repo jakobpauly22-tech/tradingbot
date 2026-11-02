@@ -76,6 +76,21 @@ def nicht_kaufbar_je_stichtag(mitglieder_fn, gueltig: pd.Series, gewicht_fn, fin
     return pd.DataFrame(zeilen)
 
 
+def gewerteter_beginn(tabelle: pd.DataFrame, schwelle: float = SCHWELLE_GEWICHT) -> pd.Timestamp | None:
+    """Regel (Jakob 03.11.2026): erster Rebalancing-Stichtag, ab dem alle folgenden Stichtage unter `schwelle` nicht
+    kaufbarem Gewicht im investierbaren Universum liegen. Ergebnis ist der Quartalsbeginn dieses Stichtags.
+
+    `tabelle`: Ergebnis von nicht_kaufbar_je_stichtag (Spalten stichtag, gewicht_investierbar_ohne_kurse).
+    Liegt schon der letzte Stichtag über der Schwelle, gibt es keinen Beginn (None).
+    """
+    t = tabelle.sort_values("stichtag").reset_index(drop=True)
+    ueber = t.index[t["gewicht_investierbar_ohne_kurse"] > schwelle]
+    erster = 0 if len(ueber) == 0 else ueber.max() + 1
+    if erster >= len(t):
+        return None
+    return pd.Timestamp(t.loc[erster, "stichtag"]).to_period("Q").start_time
+
+
 def _anteil(gewicht: pd.Series, maske: pd.Series) -> float:
     gesamt = gewicht.sum(skipna=True)
     return float(gewicht[maske].sum(skipna=True) / gesamt) if gesamt > 0 else float("nan")

@@ -14,8 +14,8 @@ import warnings
 
 import pandas as pd
 
-from tradingbot.daten.abdeckung import (SCHWELLE_GEWICHT, STREUBESITZ, STREUBESITZ_MAX, STREUBESITZ_MIN, nicht_kaufbar_je_stichtag,
-                                         rebalancing_stichtage, rueckfall_faelle, streubesitz_am)
+from tradingbot.daten.abdeckung import (SCHWELLE_GEWICHT, STREUBESITZ, STREUBESITZ_MAX, STREUBESITZ_MIN, gewerteter_beginn,
+                                         nicht_kaufbar_je_stichtag, rebalancing_stichtage, rueckfall_faelle, streubesitz_am)
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.delisting import delisting_grund_mit_korrektur, einreichungen
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
@@ -135,7 +135,17 @@ def main(argumente) -> None:
         markierung = " ⚠" if z["ueber_schwelle"] else ""
         zeilen.append(f"| {z['stichtag']} | {z['firmen']} | {z['ohne_gueltige_kurse']} ({z['gattungen_ohne_gueltige_kurse']}) | {z['gewicht_ohne_kurse']:.2%} | "
                       f"{z['investierbar']} | {z['investierbar_ohne_kurse']} | {z['gewicht_investierbar_ohne_kurse']:.2%}{markierung} | {z['ohne_streubesitzwert']} |")
+    beginn = gewerteter_beginn(tabelle)
+    in_konfig = pd.Timestamp(str(lade_konfiguration("fundamental")["backtest"]["gewertet_ab"]))
+    passt = beginn == in_konfig
+    if not args.stichtage and not passt:
+        rahmen = "!" * 80
+        print(f"\n{rahmen}\nACHTUNG: Die 2-%-Regel ergibt jetzt als gewerteten Beginn {beginn.date() if beginn is not None else 'keinen'}, "
+              f"in config/fundamental.yaml steht {in_konfig.date()}. Nicht still übernehmen – mit Jakob besprechen.\n{rahmen}", file=sys.stderr)
     zeilen += ["", f"Schwelle {SCHWELLE_GEWICHT:.0%} im investierbaren Universum überschritten an {len(ueber)} von {len(tabelle)} Stichtagen.", "",
+               f"**Gewerteter Beginn nach der Regel** (erster Stichtag, ab dem alle folgenden unter 2 % liegen): "
+               f"{beginn.date() if beginn is not None else 'keiner'}; in config/fundamental.yaml: {in_konfig.date()} "
+               f"({'stimmt überein' if passt else 'ABWEICHUNG – mit Jakob besprechen'}).", "",
                "## 2. Rückfall-Regel (gültige Reihe endet mit dem Delisting)", "", _markdown(rueckfall), ""]
     (ziel / "auswertung_abdeckung.md").write_text("\n".join(zeilen), encoding="utf-8")
     print("\n".join(zeilen))

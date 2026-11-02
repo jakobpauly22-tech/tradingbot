@@ -69,3 +69,27 @@ def test_streubesitz_unplausible_werte_werden_verworfen():
     assert streubesitz_am(reihe, "2021-02-01") == 2.0e10          # am Einreichungstag noch nicht bekannt
     assert streubesitz_am(reihe, "2021-02-02") == 2.4e10
     assert streubesitz_am(reihe, "2017-01-01") is None and streubesitz_am(pd.DataFrame(), "2020-01-01") is None
+
+
+def test_gewerteter_beginn_nach_der_2_prozent_regel():
+    from tradingbot.daten.abdeckung import gewerteter_beginn
+
+    def tab(werte):
+        tage = ["2016-01-04", "2016-04-01", "2016-07-01", "2016-10-03", "2017-01-02", "2017-04-03"]
+        return pd.DataFrame({"stichtag": pd.to_datetime(tage[: len(werte)]).date, "gewicht_investierbar_ohne_kurse": werte})
+
+    # heutige Lage: 2016-04 und 2016-07 über 2 % → Beginn mit dem Stichtag 03.10.2016 = Quartalsbeginn 01.10.2016
+    assert gewerteter_beginn(tab([0.036, 0.0268, 0.0228, 0.0183, 0.0168, 0.0127])) == pd.Timestamp("2016-10-01")
+    # ein späterer Ausreißer über 2 % verschiebt den Beginn hinter ihn (alle FOLGENDEN müssen unter 2 % liegen)
+    assert gewerteter_beginn(tab([0.01, 0.01, 0.01, 0.01, 0.025, 0.01])) == pd.Timestamp("2017-04-01")
+    assert gewerteter_beginn(tab([0.01, 0.01, 0.01])) == pd.Timestamp("2016-01-01")
+    assert gewerteter_beginn(tab([0.01, 0.01, 0.03])) is None                  # letzter Stichtag über 2 %: kein Beginn
+    assert gewerteter_beginn(tab([0.02, 0.02])) == pd.Timestamp("2016-01-01")  # genau 2 % ist nicht „über“
+
+
+def test_abnahmezeitraum_kommt_aus_der_konfiguration():
+    from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM
+    from tradingbot.konfiguration import lade_konfiguration
+
+    b = lade_konfiguration("fundamental")["backtest"]
+    assert ABNAHME_ZEITRAUM == (str(b["gewertet_ab"]), str(b["gewertet_bis"])) == ("2016-10-01", "2024-12-31")

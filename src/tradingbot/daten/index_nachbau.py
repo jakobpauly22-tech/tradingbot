@@ -154,7 +154,15 @@ ABNAHME_KORRELATION_MIN = 0.99          # Korrelation der Tagesrenditen
 ABNAHME_JAHRESABWEICHUNG_MAX = 0.01     # Abweichung der Jahresrenditen je Kalenderjahr (1 Prozentpunkt)
 ABNAHME_ANNUALISIERT_MAX = 0.005        # Abweichung der annualisierten Rendite im Abnahmezeitraum (0,5 Prozentpunkte)
 # Zeitraum = gewerteter Backtest (Entscheidung Jakob 03.11.2026); die Kriterien selbst sind unverändert.
-ABNAHME_ZEITRAUM = ("2016-04-01", "2024-12-31")
+def _gewerteter_zeitraum() -> tuple[str, str]:
+    """Zeitraum aus config/fundamental.yaml (backtest.gewertet_ab/-bis), Ergebnis der 2-%-Regel."""
+    from tradingbot.konfiguration import lade_konfiguration
+
+    b = lade_konfiguration("fundamental")["backtest"]
+    return str(b["gewertet_ab"]), str(b["gewertet_bis"])
+
+
+ABNAHME_ZEITRAUM = _gewerteter_zeitraum()
 
 
 def abnahme_gegenprobe(nachbau: pd.Series, referenz: pd.Series, zeitraum=ABNAHME_ZEITRAUM) -> dict:

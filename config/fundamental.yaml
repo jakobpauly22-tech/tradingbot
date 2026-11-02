@@ -45,11 +45,14 @@ filter:
   beneish_max: -1.78                   # M > −1,78 gilt als Manipulationsverdacht (Beneish 1999)
 
 backtest:
-  # Entscheidung 03.11.2026: gewerteter Backtest ab 01.04.2016 bis 31.12.2024 (ab April 2016 liegt das Gewicht der
-  # nicht kaufbaren Firmen an jedem Stichtag unter 2 %). 2012 bis März 2016 läuft als nicht gewerteter Vorlauf für
-  # Indikatoren mit. WRDS/CRSP entfällt: nur für akademische, nicht-kommerzielle Forschung lizenziert.
+  # Regel (Jakob 03.11.2026): Der gewertete Backtest beginnt am ersten Rebalancing-Stichtag, ab dem alle folgenden
+  # Stichtage unter 2 % nicht kaufbarem Gewicht im investierbaren Universum liegen (Quartalsbeginn des Stichtags).
+  # Berechnet von tools/auswertung_abdeckung.py (abdeckung.gewerteter_beginn); weicht das Ergebnis bei neuen Daten von
+  # `gewertet_ab` ab, meldet das Werkzeug das laut – das Datum wird nie still verschoben, Jakob entscheidet.
+  # Davor läuft ab `vorlauf_ab` ein nicht gewerteter Vorlauf für Indikatoren. WRDS/CRSP entfällt (nur akademische Nutzung).
   vorlauf_ab: 2012-01-01
-  gewertet_ab: 2016-04-01
+  gewertet_ab_regel: erster_stichtag_ab_dem_alle_unter_2_prozent
+  gewertet_ab: 2016-10-01               # Ergebnis der Regel am 03.11.2026 (erster Handelstag des Quartals: 03.10.2016)
   gewertet_bis: 2024-12-31              # Tresor ab 2025 bleibt zu
 
 score:

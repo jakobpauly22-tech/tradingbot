@@ -8,7 +8,7 @@ verfehlt: Ursachen suchen und mit Jakob besprechen, nicht weiter anpassen. Aufba
 
 Läufe: 1 nicht bestanden (Programmierfehler, Garmin-Datenfehler); 2 bestanden mit Streubesitz-Obergrenze 105 %;
 3 (03.11.2026) mit Obergrenze 130 % (Jakob: Streubesitz Ende Q2 und Aktienzahl zum Deckblattdatum haben verschiedene
-Stichtage, dazwischen Rückkäufe und Kursbewegungen).
+Stichtage, dazwischen Rückkäufe und Kursbewegungen); 4 (03.11.2026) für den Zeitraum nach der 2-%-Regel ab 01.10.2016.
 """
 import sys
 import warnings
@@ -23,7 +23,9 @@ from tradingbot.daten.universum import lade_sic_historien, lade_universum
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
-LAUF, VORHERIGER = 3, 2
+LAUF, VORHERIGER = 4, 3
+AENDERUNG = ("Zeitraum nach der Regel für den gewerteten Beginn (erster Stichtag, ab dem alle folgenden unter 2 % nicht kaufbarem "
+             "Gewicht liegen): 01.10.2016 statt 01.04.2016. Nachbau, Daten und Kriterien unverändert, keine Anpassung (Jakob 03.11.2026).")
 
 
 def main() -> int:
@@ -44,9 +46,8 @@ def main() -> int:
     abn = nachbau["abdeckung"].loc[ABNAHME_ZEITRAUM[0]:]
     k = ergebnis["kriterien"]
     text = [f"# Gegenprobe Index-Nachbau gegen S&P 500 Total Return – Lauf {LAUF}", "",
-            f"Vorheriger Lauf: daten/universum/gegenprobe_index_lauf{VORHERIGER}.md (bestanden mit Streubesitz-Obergrenze 105 %). "
-            f"Änderung in Lauf {LAUF}: Obergrenze {STREUBESITZ_ANTEIL_MAX:.0%} des Börsenwerts (Entscheidung Jakob 03.11.2026; "
-            "Streubesitz Ende Q2 und Aktienzahl zum Deckblattdatum haben verschiedene Stichtage, dazwischen Rückkäufe und Kursbewegungen).", "",
+            f"Vorheriger Lauf: daten/universum/gegenprobe_index_lauf{VORHERIGER}.md. Änderung in Lauf {LAUF}: {AENDERUNG} "
+            f"Streubesitz-Obergrenze {STREUBESITZ_ANTEIL_MAX:.0%} des Börsenwerts.", "",
             f"Zeitraum {ergebnis['zeitraum'][0]} bis {ergebnis['zeitraum'][1]}, {ergebnis['tage']} gemeinsame Handelstage. "
             f"Abdeckung der Mitglieder mit Rendite und Gewicht im Abnahmezeitraum: Median {abn.median():.1%}, Minimum {abn.min():.1%}; "
             f"je Jahr (Median): {abn.groupby(abn.index.year).median().round(3).to_dict()}.", "",
@@ -57,7 +58,7 @@ def main() -> int:
             f"| Abweichung annualisierte Rendite | {k['annualisiert_abweichung']['wert']*100:+.2f} Pp. | ≤ 0,5 Pp. | {'ja' if k['annualisiert_abweichung']['bestanden'] else 'NEIN'} |",
             "", f"**Gesamt: {'bestanden' if ergebnis['bestanden'] else 'NICHT bestanden – nicht weiter anpassen, mit Jakob besprechen'}**", "",
             "| Jahr | Nachbau | S&P 500 TR | Abweichung |", "| --- | --- | --- | --- |"]
-    text += [f"| {j}{' (ab 01.04.)' if j == 2016 else ''} | {r.nachbau:.2%} | {r.referenz:.2%} | {r.abweichung*100:+.2f} Pp. |" for j, r in ergebnis["jahre"].iterrows()]
+    text += [f"| {j}{' (ab ' + pd.Timestamp(ABNAHME_ZEITRAUM[0]).strftime('%d.%m.') + ')' if j == pd.Timestamp(ABNAHME_ZEITRAUM[0]).year else ''} | {r.nachbau:.2%} | {r.referenz:.2%} | {r.abweichung*100:+.2f} Pp. |" for j, r in ergebnis["jahre"].iterrows()]
     (ziel / "gegenprobe_index.md").write_text("\n".join(text), encoding="utf-8")
     print("\n".join(text))
     return 0
