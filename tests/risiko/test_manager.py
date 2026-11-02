@@ -92,13 +92,31 @@ def test_fundamental_veto_nur_einzelaktien_beneish_nur_hinweis(rm):
     assert rm.pruefe(kauf(), real(fundamental={"SPYI.DE": ["Piotroski 2 ≤ 3"]})).frei      # ruht bei ETFs
 
 
-def test_satellite_limits_mit_eigenen_hoechststaenden_je_buch(rm):
-    assert any("pausiert" in g for g in rm.pruefe(sat_kauf(), sat(monatsrendite=-0.11)).gruende)
-    assert any("gestoppt" in g for g in rm.pruefe(sat_kauf(), sat(vom_hoch=-0.21)).gruende)
-    # Momentum-Buch mit eigenem Stand ist nicht betroffen
+def test_satellite_limits_in_skalierungsbuechern_nur_protokolliert(rm):
+    u = rm.pruefe(sat_kauf(), sat(monatsrendite=-0.11))
+    assert u.frei and any(x.startswith("hätte gesperrt am 02.11.2026") and "pausiert" in x for x in u.hinweise)
+    u = rm.pruefe(sat_kauf(), sat(vom_hoch=-0.21))
+    assert u.frei and any(x.startswith("hätte gesperrt am") and "gestoppt" in x for x in u.hinweise)
+    # harte Regeln gelten trotzdem in allen Büchern
+    assert any("kein Hebel" in g for g in rm.pruefe(sat_kauf(), sat(kasse=100.0, vom_hoch=-0.21)).gruende)
+
+
+def test_satellite_limits_im_realbuch_sperrend(rm, monkeypatch):
+    # Realbuch mit Satellite-Rolle (z.B. später echter Satellite): Limits sind Veto
+    rm.b = {**rm.b, "buecher": {**rm.b["buecher"], "real_sat": {"art": "real", "budget_eur": 1250.0, "rolle": "satellite",
+                                                                  "max_orders_pro_tag": 5, "freigabe": "einzeln"}}}
+    v = sat_kauf(buch="real_sat", stueck=3, letzter_kurs=80.0, limit=81.0, stop=78.0)
+    k = Kontext(buch="real_sat", kasse=1250.0, wert=1250.0, vom_hoch=-0.21)
+    u = rm.pruefe(v, k)
+    assert not u.frei and any("gestoppt" in g for g in u.gruende)
+    k2 = Kontext(buch="real_sat", kasse=1250.0, wert=1250.0, monatsrendite=-0.12)
+    assert any("pausiert" in g for g in rm.pruefe(v, k2).gruende)
+    ausstieg = sat_kauf(buch="real_sat", richtung=-1, limit=None, stop=None, stueck=3)
+    assert rm.pruefe(ausstieg, Kontext(buch="real_sat", kasse=0.0, wert=1250.0, bestand={"EUNK.DE": 3}, vom_hoch=-0.25)).frei
+
+
+def test_eigene_hoechststaende_je_buch(rm):
     assert rm.pruefe(sat_kauf(buch="momentum"), sat("momentum", vom_hoch=-0.05)).frei
-    ausstieg = sat_kauf(richtung=-1, limit=None, stop=None)
-    assert rm.pruefe(ausstieg, sat(bestand={"EUNK.DE": 30}, vom_hoch=-0.25)).frei
 
 
 def test_core_notbremse_nur_hinweis(rm):

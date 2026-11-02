@@ -14,6 +14,8 @@ bot_budget:
 # Zweck der Skalierungsbücher (vorab festgeschrieben): Signalqualität ohne Kostenverzerrung messen und prüfen, ab welchem
 # Kapital ein Satellite sinnvoll wäre. Ergebnisse der Skalierungsbücher begründen NIE echte Trades mit kleinerem Kapital.
 # Vergleich je Buch: SPYI mit gleichem Kapital, rechnerisch (Buy & Hold ab Buchstart).
+# Satellite-Limits (−10 % Monat, −20 % vom Höchststand): in Skalierungsbüchern nur protokolliert („hätte gesperrt am …“),
+# im Realbuch sperrend; alle harten Regeln (Kasse, long-only, Not-Aus, Doppel-Order, Plausibilität, Orderwert) überall (02.11.2026).
 buecher:
   real:
     art: real

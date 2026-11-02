@@ -52,6 +52,7 @@ class Auftrag:
     richtung: int
     stueck: int
     limit: float | None
+    art: str = "etf"             # etf | etc | aktie (bestimmt die Börsenkennung)
 
     @property
     def order_ref(self) -> str:

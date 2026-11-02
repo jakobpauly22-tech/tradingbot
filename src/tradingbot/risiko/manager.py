@@ -14,7 +14,9 @@ dazu Hinweise (kein Veto). Regeln (CLAUDE.md „Feste Regeln“, config/risiko.y
 6. Fundamental-Veto für Einzelaktien: Piotroski ≤ 3, Z'' mit zweitem Signal, Altman Z (Industrie); Beneish nur Hinweis;
    ruht bei ETFs (config/risiko.yaml `fundamental_veto`).
 7. Satellite-Limits je Buch (eigene Höchststände): Monat ≤ −10 % → Pause; −20 % vom Höchststand → Stopp; jeweils nur
-   Käufe gesperrt. Core-Notbremse (12 Monate > 10 Pp. hinter MSCI ACWI IMI) ist ein Review-Hinweis, kein Veto.
+   Käufe gesperrt. In den Skalierungsbüchern werden sie nur protokolliert („hätte gesperrt am …“), damit die Messung
+   der Signalqualität nicht abbricht; im Realbuch sperren sie (Entscheidung 02.11.2026). Alle übrigen Regeln gelten in
+   allen Büchern hart. Core-Notbremse (12 Monate > 10 Pp. hinter MSCI ACWI IMI) ist ein Review-Hinweis, kein Veto.
 8. Plausibilität je Buch: Orderwert ≤ Budget des Buchs; Orders je Tag ≤ Höchstzahl des Buchs (Realbuch 5,
    Skalierungsbücher 25); Kauflimit vorhanden und höchstens 2 % über dem letzten Kurs; Verkäufe ohne Limit.
 9. Doppel-Orders: Ein Vorschlag (ID) kann nur einmal gesendet werden; keine zweite Order, solange im selben Buch für
@@ -131,14 +133,18 @@ class RiskManager:
                 g.append("Kauf ohne Limit")
             elif v.limit > v.letzter_kurs * (1 + abstand) + 1e-9:
                 g.append(f"Limit {v.limit:.2f} mehr als {abstand * 100:.0f} % über dem letzten Kurs {v.letzter_kurs:.2f}")
-            self._kaufregeln(v, k, b["rolle"], g, h)
+            self._kaufregeln(v, k, b, g, h)
         elif v.limit is not None:
             g.append("Verkäufe ohne Limit (Entscheidung 02.11.2026)")
         if b["rolle"] == "core" and k.core_rueckstand_12m_pp < -10:
             h.append(f"Core-Notbremse im Buch {v.buch}: 12 Monate {k.core_rueckstand_12m_pp:.1f} Pp. hinter MSCI ACWI IMI – Review")
         return Urteil(not g, g, h)
 
-    def _kaufregeln(self, v: OrderVorschlag, k: Kontext, rolle: str, g: list, h: list):
+    def _kaufregeln(self, v: OrderVorschlag, k: Kontext, b: dict, g: list, h: list):
+        rolle = b["rolle"]
+        # Satellite-Limits: im Realbuch Veto, in Skalierungsbüchern nur Protokoll (02.11.2026)
+        limit_ziel = h if b.get("art") == "skalierung" else g
+        vorsatz = f"hätte gesperrt am {pd.Timestamp(v.datum).date():%d.%m.%Y}: " if b.get("art") == "skalierung" else ""
         nachher = (k.bestand.get(v.ticker, 0) + v.stueck) * v.letzter_kurs
         sat = self.r["positionsgroesse"]["satellite"]
         if rolle == "core":
@@ -154,9 +160,9 @@ class RiskManager:
             elif v.stueck * (v.letzter_kurs - v.stop) > float(sat["risiko_je_trade"]) * k.wert + 1e-9:
                 g.append(f"Risiko {v.stueck * (v.letzter_kurs - v.stop):.2f} € über 1 % des Buchwerts")
             if k.monatsrendite <= -0.10:
-                g.append(f"Satellite-Buch {v.buch} pausiert: Monat {k.monatsrendite:.1%} (Grenze −10 %)")
+                limit_ziel.append(f"{vorsatz}Satellite-Buch {v.buch} pausiert: Monat {k.monatsrendite:.1%} (Grenze −10 %)")
             if k.vom_hoch <= -0.20:
-                g.append(f"Satellite-Buch {v.buch} gestoppt: {k.vom_hoch:.1%} vom eigenen Höchststand (Grenze −20 %)")
+                limit_ziel.append(f"{vorsatz}Satellite-Buch {v.buch} gestoppt: {k.vom_hoch:.1%} vom eigenen Höchststand (Grenze −20 %)")
         else:
             g.append(f"unbekannte Rolle {rolle}")
         # 6. Fundamental-Veto (nur Einzelaktien)

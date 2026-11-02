@@ -90,8 +90,15 @@ def test_orderaufbau(tmp_path):
     b.sende(KAUF, set())
     b.sende(Auftrag("real", "v3", "SPYI.DE", -1, 1, None), set())
     (k1, o1), (k2, o2) = b.ib.gesendet
-    assert (k1.symbol, k1.exchange, k1.currency) == ("SPYI", "IBIS", "EUR")
+    assert (k1.symbol, k1.exchange, k1.currency) == ("SPYI", "IBIS2", "EUR")      # Xetra-ETF direkt, nicht SMART
     assert (o1.action, o1.orderType, o1.lmtPrice, o1.tif, o1.orderRef) == ("BUY", "LMT", 204.0, "DAY", "real:v1")
     assert (o2.action, o2.orderType, o2.tif, o2.orderRef) == ("SELL", "MKT", "DAY", "real:v3")
     with pytest.raises(SendenGesperrt, match="Kauf ohne Limit"):
         b.sende(Auftrag("real", "v4", "SPYI.DE", 1, 1, None), set())
+
+
+def test_kontrakte_xetra_aktie_und_us():
+    from tradingbot.broker.ibkr import kontrakt
+    assert kontrakt("SAP.DE", "aktie").exchange == "IBIS"
+    us = kontrakt("AAPL", "aktie")
+    assert (us.exchange, us.currency) == ("SMART", "USD")

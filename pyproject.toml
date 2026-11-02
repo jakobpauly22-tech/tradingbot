@@ -19,9 +19,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=9.0"]
-# Broker (Phase 2). ib_async 2.1 pinnt tzdata<2026; installiert mit --no-deps plus aeventkit und nest-asyncio,
-# damit tzdata 2026 bleibt: pip install --no-deps ib_async==2.1.0 aeventkit==2.1.0 nest-asyncio==1.6.0
-broker = ["ib_async>=2.1"]
+# Broker (Phase 2). ib_async 2.1.0 verlangt tzdata<2026; das Projekt behält tzdata 2026 (neuere Zeitzonendaten).
+# Deshalb: ib_async selbst ohne Abhängigkeiten installieren, seine übrigen Abhängigkeiten stehen hier vollständig:
+#   .venv\Scripts\python -m pip install -e ".[dev,broker]"
+#   .venv\Scripts\python -m pip install --no-deps ib_async==2.1.0
+# Abhängigkeiten von ib_async 2.1.0: aeventkit (>=2.1,<3; braucht numpy), nest_asyncio, tzdata (hier >=2025.2).
+broker = ["aeventkit>=2.1.0,<3.0.0", "nest-asyncio>=1.6.0", "numpy", "tzdata>=2025.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

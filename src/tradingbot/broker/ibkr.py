@@ -14,17 +14,22 @@ from pathlib import Path
 from tradingbot.broker.basis import Auftrag, OffeneOrder, Position, pruefe_senden, pruefe_verbindung
 
 
-def kontrakt(ticker: str):
-    """Yahoo-Ticker → IBKR-Kontrakt: „XYZ.DE“ = Xetra (IBIS, EUR), sonst US-Aktie (SMART, USD)."""
+XETRA_ETF, XETRA_AKTIE = "IBIS2", "IBIS"    # IBKR-Börsenkennungen: Xetra-ETFs/ETCs und Xetra-Aktien (geprüft 02.11.2026)
+
+
+def kontrakt(ticker: str, art: str = "etf"):
+    """Yahoo-Ticker → IBKR-Kontrakt. „XYZ.DE“ = Xetra direkt (ETF/ETC: IBIS2, Aktie: IBIS; EUR), damit die Order in
+    die Xetra-Eröffnungsauktion geht; sonst US-Aktie (SMART, USD)."""
     from ib_async import Stock
 
     if ticker.endswith(".DE"):
-        return Stock(ticker[:-3], "IBIS", "EUR")
+        return Stock(ticker[:-3], XETRA_ETF if art in ("etf", "etc") else XETRA_AKTIE, "EUR")
     return Stock(ticker, "SMART", "USD")
 
 
 def ticker_aus(kontrakt_) -> str:
-    return f"{kontrakt_.symbol}.DE" if getattr(kontrakt_, "exchange", "") in ("IBIS", "XETRA") or kontrakt_.currency == "EUR" else kontrakt_.symbol
+    boerse = getattr(kontrakt_, "primaryExchange", "") or getattr(kontrakt_, "exchange", "")
+    return f"{kontrakt_.symbol}.DE" if boerse in (XETRA_ETF, XETRA_AKTIE) or kontrakt_.currency == "EUR" else kontrakt_.symbol
 
 
 class IbkrBroker:
@@ -85,6 +90,6 @@ class IbkrBroker:
             order = LimitOrder(aktion, auftrag.stueck, round(auftrag.limit, 2), tif="DAY", orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
-        trade = self.ib.placeOrder(kontrakt(auftrag.ticker), order)
+        trade = self.ib.placeOrder(kontrakt(auftrag.ticker, auftrag.art), order)
         gesendete_refs.add(auftrag.order_ref)
         return str(trade.order.orderId)
