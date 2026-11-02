@@ -196,8 +196,8 @@ def main() -> int:
             f"Buy & Hold: alle ETFs gleich gewichtet, quartalsweise (Umsetzung: {umsetzung}; Entscheidung Jakob 03.11.2026: "
             "kostenfrei als strengere Messlatte, weil 114 € je Position unter der 125-€-Grenze lägen).", "",
             "## Daten", ""]
-    for t, pp in pruefprotokoll["ersatzquellen"].items():
-        text.append(f"- **{t} über Ersatzquelle {pp['quelle']}** (gleicher Fonds, gleiche Anteilsklasse, in EUR umgerechnet): an {pp['tage']} Tagen "
+    for etf, pp in pruefprotokoll["ersatzquellen"].items():
+        text.append(f"- **{etf} über Ersatzquelle {pp['quelle']}** (gleicher Fonds, gleiche Anteilsklasse, in EUR umgerechnet): an {pp['tage']} Tagen "
                     f"mit Xetra-Umsatz Median-Abweichung {pz(pp['median'])} (Grenze 0,5 %, bestanden), 95-%-Quantil {pz(pp['p95'])}. "
                     "SXRM wird auf Xetra in USD gehandelt; der Backtest rechnet den ETF wie einen EUR-Wert ohne Währungstausch "
                     "(Vereinfachung, die Tauschkosten wären mit Netto-Tausch gering).")
