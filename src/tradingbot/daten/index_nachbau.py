@@ -25,7 +25,8 @@ from tradingbot.kennzahlen.rendite import simple_return
 # Ein fester Bereich reicht nicht (Garmin meldet in drei Jahren das 1.000-Fache, noch unter 10 Bio. USD), und ein
 # Abgleich mit dem Median der Firma würde echte Wachstumsfälle verwerfen (Nvidia seit 2016 mehr als verhundertfacht).
 STREUBESITZ_ANTEIL_MIN = 0.30        # Streubesitz mindestens 30 % von Kurs × Aktienzahl am Messtag
-STREUBESITZ_ANTEIL_MAX = 1.05        # höchstens 105 %
+STREUBESITZ_ANTEIL_MAX = 1.30        # höchstens 130 % (03.11.2026, vorher 105 %): Streubesitz (Messtag Ende Q2) und
+                                     # Aktienzahl (Deckblattdatum) haben verschiedene Stichtage; dazwischen Rückkäufe und Kursbewegungen
 STREUBESITZ_VERAENDERUNG_FAKTOR = 3.0  # ohne Aktienzahl: Veränderung zum Vorjahr höchstens Faktor 3 neben der Kursveränderung
 AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag entfernt
 
@@ -33,7 +34,7 @@ AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag
 def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Prüft die Streubesitzwerte einer Firma gegen den Börsenwert am Messtag e.
 
-    Mit Aktienzahl:  0,30 ≤ F_e / (C_e · A_e) ≤ 1,05   (A_e: Aktienzahl nahe e, splitbereinigt wie die Kurse)
+    Mit Aktienzahl:  0,30 ≤ F_e / (C_e · A_e) ≤ 1,30   (A_e: Aktienzahl nahe e, splitbereinigt wie die Kurse)
     Ohne Aktienzahl: 1/3 ≤ (F_e / F_v) / (C_e / C_v) ≤ 3  (v: letzter akzeptierter Wert davor)
     Eine Aktienzahl zählt nur, wenn C_e · A_e selbst plausibel ist (0,5 Mrd. bis 10 Bio. USD); sonst gilt die Firma
     für diesen Wert als „ohne Aktienzahl“ (z.B. nur eine Aktiengattung gemeldet, Mantelgesellschaft, falsche Einheit).

@@ -20,6 +20,7 @@ from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.delisting import delisting_grund_mit_korrektur, einreichungen
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
 from tradingbot.daten.sec import SecClient, cik10, kennzahl_jahreswerte
+from tradingbot.daten.sp500_nachbau import lade_firmendaten
 from tradingbot.daten.universum import ist_finanzwert, lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
@@ -66,7 +67,16 @@ def main(argumente) -> None:
         zeile = relevant.loc[nr]
         return int(zeile["cik"]) if pd.notna(zeile["cik"]) else f"ohne CIK {nr}"
 
+    # Firmen mit gültigen Kursen: Streubesitz gegen den Börsenwert geprüft (index_nachbau.streubesitz_pruefen, 30–130 %).
+    # Firmen ohne gültige Kurse (genau die nicht kaufbaren) sind nicht prüfbar: dort nur der feste Bereich, sonst würde
+    # ihr Gewicht verschwinden und die 2-%-Prüfung zu günstig ausfallen.
+    daten = lade_firmendaten(universum, status.set_index("index"), sic, mitglied_ab="2012-01-01")
+    nicht_pruefbar = sum(1 for f, k in daten.kurse.items() if k is None)
+
     def gewicht(nr, tag):
+        f = firma(nr)
+        if f in daten.streubesitz_gueltig:
+            return streubesitz_am(daten.streubesitz_gueltig[f], tag)
         werte = []
         for cik in _ciks(relevant.loc[nr]):
             reihe = streubesitz.get(cik)
@@ -114,7 +124,9 @@ def main(argumente) -> None:
     zeilen = ["# Kursabdeckung je Stichtag", "",
               f"Datenstand kursstatus.csv: {len(status)} Mitgliedschaften, davon gültig {int(gueltig.sum())}.", "",
               f"Gewicht: Streubesitz laut SEC-Deckblatt, plausibel nur zwischen {STREUBESITZ_MIN/1e9:.1f} Mrd. und {STREUBESITZ_MAX/1e12:.0f} Bio. USD; "
-              f"verworfen {unplausibel} von {len(alle_werte)} Meldungen ({unplausibel/len(alle_werte):.1%}).", "",
+              f"verworfen {unplausibel} von {len(alle_werte)} Meldungen ({unplausibel/len(alle_werte):.1%}). Für Firmen mit gültigen Kursen "
+              f"zusätzlich gegen den Börsenwert geprüft (30–130 %, verworfen {len(daten.verworfen)}); {nicht_pruefbar} Firmen ohne gültige Kurse "
+              "sind nicht prüfbar und nutzen nur den festen Bereich.", "",
               "## 1. Nicht kaufbar (keine gültige Kursreihe am Rebalancing-Stichtag)", "",
               "Firmen (eine je CIK; Gattungen wie GOOG/GOOGL zählen einmal). Gattungen ohne Kurse in Klammern.", "",
               "| Stichtag | Firmen | ohne Kurse | Gewicht | investierbar (ohne Finanzwerte) | davon ohne Kurse | Gewicht | ohne Streubesitzwert |",

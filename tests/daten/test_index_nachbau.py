@@ -184,3 +184,15 @@ def test_streubesitz_pruefen_mit_doppelter_aktienzahl_von_vorgaenger_cik():
     aktien = pd.Series([1.0e9, 1.0e9], index=pd.to_datetime(["2019-06-28", "2019-06-28"]))   # Firma und Vorgänger
     gueltig, verworfen = streubesitz_pruefen(reihe, pd.Series([60.0], index=reihe.index), aktien)
     assert len(gueltig) == 1 and verworfen.empty                                             # 50 / 60 = 83 %
+
+
+def test_streubesitz_obergrenze_130_prozent():
+    from tradingbot.daten.index_nachbau import STREUBESITZ_ANTEIL_MAX, streubesitz_pruefen
+
+    assert STREUBESITZ_ANTEIL_MAX == 1.30
+    reihe = _reihe([("2019-06-28", 7.2e10, "2020-02-20"), ("2020-06-30", 8.0e10, "2021-02-20")])
+    schluss = pd.Series([60.0, 60.0], index=reihe.index)
+    aktien = pd.Series([1.0e9, 1.0e9], index=reihe.index)                      # Börsenwert jeweils 60 Mrd.
+    gueltig, verworfen = streubesitz_pruefen(reihe, schluss, aktien)
+    assert list(gueltig.index.year) == [2019]                                   # 120 % gilt jetzt
+    assert "133%" in verworfen.loc["2020-06-30", "grund"]                       # 133 % weiterhin verworfen
