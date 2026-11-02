@@ -17,13 +17,13 @@ from tradingbot.broker.basis import Auftrag, OffeneOrder, Position, pruefe_sende
 XETRA_ETF, XETRA_AKTIE = "IBIS2", "IBIS"    # IBKR-Börsenkennungen: Xetra-ETFs/ETCs und Xetra-Aktien (geprüft 02.11.2026)
 
 
-def kontrakt(ticker: str, art: str = "etf"):
+def kontrakt(ticker: str, art: str = "etf", waehrung: str | None = None):
     """Yahoo-Ticker → IBKR-Kontrakt. „XYZ.DE“ = Xetra direkt (ETF/ETC: IBIS2, Aktie: IBIS; EUR), damit die Order in
     die Xetra-Eröffnungsauktion geht; sonst US-Aktie (SMART, USD)."""
     from ib_async import Stock
 
     if ticker.endswith(".DE"):
-        return Stock(ticker[:-3], XETRA_ETF if art in ("etf", "etc") else XETRA_AKTIE, "EUR")
+        return Stock(ticker[:-3], XETRA_ETF if art in ("etf", "etc") else XETRA_AKTIE, waehrung or "EUR")
     return Stock(ticker, "SMART", "USD")
 
 
@@ -79,6 +79,24 @@ class IbkrBroker:
                                         float(o.lmtPrice) if o.orderType == "LMT" else None, t.orderStatus.status))
         return ergebnis
 
+    def verbunden(self) -> bool:
+        return bool(self.ib.isConnected())
+
+    def ausfuehrungen(self) -> list[dict]:
+        """Ausführungen der Bot-Orders (orderRef „<Buch>:<ID>“) mit Preis und Gebühr in der Handelswährung."""
+        ergebnis = []
+        for f in self.ib.fills():
+            e = f.execution
+            if not e.orderRef or ":" not in e.orderRef:
+                continue
+            gebuehr = float(f.commissionReport.commission or 0.0) if f.commissionReport else 0.0
+            ergebnis.append({"exec_id": e.execId, "order_ref": e.orderRef, "ticker": ticker_aus(f.contract),
+                             "richtung": 1 if e.side == "BOT" else -1, "stueck": float(e.shares), "preis": float(e.price),
+                             "waehrung": f.contract.currency, "gebuehr": gebuehr,
+                             "gebuehr_waehrung": (f.commissionReport.currency if f.commissionReport else None) or f.contract.currency,
+                             "zeit": str(e.time)})
+        return ergebnis
+
     def sende(self, auftrag: Auftrag, gesendete_refs: set[str]) -> str:
         """Sendet einen freigegebenen Auftrag; vorher alle Riegel (inkl. offener Orders beim Broker) prüfen."""
         from ib_async import LimitOrder, MarketOrder
@@ -90,6 +108,6 @@ class IbkrBroker:
             order = LimitOrder(aktion, auftrag.stueck, round(auftrag.limit, 2), tif="DAY", orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
-        trade = self.ib.placeOrder(kontrakt(auftrag.ticker, auftrag.art), order)
+        trade = self.ib.placeOrder(kontrakt(auftrag.ticker, auftrag.art, auftrag.waehrung), order)
         gesendete_refs.add(auftrag.order_ref)
         return str(trade.order.orderId)

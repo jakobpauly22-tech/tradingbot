@@ -16,6 +16,8 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS buecher (buch TEXT PRIMARY KEY, startkapital REAL NOT NULL, messbeginn TEXT);
 CREATE TABLE IF NOT EXISTS vorschlaege (
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS ausfuehrungen (
 CREATE TABLE IF NOT EXISTS dividenden (buch TEXT, ticker TEXT, ex_tag TEXT, stueck REAL, betrag_eur REAL, PRIMARY KEY (buch, ticker, ex_tag));
 CREATE TABLE IF NOT EXISTS ereignisse (zeit TEXT NOT NULL, art TEXT NOT NULL, buch TEXT, text TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS zustand (buch TEXT PRIMARY KEY, json TEXT NOT NULL, aktualisiert TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS buchwerte (buch TEXT, tag TEXT, wert REAL, kasse REAL, PRIMARY KEY (buch, tag));
 """
 
 
@@ -76,6 +79,9 @@ class Journal:
                             jetzt: datetime | None = None):
         """Speichert Vorschlag und Urteil; `limit_order` = Limit in der Handelswährung (sonst das EUR-Limit)."""
         jetzt = (jetzt or datetime.now()).isoformat(timespec="seconds")
+        alt = self.db.execute("SELECT status FROM vorschlaege WHERE id=?", (v.id,)).fetchone()
+        if alt is not None and alt["status"] not in ("vorgeschlagen", "veto"):
+            return                                       # schon freigegeben oder gesendet: nicht überschreiben
         status = "vorgeschlagen" if urteil.frei else "veto"
         self.db.execute(
             "INSERT OR REPLACE INTO vorschlaege VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -140,6 +146,18 @@ class Journal:
         neu = self.db.execute("INSERT OR IGNORE INTO dividenden VALUES (?,?,?,?,?)", (buch, ticker, str(ex_tag), stueck, betrag_eur)).rowcount > 0
         self.db.commit()
         return neu
+
+    def buchwert_speichern(self, buch: str, tag, wert: float, kasse: float):
+        self.db.execute("INSERT OR REPLACE INTO buchwerte VALUES (?,?,?,?)", (buch, str(pd.Timestamp(tag).date()), wert, kasse))
+        self.db.commit()
+
+    def buchwerte(self, buch: str) -> pd.Series:
+        z = self.db.execute("SELECT tag, wert FROM buchwerte WHERE buch=? ORDER BY tag", (buch,)).fetchall()
+        return pd.Series({pd.Timestamp(r["tag"]): r["wert"] for r in z}, dtype=float)
+
+    def orders_heute(self, buch: str, tag) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM vorschlaege WHERE buch=? AND signaltag=? AND status IN ('freigegeben','gesendet','ausgefuehrt')",
+                               (buch, str(pd.Timestamp(tag).date()))).fetchone()[0]
 
     # --- Ereignisse und Zustände ----------------------------------------------------------------------------
     def ereignis(self, art: str, text: str, buch: str | None = None, *, jetzt: datetime | None = None):

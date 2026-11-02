@@ -53,6 +53,7 @@ class Auftrag:
     stueck: int
     limit: float | None
     art: str = "etf"             # etf | etc | aktie (bestimmt die Börsenkennung)
+    waehrung: str | None = None  # Handelswährung (z.B. USD für SXRM auf Xetra); ohne Angabe aus dem Ticker
 
     @property
     def order_ref(self) -> str:
@@ -67,6 +68,7 @@ class Broker(Protocol):
     def positionen(self) -> list[Position]: ...
     def offene_orders(self) -> list[OffeneOrder]: ...
     def sende(self, auftrag: Auftrag, gesendete_refs: set[str]) -> str: ...
+    def ausfuehrungen(self) -> list[dict]: ...
 
 
 def pruefe_verbindung(host: str, port: int, betrieb: dict) -> None:

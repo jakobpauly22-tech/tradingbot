@@ -252,11 +252,12 @@ class SatelliteStrategie:
         # Abgleich mit dem tatsächlichen Bestand (Kauf ausgeführt, verworfen oder Verkauf ausgeführt)
         for t in list(self.pos):
             p = self.pos[t]
-            if t in bestand and p.kauf_tag is None:
-                kauf_tag = self.ind[t].index[self.ind[t].index > p.signal_tag][0]
-                p.kauf_tag = kauf_tag
-                p.stop = float(self.kurse[t].loc[kauf_tag, "open"]) - self.stop_faktor * p.atr_signal
-            elif t not in bestand and (p.kauf_tag is not None or tag >= self.ind[t].index[self.ind[t].index > p.signal_tag][0]):
+            danach = self.ind[t].index[self.ind[t].index > p.signal_tag]
+            ausfuehrungstag = danach[0] if len(danach) else None     # None: Signal von heute, Ausführung steht noch aus
+            if t in bestand and p.kauf_tag is None and ausfuehrungstag is not None:
+                p.kauf_tag = ausfuehrungstag
+                p.stop = float(self.kurse[t].loc[ausfuehrungstag, "open"]) - self.stop_faktor * p.atr_signal
+            elif t not in bestand and (p.kauf_tag is not None or (ausfuehrungstag is not None and tag >= ausfuehrungstag)):
                 del self.pos[t]
 
         # Ausstiege
