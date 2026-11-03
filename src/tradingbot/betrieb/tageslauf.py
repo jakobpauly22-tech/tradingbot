@@ -172,9 +172,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             continue
         bestand = journal.bestand(buch)
         werte_buch[buch] = journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
-        v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, journal.kasse(buch), bestand, journal.zustand(buch), kt,
+        vor = journal.zustand_fuer_signaltag(buch, tag)
+        v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, journal.kasse(buch), bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"))
-        journal.zustand_speichern(buch, z)
+        journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)
 
@@ -222,6 +223,9 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     urteile = risk.pruefe_alle([x.vorschlag for x in roh], kontexte)
     nach_id = {x.vorschlag.id: x for x in roh}
     freigabe_bis = f"{jetzt.date()}T23:59:59"
+    n_ersetzt = journal.offene_ersetzen(jetzt=jetzt)
+    if n_ersetzt:
+        journal.ereignis("ersetzt", f"{n_ersetzt} noch nicht freigegebene Vorschläge früherer Läufe ersetzt")
     for v, u in urteile:
         bv = nach_id[v.id]
         journal.vorschlag_speichern(v, u, waehrung=bv.waehrung, freigabe_bis=freigabe_bis, limit_order=bv.limit_order, jetzt=jetzt)

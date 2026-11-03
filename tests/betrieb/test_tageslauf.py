@@ -178,3 +178,36 @@ def test_messbeginn_nur_wenn_senden_freigeschaltet(umgebung):
     freigeben_und_senden(j2, [rid2], BrokerAttrappe(), ABEND, risk=rm, konfig_betrieb=b, kurse_laden=kurse_attrappe())
     assert j2.messbeginn("real") == "2026-11-02"
     j2.schliessen()
+
+
+
+def _technik(e):
+    return sorted((bv.vorschlag.buch, bv.vorschlag.ticker, bv.vorschlag.stueck) for bv, _ in e.vorschlaege if bv.vorschlag.buch in ("crossover", "momentum"))
+
+
+def test_zweiter_lauf_am_selben_tag_gleiche_vorschlaege_alte_ersetzt(umgebung):
+    j, rm = umgebung
+    erst = lauf(j, rm, jetzt=ABEND.replace(hour=11))
+    zweit = lauf(j, rm, jetzt=ABEND.replace(hour=19))
+    assert _technik(erst) == _technik(zweit) and len(_technik(erst)) > 0
+    offen = j.vorschlaege(status=("vorgeschlagen",))
+    assert len(offen) == sum(1 for _, u in zweit.vorschlaege if u.frei)        # nur die des letzten Laufs sind freigebbar
+
+
+def test_probe_und_echtes_journal_teilen_keinen_zustand(tmp_path):
+    rm = RiskManager(lade_konfiguration("risiko"), lade_konfiguration("betrieb"), KOSTEN, tmp_path)
+    probe = Journal(tmp_path / "probe" / "journal.sqlite")
+    echt = Journal(tmp_path / "journal.sqlite")
+    e_probe = lauf(probe, rm)
+    lauf(probe, rm)                                                            # Probe mehrfach
+    e_echt = lauf(echt, rm)
+    assert _technik(e_probe) == _technik(e_echt)
+    probe.schliessen()
+    echt.schliessen()
+
+
+def test_momentum_baut_beim_ersten_lauf_mitten_im_monat_auf(umgebung):
+    j, rm = umgebung
+    mitte = datetime(2026, 11, 17, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+    e = lauf(j, rm, jetzt=mitte)
+    assert any(bv.vorschlag.buch == "momentum" for bv, _ in e.vorschlaege)

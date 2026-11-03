@@ -2,8 +2,9 @@
 
 - Realbuch: Kasse in ganzen SPYI-Anteilen anlegen (Rest bleibt Kasse und wird mit dem nächsten Betrag investiert).
 - Technik-Bücher (Crossover, Momentum): dieselbe SatelliteStrategie wie im Backtest, Zustand (Positionen, Stops,
-  Sperren, Monatsprüfung) zwischen den Tagen im Journal; handeln ab dem ersten Signal. Momentum prüft am ersten
-  Xetra-Handelstag des Monats; startet der Betrieb mitten im Monat, ist die erste Prüfung im Folgemonat.
+  Sperren, Monatsprüfung) zwischen den Tagen im Journal. Ein leeres Buch baut beim ersten Lauf sofort auf: Crossover mit
+  allen aktiven Signalen nach Stärke, Momentum mit dem Ergebnis der letzten Monatsprüfung; danach Monatsrhythmus am ersten
+  Xetra-Handelstag (Entscheidung Jakob 03.11.2026). Wiederholte Läufe am selben Signaltag starten vom Zustand vor dem Tag.
 - Fundamental-Bücher (A: Originalscore, B: nur Qualitätshälfte): beim ersten Lauf sofort mit dem aktuellen Signal
   aufbauen, danach am ersten NYSE-Handelstag jedes Quartals mit der Auswahlregel des Backtests (20 Titel, Puffer 30,
   Drift-Band 2,5–7,5 %, höchstens 25 % je zweistelliger SIC).
@@ -104,9 +105,9 @@ def zustand_laden(s: SatelliteStrategie, zustand: dict, tag: pd.Timestamp, erste
         if hasattr(r, "pruefmonat"):
             gespeichert = zustand.get("pruefmonat")
             if gespeichert is None:
-                # erster Lauf: Monatsprüfung nur, wenn heute der erste Handelstag des Monats ist
-                monat = None if erster_handelstag_monat else str(tag.to_period("M"))
-                r.pruefmonat = {t: pd.Period(monat) for t in s.ind} if monat else {}
+                # erster Lauf eines neuen Buchs: sofort mit dem Ergebnis der letzten Monatsprüfung aufbauen (12−1 bis zum
+                # letzten Monatsende, Entscheidung Jakob 03.11.2026), danach Monatsrhythmus
+                r.pruefmonat = {}
             else:
                 r.pruefmonat = {t: pd.Period(m) for t, m in gespeichert.items()}
 

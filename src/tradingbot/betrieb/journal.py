@@ -113,7 +113,7 @@ class Journal:
         """Speichert Vorschlag und Urteil; `limit_order` = Limit in der Handelswährung (sonst das EUR-Limit)."""
         jetzt = (jetzt or datetime.now()).isoformat(timespec="seconds")
         alt = self.db.execute("SELECT status FROM vorschlaege WHERE id=?", (v.id,)).fetchone()
-        if alt is not None and alt["status"] not in ("vorgeschlagen", "veto"):
+        if alt is not None and alt["status"] not in ("vorgeschlagen", "veto", "ersetzt", "abgelaufen"):
             return                                       # schon freigegeben oder gesendet: nicht überschreiben
         status = "vorgeschlagen" if urteil.frei else "veto"
         self.db.execute(
@@ -200,6 +200,29 @@ class Journal:
     def ereignis(self, art: str, text: str, buch: str | None = None, *, jetzt: datetime | None = None):
         self.db.execute("INSERT INTO ereignisse VALUES (?,?,?,?)", ((jetzt or datetime.now()).isoformat(timespec="seconds"), art, buch, text))
         self.db.commit()
+
+    def offene_ersetzen(self, *, jetzt: datetime | None = None) -> int:
+        """Noch nicht freigegebene Vorschläge (Status „vorgeschlagen“) werden „ersetzt“ und sind nicht mehr freigebbar.
+        Jeder Tageslauf ruft das vor dem Speichern neuer Vorschläge auf (Entscheidung Jakob 03.11.2026): Ein zweiter Lauf am
+        selben Tag ersetzt den ersten, statt Vorschläge zu addieren. Freigegebene und gesendete bleiben unberührt."""
+        n = self.db.execute("UPDATE vorschlaege SET status='ersetzt', aktualisiert=? WHERE status='vorgeschlagen'",
+                            ((jetzt or datetime.now()).isoformat(timespec="seconds"),)).rowcount
+        self.db.commit()
+        return n
+
+    def zustand_fuer_signaltag(self, buch: str, tag) -> dict:
+        """Strategiezustand als Ausgangspunkt für einen Lauf am Signaltag `tag`: bei erneutem Lauf am selben Signaltag der
+        Stand VOR diesem Tag (wiederholbar, kein Aufaddieren), sonst der Stand nach dem letzten Lauf."""
+        z = self.zustand(buch)
+        if "signaltag" not in z:
+            return z                                     # ältere Form: flacher Zustand
+        return z["vor"] if z["signaltag"] == str(pd.Timestamp(tag).date()) else z["nach"]
+
+    def zustand_nach_lauf(self, buch: str, tag, vor: dict, nach: dict):
+        alt = self.zustand(buch)
+        if alt.get("signaltag") == str(pd.Timestamp(tag).date()):
+            vor = alt["vor"]                             # der Stand vor dem Tag bleibt der vom ersten Lauf
+        self.zustand_speichern(buch, {"signaltag": str(pd.Timestamp(tag).date()), "vor": vor, "nach": nach})
 
     def zustand(self, buch: str) -> dict:
         z = self.db.execute("SELECT json FROM zustand WHERE buch=?", (buch,)).fetchone()
