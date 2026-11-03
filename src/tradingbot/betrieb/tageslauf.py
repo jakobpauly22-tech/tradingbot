@@ -16,7 +16,7 @@ zweite Prüfung durch den Risk-Manager, dann Senden über die Riegel des Broker-
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 
 import pandas as pd
@@ -55,7 +55,8 @@ def einlesen(journal, broker, fx: dict[str, float]) -> list[str]:
             continue
         f = fx.get(a["waehrung"], 1.0) if a["waehrung"] != "EUR" else 1.0
         if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], a["preis"] / f, a["gebuehr"] / fg, a["zeit"],
-                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=a["gebuehr"], gebuehr_waehrung=a["gebuehr_waehrung"]):
+                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=a["gebuehr"], gebuehr_waehrung=a["gebuehr_waehrung"],
+                               boerse=a.get("boerse")):
             neu.append(a["order_ref"].split(":")[0])
     return sorted(set(neu))
 
@@ -293,7 +294,15 @@ def kontrakte_pruefen(urteile, nach_id, broker, b, meldungen) -> list:
             bv = nach_id[v.id]
             try:
                 k = broker.kontrakt_aufloesen(v.ticker, v.art, bv.waehrung if v.art != "fx" else "USD")
-                text = f"IBKR-Kontrakt: conId {k.conId}, Symbol {k.symbol}, Xetra-Kürzel/lokal {k.localSymbol}, Börse {k.exchange}, {k.currency}"
+                text = (f"IBKR-Kontrakt: conId {k.conId}, Symbol {k.symbol}, Xetra-Kürzel/lokal {k.localSymbol}, "
+                        f"Routing {k.exchange}/{getattr(k, 'primaryExchange', '') or '–'}, {k.currency}")
+                if bv.limit_order and v.art != "fx" and hasattr(broker, "limit_runden"):
+                    alt = bv.limit_order
+                    gerundet, stufe = broker.limit_runden(v.ticker, alt, v.richtung)
+                    bv.limit_order = gerundet
+                    v = replace(v, limit=v.limit * gerundet / alt if v.limit else gerundet)
+                    bv.vorschlag = v
+                    text += f"; Limit {alt:.4f} → {gerundet:.4f} {bv.waehrung} (Kursstufe {stufe:g})"
                 bv.details = (bv.details + "\n" if bv.details else "") + text
                 meldungen.append(f"{v.buch} {v.ticker}: {text}")
             except KontraktUnbekannt as f:

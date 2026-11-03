@@ -8,6 +8,7 @@ orderRef = „<Buch>:<Vorschlag-ID>“ (Zuordnung zu Buch und Journal, Doppel-Or
 """
 from __future__ import annotations
 
+import math
 import os
 import time
 from functools import lru_cache
@@ -17,6 +18,29 @@ from tradingbot.broker.basis import (Auftrag, KontraktUnbekannt, OffeneOrder, Po
                                      pruefe_verbindung)
 
 ANGENOMMEN = {"PreSubmitted", "Submitted", "Filled"}
+ROUTING = "SMART"            # Jakob 03.11.2026: Direktrouting an IBIS2 sperren die API-Vorsichtseinstellungen (Fehler 10311)
+
+
+def stufe_fuer(regel: list, preis: float) -> float:
+    """Preisstufe einer IBKR-Marktregel (Liste von (lowEdge, increment)) für ein Preisniveau: größte Untergrenze ≤ Preis."""
+    passend = [s for s in regel if s[0] <= preis + 1e-12]
+    return float(max(passend, key=lambda s: s[0])[1]) if passend else float(regel[0][1])
+
+
+def gemeinsame_stufe(stufen: list[float]) -> float:
+    """Kleinste Stufe, die ein Vielfaches aller Stufen ist (kgV in 1e-6-Einheiten): gilt für SMART und IBIS2 zugleich."""
+    einheiten = [max(int(round(s * 1_000_000)), 1) for s in stufen]
+    k = einheiten[0]
+    for e in einheiten[1:]:
+        k = k * e // math.gcd(k, e)
+    return k / 1_000_000
+
+
+def auf_stufe(preis: float, stufe: float, richtung: int) -> float:
+    """Kauflimit auf die gültige Kursstufe abrunden, Verkaufslimit aufrunden (nie über die 2-%-Grenze hinaus)."""
+    n = preis / stufe
+    n = math.floor(n + 1e-9) if richtung > 0 else math.ceil(n - 1e-9)
+    return round(n * stufe, 6)
 ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive"}
 
 
@@ -144,7 +168,7 @@ class IbkrBroker:
                                  "gebuehr": gebuehr, "gebuehr_waehrung": (f.commissionReport.currency if f.commissionReport else None) or f.contract.currency,
                                  "zeit": str(e.time)})
                 continue
-            ergebnis.append({"exec_id": e.execId, "order_ref": e.orderRef, "ticker": ticker_aus(f.contract),
+            ergebnis.append({"exec_id": e.execId, "order_ref": e.orderRef, "ticker": ticker_aus(f.contract), "boerse": e.exchange,
                              "richtung": 1 if e.side == "BOT" else -1, "stueck": float(e.shares), "preis": float(e.price),
                              "waehrung": f.contract.currency, "gebuehr": gebuehr,
                              "gebuehr_waehrung": (f.commissionReport.currency if f.commissionReport else None) or f.contract.currency,
@@ -178,9 +202,33 @@ class IbkrBroker:
             raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – Währung {k.currency} statt {erwartet}")
         if eintrag and int(k.conId) != int(eintrag["con_id"]):
             raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – conId {k.conId} statt {eintrag['con_id']}")
-        if eintrag:
-            k.exchange = eintrag["boerse"]                       # direkt an Xetra (IBIS2), nicht SMART
+        # Kursregeln für SMART und den Xetra-Platz merken (marketRuleIds passen der Reihe nach zu validExchanges)
+        cd = treffer[0]
+        plaetze = dict(zip(str(getattr(cd, "validExchanges", "") or "").split(","), str(getattr(cd, "marketRuleIds", "") or "").split(",")))
+        self._regel_ids = getattr(self, "_regel_ids", {})
+        self._regel_ids[ticker] = sorted({int(plaetze[p]) for p in ("SMART", XETRA_ETF if art != "aktie" else XETRA_AKTIE) if plaetze.get(p)})
+        if ticker.endswith(".DE") and art != "fx":
+            # Routing über SMART mit Xetra als Primärbörse, Kontrakt per conId (Jakob 03.11.2026, Fehler 10311 bei IBIS2 direkt)
+            k.exchange, k.primaryExchange = ROUTING, (eintrag or {}).get("boerse", XETRA_ETF if art != "aktie" else XETRA_AKTIE)
         return k
+
+    def kursstufe(self, ticker: str, preis: float) -> float:
+        """Gültige Kursstufe für einen Preis (reqMarketRule, Regeln von SMART und Xetra; Ergebnis gilt für beide)."""
+        ids = getattr(self, "_regel_ids", {}).get(ticker)
+        if not ids:
+            raise KontraktUnbekannt(f"Kursregel für {ticker} unbekannt – erst Kontrakt qualifizieren")
+        self._regeln = getattr(self, "_regeln", {})
+        stufen = []
+        for i in ids:
+            if i not in self._regeln:
+                self._regeln[i] = [(float(s.lowEdge), float(s.increment)) for s in self.ib.reqMarketRule(i)]
+            stufen.append(stufe_fuer(self._regeln[i], preis))
+        return gemeinsame_stufe(stufen)
+
+    def limit_runden(self, ticker: str, preis: float, richtung: int) -> tuple[float, float]:
+        """Limit auf die gültige Kursstufe: Kauf abrunden, Verkauf aufrunden. Gibt (Limit, Stufe) zurück."""
+        stufe = self.kursstufe(ticker, preis)
+        return auf_stufe(preis, stufe, richtung), stufe
 
     def _warte_auf_antwort(self, trade, sekunden: float) -> SendeErgebnis:
         """Wartet kurz auf die Antwort von IBKR: angenommen, abgelehnt (mit Fehlertext) oder unbestätigt."""
@@ -211,7 +259,8 @@ class IbkrBroker:
         if auftrag.art == "fx":
             order = MarketOrder("SELL", auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
         elif auftrag.richtung > 0:
-            order = LimitOrder(aktion, auftrag.stueck, round(auftrag.limit, 2), tif="DAY", orderRef=auftrag.order_ref)
+            limit, _ = self.limit_runden(auftrag.ticker, auftrag.limit, auftrag.richtung)     # Kursstufe (Fehler 110 am 03.11.2026)
+            order = LimitOrder(aktion, auftrag.stueck, limit, tif="DAY", orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
         trade = self.ib.placeOrder(k, order)

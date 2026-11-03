@@ -53,7 +53,7 @@ class Journal:
             if name not in v_spalten:
                 self.db.execute(f"ALTER TABLE vorschlaege ADD COLUMN {name} TEXT")
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
-        for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT")):
+        for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT"), ("boerse", "TEXT")):
             if name not in spalten:                                   # ältere Journale ergänzen
                 self.db.execute(f"ALTER TABLE ausfuehrungen ADD COLUMN {name} {typ}")
         self.db.commit()
@@ -227,13 +227,16 @@ class Journal:
 
     # --- Ausführungen und Dividenden --------------------------------------------------------------------------
     def ausfuehrung(self, exec_id, order_ref, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, *, waehrung="EUR", preis=None,
-                    gebuehr=None, gebuehr_waehrung=None) -> bool:
+                    gebuehr=None, gebuehr_waehrung=None, boerse=None) -> bool:
+        """Ausführung ins Journal; `boerse` = Ausführungsplatz laut IBKR (SMART-Routing, Jakob 03.11.2026)."""
         buch, _, vid = order_ref.partition(":")
         neu = self.db.execute("INSERT OR IGNORE INTO ausfuehrungen (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, "
                               "waehrung, preis, gebuehr, gebuehr_waehrung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                               (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, str(zeit), waehrung,
                                preis if preis is not None else preis_eur, gebuehr, gebuehr_waehrung or waehrung)).rowcount > 0
         if neu:
+            if boerse:
+                self.db.execute("UPDATE ausfuehrungen SET boerse=? WHERE exec_id=?", (boerse, exec_id))
             self.status_setzen(vid, "ausgefuehrt")
         self.db.commit()
         return neu

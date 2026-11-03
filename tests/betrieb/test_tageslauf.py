@@ -79,7 +79,12 @@ class BrokerAttrappe:
         if ticker in self.unbekannt:
             raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – 0 Treffer bei IBKR")
         from types import SimpleNamespace
-        return SimpleNamespace(conId=1000 + len(ticker), symbol=ticker[:-3], localSymbol=ticker[:-3], exchange="IBIS2", currency="EUR")
+        return SimpleNamespace(conId=1000 + len(ticker), symbol=ticker[:-3], localSymbol=ticker[:-3], exchange="SMART", primaryExchange="IBIS2",
+                               currency="EUR")
+
+    def limit_runden(self, ticker, preis, richtung):
+        from tradingbot.broker.ibkr import auf_stufe
+        return auf_stufe(preis, 0.05, richtung), 0.05
 
 
 @pytest.fixture
@@ -365,3 +370,23 @@ def test_nachtraeglich_abgelehnt_loest_reservierung_und_messbeginn(umgebung):
     assert j.unterwegs() == [] and kasse_frei(j, "crossover")[0] == j.kasse("crossover")
     assert j.messbeginn("real") is None and j.messbeginn("crossover") is None
     assert all(z["status"] == "abgelehnt" and "conId 0" in z["meldung"] for z in j.vorschlaege() if z["id"] in ids)
+
+
+def test_tageslauf_rundet_limit_auf_kursstufe_und_zeigt_routing(umgebung):
+    j, rm = umgebung
+    e = lauf(j, rm, broker=BrokerAttrappe())
+    frei = [(bv, u) for bv, u in e.vorschlaege if bv.vorschlag.buch in ("real", "crossover") and u.frei and bv.vorschlag.richtung > 0]
+    assert frei
+    for bv, _ in frei:
+        assert "Routing SMART/IBIS2" in bv.details and "Kursstufe 0.05" in bv.details
+        assert abs(bv.limit_order / 0.05 - round(bv.limit_order / 0.05)) < 1e-6 and bv.vorschlag.limit == bv.limit_order
+        z = next(x for x in j.vorschlaege() if x["id"] == bv.vorschlag.id)
+        assert z["limit_preis"] == bv.limit_order and z["limit_preis"] <= z["letzter_kurs_eur"] * 1.02 + 1e-9
+
+
+def test_ausfuehrungsplatz_im_journal(umgebung):
+    j, rm = umgebung
+    lauf(j, rm)
+    z = j.vorschlaege(buch="real")[0]
+    assert j.ausfuehrung("x9", f"real:{z['id']}", "SPYI.DE", 1, 2, 11.8, 1.25, "2026-11-04T09:00", boerse="IBIS2")
+    assert j.db.execute("SELECT boerse FROM ausfuehrungen WHERE exec_id='x9'").fetchone()[0] == "IBIS2"

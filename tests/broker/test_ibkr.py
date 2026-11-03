@@ -25,11 +25,21 @@ class IBAttrappe:
             if anfrage.conId and int(e["con_id"]) == anfrage.conId or (not anfrage.conId and anfrage.symbol == e["symbol"]
                                                                         and anfrage.exchange in ("IBIS2", "SMART")):
                 return [SimpleNamespace(contract=SimpleNamespace(conId=int(e["con_id"]), symbol=e["symbol"], localSymbol=e["xetra_kuerzel"],
-                                                                 exchange=anfrage.exchange, currency=e["waehrung"]))]
+                                                                 exchange=anfrage.exchange, primaryExchange="AEB", currency=e["waehrung"]),
+                                        validExchanges="SMART,AEB,IBIS2", marketRuleIds=self.regel_ids.get(t, "1874,1874,1874"))]
         if anfrage.currency == "USD" and anfrage.exchange == "SMART":
             return [SimpleNamespace(contract=SimpleNamespace(conId=265598, symbol=anfrage.symbol, localSymbol=anfrage.symbol, exchange="SMART",
                                                              currency="USD"))]
         return []
+
+    regel_ids = {"EUNM.DE": "2077,2077,1906"}
+    REGELN = {1874: [(0.0, 0.0001), (1.0, 0.0002), (2.0, 0.0005), (5.0, 0.001), (10.0, 0.002), (20.0, 0.005), (50.0, 0.01), (100.0, 0.02),
+                     (200.0, 0.05), (500.0, 0.1)],
+              2077: [(0.0, 0.0001), (1.0, 0.0002), (2.0, 0.0005), (5.0, 0.001), (10.0, 0.002), (20.0, 0.005), (50.0, 0.01)],
+              1906: [(0.0, 0.0001), (5.0, 0.0002), (10.0, 0.0005), (20.0, 0.001), (50.0, 0.002), (100.0, 0.005), (200.0, 0.01)]}
+
+    def reqMarketRule(self, i):
+        return [SimpleNamespace(lowEdge=a, increment=b) for a, b in self.REGELN[i]]
 
     def sleep(self, s):
         pass
@@ -114,7 +124,7 @@ def test_orderaufbau(tmp_path):
     b.sende(KAUF, set())
     b.sende(Auftrag("real", "v3", "SPYI.DE", -1, 1, None), set())
     (k1, o1), (k2, o2) = b.ib.gesendet
-    assert (k1.symbol, k1.exchange, k1.currency) == ("SPYI", "IBIS2", "EUR")      # Xetra-ETF direkt, nicht SMART
+    assert (k1.symbol, k1.exchange, k1.primaryExchange, k1.currency) == ("SPYI", "SMART", "IBIS2", "EUR")   # SMART, Xetra primär
     assert (o1.action, o1.orderType, o1.lmtPrice, o1.tif, o1.orderRef) == ("BUY", "LMT", 204.0, "DAY", "real:v1")
     assert (o2.action, o2.orderType, o2.tif, o2.orderRef) == ("SELL", "MKT", "DAY", "real:v3")
     with pytest.raises(SendenGesperrt, match="Kauf ohne Limit"):
@@ -166,10 +176,10 @@ def test_kontrakt_qualifiziert_ueber_tabelle(tmp_path):
     assert int(kontrakttabelle()["EUNM.DE"]["con_id"]) == 100292766
     b = broker(tmp_path)
     k = b.kontrakt_aufloesen("EUNM.DE", "etf")
-    assert (k.conId, k.symbol, k.localSymbol, k.exchange, k.currency) == (100292766, "IEMA", "EUNM", "IBIS2", "EUR")
+    assert (k.conId, k.symbol, k.localSymbol, k.exchange, k.primaryExchange, k.currency) == (100292766, "IEMA", "EUNM", "SMART", "IBIS2", "EUR")
     e = b.sende(Auftrag("crossover", "x1", "EUNM.DE", 1, 35, 53.61), set())
     kontrakt_gesendet, order = b.ib.gesendet[-1]
-    assert kontrakt_gesendet.conId == 100292766 and kontrakt_gesendet.exchange == "IBIS2" and order.orderRef == "crossover:x1"
+    assert kontrakt_gesendet.conId == 100292766 and kontrakt_gesendet.exchange == "SMART" and order.orderRef == "crossover:x1"
     assert e.status == "angenommen" and e.con_id == 100292766
 
 
@@ -194,3 +204,34 @@ def test_ticker_aus_conid():
     from tradingbot.broker.ibkr import ticker_aus
     assert ticker_aus(SimpleNamespace(conId=100292766, symbol="IEMA", primaryExchange="AEB", exchange="", currency="EUR")) == "EUNM.DE"
     assert ticker_aus(SimpleNamespace(conId=80268543, symbol="IJPA", primaryExchange="AEB", exchange="", currency="EUR")) == "EUNN.DE"
+
+
+def test_kursstufe_runden():
+    """Fehler 110 am 03.11.2026: SXR1 221,34 € verletzt die Stufe 0,05 (Regel 1874 ab 200 €) → Kauf 221,30, Verkauf 221,35."""
+    from tradingbot.broker.ibkr import auf_stufe, gemeinsame_stufe, stufe_fuer
+    r1874 = IBAttrappe.REGELN[1874]
+    assert stufe_fuer(r1874, 221.34) == 0.05 and stufe_fuer(r1874, 11.81) == 0.002 and stufe_fuer(r1874, 200.0) == 0.05
+    assert auf_stufe(221.34, 0.05, 1) == 221.30 and auf_stufe(221.34, 0.05, -1) == 221.35
+    assert auf_stufe(221.30, 0.05, 1) == 221.30                       # schon gültig: unverändert
+    assert gemeinsame_stufe([0.002, 0.005]) == 0.01 and gemeinsame_stufe([0.01, 0.002]) == 0.01
+
+
+def test_limit_im_auftrag_auf_kursstufe(tmp_path):
+    b = broker(tmp_path)
+    b.sende(Auftrag("crossover", "s1", "SXR1.DE", 1, 11, 221.34), set())
+    k, o = b.ib.gesendet[-1]
+    assert o.lmtPrice == 221.30 and o.lmtPrice <= 221.34 and k.exchange == "SMART" and k.primaryExchange == "IBIS2"
+    # EUNM: SMART-Regel 2077 (0,01 ab 50 €) und IBIS2-Regel 1906 (0,002) → gemeinsame Stufe 0,01
+    b.kontrakt_aufloesen("EUNM.DE")
+    assert b.limit_runden("EUNM.DE", 53.617, 1) == (53.61, 0.01)
+
+
+def test_ausfuehrungsplatz(tmp_path):
+    b = broker(tmp_path)
+    b.ib.fills = lambda: [SimpleNamespace(execution=SimpleNamespace(orderRef="real:v1", execId="e1", side="BOT", shares=2.0, price=11.8,
+                                                                    time="t", exchange="GETTEX2"),
+                                          contract=SimpleNamespace(conId=89384965, symbol="SPYI", secType="STK", currency="EUR",
+                                                                   primaryExchange="IBIS2", exchange=""),
+                                          commissionReport=None)]
+    a = b.ausfuehrungen()[0]
+    assert a["ticker"] == "SPYI.DE" and a["boerse"] == "GETTEX2"
