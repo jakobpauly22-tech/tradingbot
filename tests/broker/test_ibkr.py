@@ -24,7 +24,9 @@ class IBAttrappe:
         for t, e in kontrakttabelle().items():
             if anfrage.conId and int(e["con_id"]) == anfrage.conId or (not anfrage.conId and anfrage.symbol == e["symbol"]
                                                                         and anfrage.exchange in ("IBIS2", "SMART")):
-                return [SimpleNamespace(contract=SimpleNamespace(conId=int(e["con_id"]), symbol=e["symbol"], localSymbol=e["xetra_kuerzel"],
+                # wie IBKR: unter SMART ist localSymbol das IBKR-Symbol (IEMA), nur unter IBIS2 das Xetra-Kürzel (EUNM)
+                lokal = e["symbol"] if anfrage.exchange == "SMART" else e["xetra_kuerzel"]
+                return [SimpleNamespace(contract=SimpleNamespace(conId=int(e["con_id"]), symbol=e["symbol"], localSymbol=lokal,
                                                                  exchange=anfrage.exchange, primaryExchange="AEB", currency=e["waehrung"]),
                                         validExchanges="SMART,AEB,IBIS2", marketRuleIds=self.regel_ids.get(t, "1874,1874,1874"))]
         if anfrage.currency == "USD" and anfrage.exchange == "SMART":
@@ -124,7 +126,7 @@ def test_orderaufbau(tmp_path):
     b.sende(KAUF, set())
     b.sende(Auftrag("real", "v3", "SPYI.DE", -1, 1, None), set())
     (k1, o1), (k2, o2) = b.ib.gesendet
-    assert (k1.symbol, k1.exchange, k1.primaryExchange, k1.currency) == ("SPYI", "SMART", "IBIS2", "EUR")   # SMART, Xetra primär
+    assert (k1.symbol, k1.exchange, k1.currency) == ("SPYI", "SMART", "EUR")                     # SMART, Kontrakt wie von IBKR
     assert (o1.action, o1.orderType, o1.lmtPrice, o1.tif, o1.orderRef) == ("BUY", "LMT", 204.0, "DAY", "real:v1")
     assert (o2.action, o2.orderType, o2.tif, o2.orderRef) == ("SELL", "MKT", "DAY", "real:v3")
     with pytest.raises(SendenGesperrt, match="Kauf ohne Limit"):
@@ -176,7 +178,7 @@ def test_kontrakt_qualifiziert_ueber_tabelle(tmp_path):
     assert int(kontrakttabelle()["EUNM.DE"]["con_id"]) == 100292766
     b = broker(tmp_path)
     k = b.kontrakt_aufloesen("EUNM.DE", "etf")
-    assert (k.conId, k.symbol, k.localSymbol, k.exchange, k.primaryExchange, k.currency) == (100292766, "IEMA", "EUNM", "SMART", "IBIS2", "EUR")
+    assert (k.conId, k.symbol, k.localSymbol, k.exchange, k.primaryExchange, k.currency) == (100292766, "IEMA", "IEMA", "SMART", "AEB", "EUR")
     e = b.sende(Auftrag("crossover", "x1", "EUNM.DE", 1, 35, 53.61), set())
     kontrakt_gesendet, order = b.ib.gesendet[-1]
     assert kontrakt_gesendet.conId == 100292766 and kontrakt_gesendet.exchange == "SMART" and order.orderRef == "crossover:x1"
@@ -220,7 +222,7 @@ def test_limit_im_auftrag_auf_kursstufe(tmp_path):
     b = broker(tmp_path)
     b.sende(Auftrag("crossover", "s1", "SXR1.DE", 1, 11, 221.34), set())
     k, o = b.ib.gesendet[-1]
-    assert o.lmtPrice == 221.30 and o.lmtPrice <= 221.34 and k.exchange == "SMART" and k.primaryExchange == "IBIS2"
+    assert o.lmtPrice == 221.30 and o.lmtPrice <= 221.34 and k.exchange == "SMART"
     # EUNM: SMART-Regel 2077 (0,01 ab 50 €) und IBIS2-Regel 1906 (0,002) → gemeinsame Stufe 0,01
     b.kontrakt_aufloesen("EUNM.DE")
     assert b.limit_runden("EUNM.DE", 53.617, 1) == (53.61, 0.01)
@@ -235,3 +237,20 @@ def test_ausfuehrungsplatz(tmp_path):
                                           commissionReport=None)]
     a = b.ausfuehrungen()[0]
     assert a["ticker"] == "SPYI.DE" and a["boerse"] == "GETTEX2"
+
+
+def test_kontrakt_unveraendert_wie_von_ibkr(tmp_path):
+    """Fehler 478 (03.11.2026): Symbol ≠ Xetra-Kürzel (EUNM/IEMA, EUNN/IJPA). Gesendet wird genau der von IBKR unter SMART
+    qualifizierte Kontrakt – kein eigenes symbol/localSymbol/primaryExchange."""
+    b = broker(tmp_path)
+    anfragen = []
+    original = b.ib.reqContractDetails
+    b.ib.reqContractDetails = lambda a: (anfragen.append(a), original(a))[1]
+    for ticker, symbol in (("EUNM.DE", "IEMA"), ("EUNN.DE", "IJPA")):
+        geliefert = b.kontrakt_aufloesen(ticker)
+        b.sende(Auftrag("crossover", f"x-{ticker}", ticker, 1, 10, 50.0), set())
+        gesendet, _ = b.ib.gesendet[-1]
+        assert gesendet is not None and (gesendet.conId, gesendet.symbol, gesendet.localSymbol) == (geliefert.conId, symbol, symbol)
+        assert gesendet.exchange == "SMART" and gesendet.primaryExchange == "AEB" and gesendet.localSymbol != ticker[:-3]
+    a = anfragen[-1]
+    assert a.conId and a.exchange == "SMART" and not a.symbol and not a.localSymbol and not a.primaryExchange

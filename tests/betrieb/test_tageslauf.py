@@ -390,3 +390,27 @@ def test_ausfuehrungsplatz_im_journal(umgebung):
     z = j.vorschlaege(buch="real")[0]
     assert j.ausfuehrung("x9", f"real:{z['id']}", "SPYI.DE", 1, 2, 11.8, 1.25, "2026-11-04T09:00", boerse="IBIS2")
     assert j.db.execute("SELECT boerse FROM ausfuehrungen WHERE exec_id='x9'").fetchone()[0] == "IBIS2"
+
+
+def test_orders_unterwegs_halbieren_nicht_die_stueckzahl(umgebung):
+    """Korrektur 03.11.2026: Reservierte Kasse gehört zum Buchwert. Nach Ablehnung einzelner Orders erscheinen die
+    abgelehnten Käufe im nächsten Lauf mit derselben Stückzahl wie zuvor, die angenommenen bleiben gesperrt."""
+    j, rm = umgebung
+    e1 = lauf(j, rm)
+    kaeufe = {bv.vorschlag.ticker: bv.vorschlag.stueck for bv, u in e1.vorschlaege if bv.vorschlag.buch == "crossover" and u.frei
+              and bv.vorschlag.richtung > 0}
+    assert len(kaeufe) >= 2
+    ids = [z["id"] for z in j.vorschlaege(buch="crossover") if z["status"] == "vorgeschlagen" and z["richtung"] > 0]
+    angenommen, abgelehnt = ids[:1], ids[1:]
+    freigeben_und_senden(j, angenommen, BrokerAttrappe(), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    freigeben_und_senden(j, abgelehnt, BrokerAttrappe(antwort="abgelehnt"), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    e2 = lauf(j, rm)
+    neu = {bv.vorschlag.ticker: bv.vorschlag.stueck for bv, u in e2.vorschlaege if bv.vorschlag.buch == "crossover" and bv.vorschlag.richtung > 0}
+    gesperrt = {z["ticker"] for z in j.unterwegs("crossover")}
+    assert gesperrt and not (gesperrt & set(neu))
+    abgelehnte_titel = {z["ticker"] for z in j.vorschlaege(buch="crossover") if z["id"] in abgelehnt} | {
+        t for t in kaeufe if t not in gesperrt}
+    verglichen = [t for t in abgelehnte_titel if t in neu]
+    assert verglichen
+    for t in verglichen:
+        assert neu[t] == kaeufe[t], (t, neu[t], kaeufe[t])

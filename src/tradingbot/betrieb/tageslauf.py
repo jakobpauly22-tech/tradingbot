@@ -209,7 +209,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         vor = journal.zustand_fuer_signaltag(buch, tag)
         frei_buch, _ = kasse_frei(journal, buch, fx)
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
-                           aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)})
+                           aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
+                           reserviert=journal.kasse(buch) - frei_buch)
         journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)
@@ -235,9 +236,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             bestand = journal.bestand(n)
             preise = {r.symbol: float(r.schluss_usd) for r in bewertung.itertuples() if r.symbol}
             preise.update({t: float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1]) for t in bestand if t not in preise})
-            v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, kasse_frei(journal, n, fx)[0], bestand,
+            frei_n = kasse_frei(journal, n, fx)[0]
+            v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, frei_n, bestand,
                                           journal.zustand(n), kf, aufschlag, gebuehr_fuer("USD", eurusd),
-                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)})
+                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)}, reserviert=journal.kasse(n) - frei_n)
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue

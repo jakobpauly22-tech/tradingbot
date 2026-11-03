@@ -185,7 +185,9 @@ class IbkrBroker:
         if art == "fx":
             anfrage, erwartet = Forex(f"EUR{waehrung or 'USD'}"), waehrung or "USD"
         elif eintrag:
-            anfrage, erwartet = Contract(conId=int(eintrag["con_id"]), exchange=eintrag["boerse"]), eintrag["waehrung"]
+            # nur conId plus SMART; IBKR liefert Symbol, localSymbol und primaryExchange (Fehler 478 am 03.11.2026, als das
+            # Xetra-Kürzel EUNM gegen das SMART-Symbol IEMA stand)
+            anfrage, erwartet = Contract(conId=int(eintrag["con_id"]), exchange=ROUTING), eintrag["waehrung"]
         else:
             anfrage = kontrakt(ticker, art, waehrung)
             erwartet = anfrage.currency
@@ -207,10 +209,9 @@ class IbkrBroker:
         plaetze = dict(zip(str(getattr(cd, "validExchanges", "") or "").split(","), str(getattr(cd, "marketRuleIds", "") or "").split(",")))
         self._regel_ids = getattr(self, "_regel_ids", {})
         self._regel_ids[ticker] = sorted({int(plaetze[p]) for p in ("SMART", XETRA_ETF if art != "aktie" else XETRA_AKTIE) if plaetze.get(p)})
-        if ticker.endswith(".DE") and art != "fx":
-            # Routing über SMART mit Xetra als Primärbörse, Kontrakt per conId (Jakob 03.11.2026, Fehler 10311 bei IBIS2 direkt)
-            k.exchange, k.primaryExchange = ROUTING, (eintrag or {}).get("boerse", XETRA_ETF if art != "aktie" else XETRA_AKTIE)
-        return k
+        if eintrag and k.exchange != ROUTING:
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – Routing {k.exchange} statt {ROUTING}")
+        return k                                                   # unverändert, wie von IBKR qualifiziert
 
     def kursstufe(self, ticker: str, preis: float) -> float:
         """Gültige Kursstufe für einen Preis (reqMarketRule, Regeln von SMART und Xetra; Ergebnis gilt für beide)."""

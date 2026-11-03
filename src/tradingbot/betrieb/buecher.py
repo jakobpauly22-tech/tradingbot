@@ -160,7 +160,9 @@ def erster_handelstag_im_monat(boerse: str, tag) -> bool:
 
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
-                gebuehr, gesperrt_titel: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict]:
+                gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0) -> tuple[list[BuchVorschlag], dict]:
+    """`kasse` = freie Kasse (nach Orders unterwegs), `reserviert` = durch Orders unterwegs gebundene Kasse; der Buchwert
+    für Zielgewichte und 1-%-Risiko enthält beides (Korrektur 03.11.2026: sonst halbe Stückzahlen bei Orders unterwegs)."""
     from tradingbot.backtest.marktdaten import Marktdaten, Sicht
 
     tag = pd.Timestamp(tag)
@@ -170,7 +172,7 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
     ziel = s.zielgewichte(tag, Sicht(m, tag, {t: v for t, v in bestand.items() if v > 0}, kasse))
     vorschlaege = []
     if ziel is not None:
-        wert = kasse + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())
+        wert = kasse + reserviert + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())
         protokoll = {p["ticker"]: p for p in s.protokoll if pd.Timestamp(p["tag"]) == tag}
         frei = kasse
         for t, w in ziel.items():
@@ -279,7 +281,7 @@ def quartalsstichtag(tag) -> bool:
 
 def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurse_usd: dict[str, float], eurusd: float,
                     kasse: float, bestand: dict[str, float], zustand: dict, konfig_fundamental: dict, aufschlag: float,
-                    gebuehr, gesperrt_titel: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict, str]:
+                    gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0) -> tuple[list[BuchVorschlag], dict, str]:
     """Erster Lauf: sofort aufbauen; danach nur am Quartalsstichtag. Gibt Vorschläge, neuen Zustand und Begründung zurück."""
     tag = pd.Timestamp(tag)
     # aufgebaut mit Bestand oder mit gesendeten, noch nicht ausgeführten Orders („unterwegs“); verfallene Aufbauten wiederholen
@@ -288,7 +290,7 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
         return [], zustand, "kein Quartalsstichtag"
     sp = konfig_fundamental["schattenportfolio"]
     wert_pos = {t: st * kurse_usd[t] / eurusd for t, st in bestand.items() if t in kurse_usd}
-    wert = kasse + sum(wert_pos.values())
+    wert = kasse + reserviert + sum(wert_pos.values())          # Buchwert inkl. Kasse für Orders unterwegs
     gewichte = pd.Series({t: v / wert for t, v in wert_pos.items()}, dtype=float)
     ziel, protokoll = auswahl(rangliste, gewichte, titel=int(sp["titel"]), puffer=int(sp["puffer_rang"]),
                               max_je_branche=int(float(sp["max_branchenanteil"]) * int(sp["titel"])),
