@@ -74,3 +74,7 @@ geändert. Begründung:
 
 `senden_freigeschaltet` bleibt aus, bis Jakob nach dem Test der Probe-Oberfläche ausdrücklich freigibt.
 
+**Freischaltung (Jakob, 03.11.2026):** Senden global an, zunächst nur für die Bücher real und crossover; Fundamental A,
+Fundamental B und Momentum bleiben gesperrt, bis die ersten Ausführungen und der Abgleich geprüft sind. Ablauf am Abend:
+`docs/BETRIEB_ABEND.md`.
+

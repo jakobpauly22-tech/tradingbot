@@ -23,30 +23,35 @@ buecher:
     rolle: core                        # Core 500 € in SPYI; Satellite-Anteil fließt in den Core; Strategien nur als Schatten
     max_orders_pro_tag: 5
     freigabe: einzeln                  # bei echtem Geld immer einzeln je Order
+    senden_freigeschaltet: true           # 03.11.2026: freigeschaltet
   fundamental_a:
     art: skalierung
     budget_eur: 10000.0                # entspricht dem Fundamental-Backtest
     rolle: core                        # 20 Einzelaktien, Originalscore (docs/FUNDAMENTAL.md)
     max_orders_pro_tag: 25
     freigabe: sammel                   # Sammelfreigabe je Buch, nur im Paper-Konto
+    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
   fundamental_b:
     art: skalierung
     budget_eur: 10000.0
     rolle: core                        # nur Qualitätshälfte
     max_orders_pro_tag: 25
     freigabe: sammel
+    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
   crossover:
     art: skalierung
     budget_eur: 10000.0                # ab hier wirkt die Mindestgebühr nicht mehr (Orders ≥ 2.500 €)
     rolle: satellite
     max_orders_pro_tag: 25
     freigabe: sammel
+    senden_freigeschaltet: true           # 03.11.2026: freigeschaltet
   momentum:
     art: skalierung
     budget_eur: 10000.0
     rolle: satellite
     max_orders_pro_tag: 25
     freigabe: sammel
+    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
 
 ibkr:
   host: 127.0.0.1                      # nur lokal
@@ -55,7 +60,8 @@ ibkr:
   konto_praefix_paper: DU              # Senden nur, wenn die Konto-ID damit beginnt
   modus_variable: TRADING_MODE         # aus .env; nur „paper“ erlaubt
   bibliothek: ib_async                 # bei Problemen mit Python 3.15: ältere Python-Version im venv, nicht die Bibliothek wechseln
-  senden_freigeschaltet: false        # Phase 6b: nur lesen; Freischalten erst nach dem Verbindungstest und Jakobs Okay
+  # Freischaltung durch Jakob am 03.11.2026 (ausdrücklich): global an, je Buch zusätzlich `senden_freigeschaltet` unten.
+  senden_freigeschaltet: true
 
 orders:
   kauf: {typ: limit, aufschlag_vortagesschluss: 0.02}   # gesendet sofort nach der Abendfreigabe, geht in die Xetra-Eröffnungsauktion
