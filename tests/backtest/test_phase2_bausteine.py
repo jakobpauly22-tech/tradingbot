@@ -68,3 +68,13 @@ def test_risk_hook_veto_verhindert_ausfuehrung(konfig, ohne_kosten):
     e = simuliere([_def(SparplanKern("A", lambda n, w: 0.0), limit=0.02, risk=veto)], m, t[0], t[-1], kosten=ohne_kosten,
                   regeln=Ausfuehrungsregeln(), konfig=konfig)["real"]
     assert e.trades.empty and len(e.meta["vetos"]) >= 1 and aufrufe[0][4] == 102.0 and e.meta["risk_geprueft"] == len(aufrufe)
+
+
+def test_limit_order_gebuehrenregel_auf_orderwert_zum_limit(konfig, mit_kosten):
+    """Ein Stück: Limit 125,46 € (Orderwert ≥ 125 €, Gebühr 1,25 € ≤ 1 %) – Eröffnung 123 € wird trotzdem ausgeführt."""
+    eroeffnung = [123.0] * 6
+    m = Marktdaten({"A": kerzen([123.0] * 6, eroeffnung=eroeffnung)})
+    t = m.kalender
+    d = TeilportfolioDefinition("real", 130.0, SparplanKern("A", GEB), [Instrument("A", "etf")], kauf_limit_aufschlag=0.02)
+    e = simuliere([d], m, t[0], t[-1], kosten=mit_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["real"]
+    assert len(e.trades) == 1 and e.trades.iloc[0]["stueck"] == 1 and e.verworfen.empty

@@ -420,8 +420,11 @@ class _Lauf:
         if stueck * preis + gebuehr > self.portfolio.verfuegbar_eur(w, fx) + 1e-9:
             self._verwerfen(tag, ticker, +1, stueck, "zu wenig Cash")
             return
-        if not self._gebuehrenregel_ok(gebuehr, kurswert):
-            self._verwerfen(tag, ticker, +1, stueck, f"Gebühren {gebuehr:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {kurswert:.2f} €")
+        # 1-%-Regel: bei Limit-Orders auf den Orderwert zum Limit (so prüft das Paper Trading vor dem Senden; eine gesendete
+        # Limit-Order wird bei günstigerer Eröffnung nicht storniert, Korrektur 03.11.2026), sonst auf den Ausführungswert
+        orderwert = stueck * limit if limit is not None else kurswert
+        if not self._gebuehrenregel_ok(self._gebuehren(tag, ticker, stueck, orderwert), orderwert):
+            self._verwerfen(tag, ticker, +1, stueck, f"Gebühren {gebuehr:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {orderwert:.2f} €")
             return
         if not self._risk(tag, ticker, +1, stueck, vortag if vortag is not None and pd.notna(vortag) else kurs, limit):
             return
