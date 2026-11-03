@@ -30,6 +30,21 @@ class BuchVorschlag:
     vorschlag: OrderVorschlag     # Werte in EUR (Risk-Manager)
     waehrung: str                 # Handelswährung der Order
     limit_order: float | None     # Limit in der Handelswährung
+    kern: str = ""                # Kernaussage in einem Satz (Kurzzeile)
+    details: str = ""             # Detail-These mit Zahlen, „Was dagegen spricht“, „Widerlegt, wenn“
+
+
+def _pz(x) -> str:
+    return "–" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x:.1%}".replace(".", ",")
+
+
+def _z(x, n=2) -> str:
+    return "–" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x:,.{n}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def details_text(zahlen: list[str], dagegen: list[str], widerlegt: str) -> str:
+    return "\n".join(["Zahlen:"] + [f"  • {z}" for z in zahlen] + ["Was dagegen spricht:"]
+                      + [f"  • {d}" for d in (dagegen or ["nichts Besonderes"])] + [f"Widerlegt, wenn: {widerlegt}"])
 
 
 def limit_preis(kurs: float, aufschlag: float) -> float:
@@ -80,7 +95,13 @@ def tausch_vorschlag(buch: str, tag, vorschlaege: list[BuchVorschlag], kasse_wae
              f"{erloese:,.0f}). Keine Währung darf negativ werden.")
     v = OrderVorschlag(vorschlag_id(buch, tag, f"EUR.{waehrung}", -1), pd.Timestamp(tag), buch, f"EUR.{waehrung}", -1, eur, 1.0, "fx",
                        eur_kurs=fx, waehrung=waehrung, these=these)
-    return BuchVorschlag(v, waehrung, None)
+    bv = BuchVorschlag(v, waehrung, None)
+    bv.kern = f"{eur} EUR in {waehrung} tauschen, damit die {waehrung}-Käufe ohne Kredit bezahlt werden."
+    bv.details = details_text([f"Geplante Käufe in {waehrung} zum Limit inkl. Gebühren: {_z(kaeufe)}", f"Puffer {_pz(puffer)}",
+                               f"Vorhandene {waehrung}-Kasse {_z(kasse_waehrung)}, Verkaufserlöse {_z(erloese)}",
+                               f"Kurs ≈ {_z(fx, 4)} {waehrung} je EUR → ≈ {_z(eur * fx)} {waehrung}"],
+                              ["Tauschkosten (mindestens 2 USD); Kursrisiko EUR/USD"], "die Käufe nicht freigegeben werden (Rest bleibt in USD-Kasse).")
+    return bv
 
 
 # --- Realbuch ---------------------------------------------------------------------------------------------------
@@ -91,7 +112,14 @@ def realbuch(tag, ticker: str, kurs_eur: float, kasse: float, aufschlag: float, 
         return []
     these = (f"Core: freie Kasse ({kasse:.2f} €) in {n} ganzen Anteilen {ticker} (MSCI ACWI IMI, Hauptbenchmark) anlegen; "
              "Rest bleibt Kasse. Widerlegt, wenn sich die Core-Regel ändert (Review bei 12 Monaten > 10 Pp. hinter ACWI IMI).")
-    return [_kauf("real", tag, ticker, n, kurs_eur, kurs_eur, "EUR", aufschlag, "etf", these)]
+    bv = _kauf("real", tag, ticker, n, kurs_eur, kurs_eur, "EUR", aufschlag, "etf", these)
+    rest = kasse - n * limit - gebuehr(n, n * limit)
+    bv.kern = "Freie Kasse in den Core-ETF (MSCI ACWI IMI = Hauptbenchmark) anlegen."
+    bv.details = details_text([f"Kurs {_z(kurs_eur)} €, Limit {_z(limit)} € (Vortagesschluss + 2 %, abgerundet)",
+                               f"{n} Stück ≈ {_z(n * limit)} €, Gebühr {_z(gebuehr(n, n * limit))} €, Restkasse ≈ {_z(rest)} €"],
+                              ([f"Ganze Stücke: {_z(rest)} € bleiben Kasse bis zum nächsten Betrag"] if rest > 0 else []),
+                              "sich die Core-Regel ändert (Review, wenn der Core 12 Monate mehr als 10 Pp. hinter dem ACWI IMI liegt).")
+    return [bv]
 
 
 # --- Technik-Bücher --------------------------------------------------------------------------------------------
@@ -155,7 +183,12 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
             grund = protokoll.get(t, {}).get("grund", "")
             if w == 0 and bestand.get(t, 0) > 0:
                 these = f"{regel}: Ausstieg {t} – {grund}."
-                vorschlaege.append(_verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f))
+                bv = _verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f)
+                bv.kern = f"Ausstieg: {grund}."
+                bv.details = details_text([f"Schluss {_z(kurs_eur)} €, SMA50 {_z(z['sma_schnell'])} €, SMA200 {_z(z['sma_langsam'])} €",
+                                           f"Bestand {bestand[t]:g} Stück ≈ {_z(bestand[t] * kurs_eur)} €"], [],
+                                          "– (Ausstiege sind immer erlaubt)")
+                vorschlaege.append(bv)
             elif w > 0:
                 limit_eur = limit_preis(orderkurs[t], aufschlag) / (f if w_ccy != "EUR" else 1.0)
                 n = stueck_fuer(w * wert, frei, limit_eur, gebuehr)
@@ -165,12 +198,74 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                 these = (f"{regel}: Einstieg {t} ({grund}); Ziel {w:.1%} des Buchs, Stop etwa {stop:.2f} € (2 × ATR). "
                          f"Widerlegt bei Schluss unter dem Stop oder wenn das Signal erlischt"
                          + (" (SMA50 unter SMA200)." if regel == "crossover" else " (12−1 ≤ 0 bei der Monatsprüfung)."))
-                vorschlaege.append(_kauf(buch, tag, t, n, kurs_eur, orderkurs[t], w_ccy, aufschlag, "etf", these, stop=stop, fx=f))
+                bv = _kauf(buch, tag, t, n, kurs_eur, orderkurs[t], w_ccy, aufschlag, "etf", these, stop=stop, fx=f)
+                abstand = z["sma_schnell"] / z["sma_langsam"] - 1 if z["sma_langsam"] else float("nan")
+                bv.kern = (f"Trend intakt: SMA50 {_pz(abstand)} über SMA200." if regel == "crossover"
+                           else f"Momentum 12−1 positiv ({_pz(z['mom'])}).")
+                zahlen = [f"Schluss {_z(kurs_eur)} €, Limit {_z(limit_eur)} €" + (f" ({_z(bv.limit_order)} {w_ccy})" if w_ccy != "EUR" else ""),
+                          f"SMA50 {_z(z['sma_schnell'])} €, SMA200 {_z(z['sma_langsam'])} € (Abstand {_pz(abstand)})",
+                          f"Momentum 12−1: {_pz(z['mom'])}",
+                          f"ATR(20) {_z(z['atr'])} €, Stop ≈ {_z(stop)} € (Abstand {_pz(stop / kurs_eur - 1)})",
+                          f"Maximaler Verlust bis Stop ≈ {_z(n * (limit_eur - stop))} € ({_pz(n * (limit_eur - stop) / wert)} des Buchs)",
+                          f"{n} Stück ≈ {_z(n * limit_eur)} € = {_pz(n * limit_eur / wert)} des Buchs (Ziel {_pz(w)})"]
+                dagegen = []
+                if n * limit_eur < 0.9 * w * wert:
+                    dagegen.append(f"Ganze Stücke/Kasse: nur {_pz(n * limit_eur / wert)} statt {_pz(w)} des Buchs")
+                if regel == "momentum" and z["sma_langsam"] and z["close"] < z["sma_langsam"]:
+                    dagegen.append("Kurs unter SMA200 (kurzfristig schwächer als das 12−1-Signal)")
+                if regel == "crossover" and not math.isnan(z["mom"]) and z["mom"] < 0:
+                    dagegen.append(f"Momentum 12−1 negativ ({_pz(z['mom'])})")
+                bv.details = details_text(zahlen, dagegen, "der Schluss unter dem Stop liegt oder das Signal erlischt"
+                                          + (" (SMA50 unter SMA200)." if regel == "crossover" else " (12−1 ≤ 0 bei der Monatsprüfung)."))
+                vorschlaege.append(bv)
                 frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     return vorschlaege, zustand_speichern(s)
 
 
 # --- Fundamental-Bücher ----------------------------------------------------------------------------------------
+SIGNALNAMEN = {"roa": "ROA > 0", "cfo": "CFO > 0", "delta_roa": "ROA steigt", "accrual": "CFO > Jahresüberschuss",
+               "delta_lever": "Verschuldung sinkt", "delta_liquid": "Liquidität steigt", "eq_offer": "keine neuen Aktien",
+               "delta_margin": "Bruttomarge steigt", "delta_turn": "Kapitalumschlag steigt"}
+
+
+def _wert(z, spalte):
+    v = z.get(spalte) if hasattr(z, "get") else None
+    return None if v is None or (isinstance(v, float) and math.isnan(v)) else v
+
+
+def details_fundamental(ticker, z, med, variante, rang, kurs_usd, n, limit_eur, zielwert) -> str:
+    sig = _wert(z, "piotroski_signale") or {}
+    erfuellt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v == 1]
+    verfehlt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v == 0]
+    fehlt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v is None]
+    ep, ev, acc = _wert(z, "ep"), _wert(z, "ebit_ev"), _wert(z, "accruals")
+    m = (lambda c: None if med is None or c not in med.index or (isinstance(med[c], float) and math.isnan(med[c])) else float(med[c]))
+    kgv = (1 / ep) if ep and ep > 0 else None
+    kgv_med = (1 / m("ep")) if m("ep") and m("ep") > 0 else None
+    mw = _wert(z, "marktwert_usd")
+    zahlen = [f"Branche SIC {int(z['sic'])} (Vergleichsgruppe {_wert(z, 'gruppe') or '–'}), Kurs {_z(kurs_usd)} USD"
+              + (f", Marktkapitalisierung {_z(mw / 1e9, 1)} Mrd. USD" if mw else ""),
+              f"Rang {rang} im gefilterten S&P 500 (ohne Finanzwerte), Gesamtscore {z['gesamt']:.2f} = "
+              + ("nur Qualität" if variante == "B" else "½ Qualität + ½ Bewertung") + f"; Qualität {z['qualitaet']:.2f}, Bewertung {z['bewertung']:.2f}",
+              f"Piotroski {_z(_wert(z, 'piotroski_filter'), 0)} von 9" + (f" (hochgerechnet aus {_wert(z, 'piotroski_n')} Signalen)" if _wert(z, "piotroski_hoch") else "")
+              + (f"; erfüllt: {', '.join(erfuellt)}" if erfuellt else "") + (f"; nicht erfüllt: {', '.join(verfehlt)}" if verfehlt else "")
+              + (f"; nicht berechenbar: {', '.join(fehlt)}" if fehlt else ""),
+              f"Accruals {_pz(acc)} (Branchenmedian {_pz(m('accruals'))}; niedriger ist besser)",
+              f"KGV {_z(kgv, 1)} (Branchenmedian {_z(kgv_med, 1)}), EBIT/EV {_pz(ev)} (Branchenmedian {_pz(m('ebit_ev'))})",
+              f"Altman {_wert(z, 'altman_variante') or '–'} {_z(_wert(z, 'altman'))} ({_wert(z, 'altman_zone') or 'nicht berechenbar'}), "
+              f"Beneish {_z(_wert(z, 'beneish'))} (Grenze −1,78)",
+              f"Jahresabschluss bis {pd.Timestamp(z['geschaeftsjahr_ende']).date():%d.%m.%Y}" if _wert(z, "geschaeftsjahr_ende") is not None else "Jahresabschluss: –",
+              (f"Daten bekannt ab {pd.Timestamp(z['bekannt_ab']).date():%d.%m.%Y} (Tag nach der SEC-Einreichung)" if _wert(z, "bekannt_ab") is not None else ""),
+              f"{n} Stück ≈ {_z(n * limit_eur)} € (Ziel ≈ {_z(zielwert)} €)"]
+    dagegen = list(_wert(z, "hinweise") or [])
+    if z.get("ersetzt"):
+        dagegen.append(f"Median-Ersatz für: {z['ersetzt']} (fehlende Werte zählen neutral)")
+    if n * limit_eur < 0.8 * zielwert:
+        dagegen.append(f"Ganze Stücke: nur {_z(n * limit_eur)} € statt {_z(zielwert)} € investiert")
+    if variante == "B":
+        dagegen.append(f"Bewertung zählt in Buch B nicht (Bewertungsrang {z['bewertung']:.2f})")
+    return details_text([x for x in zahlen if x], dagegen,
+                        "ein Filter die Aktie ausschließt (Piotroski ≤ 3, Altman, Beneish) oder ihr Rang am nächsten Quartalsstichtag über 30 liegt.")
 def quartalsstichtag(tag) -> bool:
     """Erster NYSE-Handelstag eines Quartals (Rebalancing wie im Backtest)."""
     t = pd.Timestamp(tag)
@@ -196,6 +291,8 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
                               band=tuple(float(x) for x in sp["drift_band"]))
     zeilen = rangliste.set_index("ticker")
     gruende = {p["ticker"]: p for p in protokoll}
+    spalten_median = [c for c in ("ep", "ebit_ev", "accruals", "piotroski_filter") if c in rangliste.columns]
+    median = rangliste.groupby("gruppe")[spalten_median].median() if "gruppe" in rangliste.columns and spalten_median else pd.DataFrame()
     vorschlaege, frei, nicht_kaufbar = [], kasse, []
     for t, w in sorted(ziel.items(), key=lambda x: x[1] if not math.isnan(x[1]) else 1):   # Verkäufe zuerst
         if math.isnan(w):
@@ -203,7 +300,10 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
         kurs_eur = kurse_usd[t] / eurusd
         if w == 0 and bestand.get(t, 0) > 0:
             these = f"Fundamental {variante}: Verkauf {t} – {gruende[t]['grund']}."
-            vorschlaege.append(_verkauf(buch, tag, t, bestand[t], kurs_eur, "USD", "aktie", these, fx=eurusd, plan="USD"))
+            bv = _verkauf(buch, tag, t, bestand[t], kurs_eur, "USD", "aktie", these, fx=eurusd, plan="USD")
+            bv.kern = f"Verkauf: {gruende[t]['grund']}."
+            bv.details = details_text([f"Kurs {_z(kurse_usd[t])} USD, Bestand {bestand[t]:g} Stück"], [], "– (Ausstiege sind immer erlaubt)")
+            vorschlaege.append(bv)
             frei += bestand[t] * kurs_eur
         elif w > 0:
             ist = bestand.get(t, 0) * kurs_eur
@@ -218,7 +318,12 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
                      f"(Qualität {z['qualitaet']:.2f}, Bewertung {z['bewertung']:.2f})"
                      + (f", Median-Ersatz: {z['ersetzt']}" if z.get("ersetzt") else "")
                      + ". Widerlegt bei Ausschluss durch einen Filter oder Rang über 30 am nächsten Quartalsstichtag.")
-            vorschlaege.append(_kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD"))
+            bv = _kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD")
+            bv.kern = (f"Rang {gruende[t].get('rang')}: " + (f"Qualität {z['qualitaet']:.2f} (Buch B: nur Qualitätshälfte zählt)." if variante == "B"
+                       else f"Qualität {z['qualitaet']:.2f} und Bewertung {z['bewertung']:.2f} im oberen Bereich der Branche."))
+            bv.details = details_fundamental(t, z, median.loc[z["gruppe"]] if z.get("gruppe") in median.index else None, variante,
+                                             gruende[t].get("rang"), kurse_usd[t], n, limit_eur, w * wert)
+            vorschlaege.append(bv)
             frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     grund = "Aufbau" if not aufgebaut else "Quartalsstichtag"
     if nicht_kaufbar:

@@ -66,3 +66,20 @@ def test_auswahl_zaehler_und_sammelfreigabe(wurzel):
     f._alle(False)
     wurzel.update()
     assert all(i.winfo_manager() == "" for i in f.inhalte)
+
+
+
+def test_kurzzeile_und_details_aufklappbar(wurzel):
+    from tradingbot.betrieb.oberflaeche import Freigabefenster
+    erg = _erg(10)
+    erg.vorschlaege[0][0].kern = "Trend intakt."
+    erg.vorschlaege[0][0].details = "Zahlen:\n  • SMA50 1 €"
+    f = Freigabefenster(wurzel, erg, JournalAttrappe(), lade_konfiguration("betrieb"), probe=True, senden_fn=lambda ids: [])
+    zeile = Freigabefenster.kurzzeile("real", erg.vorschlaege[0][0], erg.vorschlaege[0][1])
+    assert zeile.startswith("real | KAUF 3 × T0 | Limit 102.00 EUR | ≈ 306.00 € | Trend intakt.")
+    knopf = f.detail_knoepfe[0]
+    knopf.invoke()
+    assert knopf.cget("text") == "Details ▾"
+    knopf.invoke()
+    assert knopf.cget("text") == "Details ▸"
+    assert "PROBE" in wurzel.title()

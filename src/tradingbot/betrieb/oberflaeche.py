@@ -15,7 +15,7 @@ class Freigabefenster:
     def __init__(self, wurzel: tk.Tk, erg, journal, betrieb: dict, *, probe: bool, senden_fn):
         self.wurzel, self.erg, self.journal, self.betrieb, self.probe, self.senden_fn = wurzel, erg, journal, betrieb, probe, senden_fn
         self.auswahl: dict[str, tk.BooleanVar] = {}
-        wurzel.title("Trading-Bot – " + ("PROBELAUF (nichts wird gesendet)" if probe else "Tageslauf (Paper)"))
+        wurzel.title(("■ PROBE ■ PROBELAUF – nichts wird gesendet, kein Messbeginn" if probe else "Trading-Bot – Tageslauf (Paper)"))
         wurzel.geometry("1100x800")
 
         # 1. unten zuerst: Knopfleiste, dann Protokoll – bleiben immer sichtbar
@@ -31,8 +31,12 @@ class Freigabefenster:
         self.protokoll.pack(side="bottom", fill="x", padx=8, pady=4)
         self.protokoll.insert("end", "\n".join(erg.meldungen) + "\n")
 
-        # Kopfzeile oben
-        kopf = tk.Frame(wurzel)
+        # Kopfzeile oben; Probe deutlich markiert (Entscheidung Jakob 03.11.2026)
+        if probe:
+            tk.Label(wurzel, text="PROBE – nichts wird gesendet, kein Messbeginn, eigenes Probe-Journal", bg="#c62828", fg="white",
+                     font=("Segoe UI", 14, "bold"), pady=6).pack(side="top", fill="x")
+            wurzel.configure(bg="#ffebee")
+        kopf = tk.Frame(wurzel, bg="#ffebee" if probe else None)
         kopf.pack(side="top", fill="x", padx=8, pady=4)
         modus = "PROBE – sendet nie, kein Messbeginn" if probe else ("Senden AN" if betrieb["ibkr"].get("senden_freigeschaltet") else "Senden AUS (nur Freigabe)")
         tk.Label(kopf, text=f"Tageslauf {erg.jetzt:%d.%m.%Y %H:%M} – {modus}", font=("Segoe UI", 12, "bold")).pack(side="left")
@@ -57,6 +61,7 @@ class Freigabefenster:
 
         self.inhalte: list[tk.Frame] = []
         self.klapp_knoepfe: list[tk.Button] = []
+        self.detail_knoepfe: list[tk.Button] = []
         for buch, bk in betrieb["buecher"].items():
             self._buch(buch, bk)
         self._zaehlen()
@@ -90,19 +95,48 @@ class Freigabefenster:
         if buch in self.erg.befunde:
             tk.Label(inhalt, text="Datenprüfung: " + "; ".join(self.erg.befunde[buch][:3]), fg="red").pack(anchor="w")
         for bv, u in vs:
-            v = bv.vorschlag
-            text = (f"{'TAUSCH' if v.art == 'fx' else ('KAUF' if v.richtung > 0 else 'VERKAUF')} {v.stueck} × {v.ticker}  "
-                    f"{('Limit %.2f %s' % (bv.limit_order, bv.waehrung)) if bv.limit_order else 'ohne Limit'}  ≈ {v.orderwert:,.2f} €  "
-                    f"{'' if u.frei else 'VETO: ' + '; '.join(u.gruende)}")
-            if bk["freigabe"] == "einzeln" and u.frei:
-                var = tk.BooleanVar(value=False)
-                var.trace_add("write", lambda *a: self._zaehlen())
-                self.auswahl[v.id] = var
-                tk.Checkbutton(inhalt, text=text, variable=var, anchor="w", justify="left").pack(anchor="w")
+            self._vorschlag(inhalt, buch, bk, bv, u)
+
+    @staticmethod
+    def kurzzeile(buch: str, bv, u) -> str:
+        """Kurzzeile: Buch, Kauf/Verkauf, Stück, Titel, Limit, Orderwert, Kernaussage in einem Satz."""
+        v = bv.vorschlag
+        art = "TAUSCH" if v.art == "fx" else ("KAUF" if v.richtung > 0 else "VERKAUF")
+        limit = f"Limit {bv.limit_order:.2f} {bv.waehrung}" if bv.limit_order else "ohne Limit"
+        kern = bv.kern or v.these.split(". ")[0]
+        veto = "" if u.frei else "  VETO: " + "; ".join(u.gruende)
+        return f"{buch} | {art} {v.stueck} × {v.ticker} | {limit} | ≈ {v.orderwert:,.2f} € | {kern}{veto}"
+
+    def _vorschlag(self, inhalt, buch, bk, bv, u):
+        v = bv.vorschlag
+        zeile = tk.Frame(inhalt)
+        zeile.pack(fill="x", anchor="w")
+        text = self.kurzzeile(buch, bv, u)
+        if bk["freigabe"] == "einzeln" and u.frei:
+            var = tk.BooleanVar(value=False)
+            var.trace_add("write", lambda *a: self._zaehlen())
+            self.auswahl[v.id] = var
+            tk.Checkbutton(zeile, text=text, variable=var, anchor="w", justify="left").pack(side="left")
+        else:
+            tk.Label(zeile, text=text, anchor="w", justify="left", fg="black" if u.frei else "gray").pack(side="left")
+        detail = bv.details or v.these
+        if u.hinweise:
+            detail += "\nHinweise des Risk-Managers: " + "; ".join(u.hinweise)
+        rahmen = tk.Frame(inhalt)
+        label = tk.Label(rahmen, text=detail, wraplength=1000, justify="left", anchor="w", fg="#333", bg="#f5f5f5")
+        label.pack(fill="x", padx=24)
+        knopf = tk.Button(zeile, text="Details ▸", relief="flat", fg="#1565c0")
+
+        def umschalten():
+            if rahmen.winfo_manager():
+                rahmen.pack_forget()
+                knopf.configure(text="Details ▸")
             else:
-                tk.Label(inhalt, text=text, anchor="w", justify="left", fg="black" if u.frei else "gray").pack(anchor="w")
-            tk.Label(inhalt, text="   These: " + v.these + ("   Hinweise: " + "; ".join(u.hinweise) if u.hinweise else ""),
-                     wraplength=1000, justify="left", fg="#444").pack(anchor="w")
+                rahmen.pack(fill="x", anchor="w", after=zeile)
+                knopf.configure(text="Details ▾")
+        knopf.configure(command=umschalten)
+        knopf.pack(side="right")
+        self.detail_knoepfe.append(knopf)
 
     def _klappen(self, inhalt: tk.Frame, knopf: tk.Button, offen: bool | None = None):
         sichtbar = inhalt.winfo_manager() != ""

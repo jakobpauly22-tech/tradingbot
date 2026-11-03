@@ -57,11 +57,12 @@ def bericht(erg, journal, betrieb: dict) -> str:
         for bv, u in vs:
             v = bv.vorschlag
             limit = f"Limit {bv.limit_order:.2f} {bv.waehrung}" if bv.limit_order else "ohne Limit"
-            zeilen.append(f"  {'KAUF' if v.richtung > 0 else 'VERKAUF'} {v.stueck} × {v.ticker} ({limit}, Wert ≈ {v.orderwert:,.2f} €) "
-                          f"→ {'frei' if u.frei else 'VETO: ' + '; '.join(u.gruende)}")
+            art = "TAUSCH" if v.art == "fx" else ("KAUF" if v.richtung > 0 else "VERKAUF")
+            zeilen.append(f"  {art} {v.stueck} × {v.ticker} ({limit}, Wert ≈ {v.orderwert:,.2f} €) → {'frei' if u.frei else 'VETO: ' + '; '.join(u.gruende)}")
+            zeilen.append(f"     Kern: {bv.kern or v.these}")
             if u.hinweise:
                 zeilen.append("     Hinweise: " + "; ".join(u.hinweise))
-            zeilen.append(f"     These: {v.these}")
+            zeilen += ["     " + x for x in (bv.details or "").splitlines()]
     return "\n".join(zeilen)
 
 

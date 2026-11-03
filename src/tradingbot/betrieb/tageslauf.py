@@ -228,7 +228,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         journal.ereignis("ersetzt", f"{n_ersetzt} noch nicht freigegebene Vorschläge früherer Läufe ersetzt")
     for v, u in urteile:
         bv = nach_id[v.id]
-        journal.vorschlag_speichern(v, u, waehrung=bv.waehrung, freigabe_bis=freigabe_bis, limit_order=bv.limit_order, jetzt=jetzt)
+        journal.vorschlag_speichern(v, u, waehrung=bv.waehrung, freigabe_bis=freigabe_bis, limit_order=bv.limit_order, jetzt=jetzt,
+                                    kern=bv.kern, details=bv.details)
         erg.vorschlaege.append((bv, u))
     for n, w in werte_buch.items():
         journal.buchwert_speichern(n, tag, w, journal.kasse(n))

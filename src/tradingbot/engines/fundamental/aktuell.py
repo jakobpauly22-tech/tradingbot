@@ -99,10 +99,15 @@ def bewertung_am(tag, *, aktualisieren: bool = True) -> tuple[pd.DataFrame, dict
             p, alt, ben, acc, m = piotroski(t), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t), multiples(t, mw)
             cfo = _w(t, "operativer_cashflow", 0)
             e = filter_anwenden(sic=sic, piotroski=p, altman=alt, beneish=ben, cfo_t=cfo, konfig=konfig)
+            ende_t = info["ende_t"]
+            bekannt = werte.loc[werte["ende"] == ende_t, "bekannt_ab"]
             zeilen.append({"firma": firma, "symbol": symbol_je_firma.get(firma), "sic": sic, "schluss_usd": float(kurse["close"].iloc[-1]),
                            "kursdatum": kurse.index[-1], "piotroski_filter": piotroski_fuer_filter(p), "accruals": acc["wert"], "ep": m["ep"],
                            "ebit_ev": m["ebit_ev"], "ausgeschlossen": e.ausgeschlossen, "gruende": list(e.gruende), "hinweise": list(e.hinweise),
-                           "piotroski_hoch": p["hochgerechnet"]})
+                           "piotroski_hoch": p["hochgerechnet"], "piotroski_n": p["anzahl_signale"], "piotroski_signale": dict(p["signale"]),
+                           "marktwert_usd": mw, "altman": alt.get("wert"), "altman_zone": alt.get("zone"), "altman_variante": alt.get("variante"),
+                           "beneish": ben.get("wert"), "geschaeftsjahr_ende": ende_t,
+                           "bekannt_ab": bekannt.min() if len(bekannt) else None})
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{firma}: {type(f).__name__} {str(f)[:60]}"
         schwelle.zaehle(fehler)

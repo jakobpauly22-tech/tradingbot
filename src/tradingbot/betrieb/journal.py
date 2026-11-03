@@ -48,6 +48,10 @@ class Journal:
         self.db = sqlite3.connect(self.datei)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        v_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(vorschlaege)")}
+        for name in ("kern", "details"):
+            if name not in v_spalten:
+                self.db.execute(f"ALTER TABLE vorschlaege ADD COLUMN {name} TEXT")
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
         for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT")):
             if name not in spalten:                                   # ältere Journale ergänzen
@@ -109,7 +113,7 @@ class Journal:
 
     # --- Vorschläge ----------------------------------------------------------------------------------------
     def vorschlag_speichern(self, v, urteil, *, waehrung: str, freigabe_bis: str, limit_order: float | None = None,
-                            jetzt: datetime | None = None):
+                            jetzt: datetime | None = None, kern: str = "", details: str = ""):
         """Speichert Vorschlag und Urteil; `limit_order` = Limit in der Handelswährung (sonst das EUR-Limit)."""
         jetzt = (jetzt or datetime.now()).isoformat(timespec="seconds")
         alt = self.db.execute("SELECT status FROM vorschlaege WHERE id=?", (v.id,)).fetchone()
@@ -117,11 +121,14 @@ class Journal:
             return                                       # schon freigegeben oder gesendet: nicht überschreiben
         status = "vorgeschlagen" if urteil.frei else "veto"
         self.db.execute(
-            "INSERT OR REPLACE INTO vorschlaege VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO vorschlaege (id, erstellt, signaltag, buch, ticker, art, waehrung, richtung, stueck, limit_preis, "
+            "letzter_kurs_eur, stop, these, frei, gruende, hinweise, status, freigabe_bis, order_id, aktualisiert) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (v.id, jetzt, str(v.datum.date()), v.buch, v.ticker, v.art, waehrung, v.richtung, v.stueck,
              limit_order if limit_order is not None else v.limit, v.letzter_kurs,
              v.stop, v.these, int(urteil.frei), json.dumps(urteil.gruende, ensure_ascii=False), json.dumps(urteil.hinweise, ensure_ascii=False),
              status, freigabe_bis, None, jetzt))
+        self.db.execute("UPDATE vorschlaege SET kern=?, details=? WHERE id=?", (kern, details, v.id))
         for hinweis in urteil.hinweise:
             if hinweis.startswith("hätte gesperrt"):
                 self.ereignis("haette_gesperrt", hinweis, v.buch)

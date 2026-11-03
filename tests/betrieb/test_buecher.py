@@ -63,3 +63,15 @@ def test_limit_abgerundet_nie_ueber_zwei_prozent():
     from tradingbot.betrieb.buecher import limit_preis
     assert limit_preis(11.67, 0.02) == 11.90 and 11.90 <= 11.67 * 1.02          # 11,9034 → 11,90
     assert limit_preis(67.87, 0.02) == 69.22 and 69.22 <= 67.87 * 1.02          # vorher gerundet 69,23 > 2 %
+
+
+
+def test_thesen_kern_und_details():
+    v = realbuch("2026-11-02", "SPYI.DE", 200.0, 500.0, 0.02, GEB)[0]
+    assert v.kern and "Widerlegt, wenn" in v.details and "Was dagegen spricht" in v.details
+    k = lade_konfiguration("technik")
+    kurse = {"A.DE": _kerzen(np.linspace(100, 160, 300))}
+    tag = kurse["A.DE"].index[-1]
+    tv, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 160.0}, {}, {}, 10_000.0, {}, {}, k, 0.02, GEB)
+    d = tv[0].details
+    assert "SMA50" in d and "Stop" in d and "Maximaler Verlust bis Stop" in d and "des Buchs" in d
