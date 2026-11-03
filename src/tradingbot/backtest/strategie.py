@@ -56,3 +56,28 @@ class FesteGewichte:
             return None
         self._letzte_periode = periode
         return self.gewichte
+
+
+class SparplanKern:
+    """Realbuch (Phase 2): Kasse in ganzen Anteilen eines ETF anlegen, sobald es für mindestens ein Stück zum Limit plus
+    Gebühr reicht und die Gebühr höchstens 1 % des Orderwerts ist; Rest bleibt Kasse (Entscheidungen 02./03.11.2026).
+
+    `mit_limit`: Referenzpreis = Vortagesschluss · (1 + Aufschlag), abgerundet (Limit-Order); sonst der Schlusskurs
+    (Zwilling mit Market-Order). Signal am Schluss, Ausführung zur Eröffnung des nächsten Handelstags (Simulation).
+    """
+
+    def __init__(self, ticker: str, gebuehr, *, aufschlag: float = 0.02, mit_limit: bool = True, max_gebuehr_anteil: float = 0.01):
+        self.ticker, self.gebuehr, self.aufschlag, self.mit_limit, self.max_anteil = ticker, gebuehr, aufschlag, mit_limit, max_gebuehr_anteil
+        self.name = f"Sparplan {ticker} ({'Limit' if mit_limit else 'Market'})"
+
+    def zielgewichte(self, stichtag, sicht):
+        import math
+
+        kurs = sicht.kurs_am(self.ticker, stichtag)
+        preis = math.floor(kurs * (1 + self.aufschlag) * 100 + 1e-9) / 100 if self.mit_limit else kurs
+        n = int(sicht.cash // preis)
+        while n > 0 and n * preis + self.gebuehr(n, n * preis) > sicht.cash + 1e-9:
+            n -= 1
+        if n < 1 or self.gebuehr(n, n * preis) > self.max_anteil * n * preis + 1e-12:
+            return None
+        return pd.Series({self.ticker: 1.0})

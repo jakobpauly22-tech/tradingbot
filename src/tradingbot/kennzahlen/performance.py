@@ -246,3 +246,42 @@ def kennzahlen(werte: pd.Series, benchmark: pd.Series | None = None, rf_tag: pd.
             }
         )
     return ergebnis
+
+
+def zeitgewichtete_rendite(werte: pd.Series, einzahlungen: pd.Series | None = None) -> pd.Series:
+    """Zeitgewichtete Rendite (TWR) als Index (Start 1,0): Einzahlungen verzerren die Rendite nicht.
+
+    Formel: r_t = (V_t − E_t) / V_{t−1} − 1,  TWR-Index_t = Π_{s ≤ t} (1 + r_s)
+    V_t = Depotwert am Ende von Tag t, E_t = Einzahlung am Tagesbeginn von Tag t (externer Zufluss).
+    Quelle: Performance-Messung mit Ein- und Auszahlungen bei täglicher Bewertung, vgl. wissen/02 (Rendite und Risiko);
+    Gegenstück zur geldgewichteten Rendite (`xirr`).
+    """
+    e = (einzahlungen if einzahlungen is not None else pd.Series(0.0, index=werte.index)).reindex(werte.index).fillna(0.0)
+    r = (werte - e) / werte.shift(1) - 1
+    return (1 + r.fillna(0.0)).cumprod()
+
+
+def xirr(zahlungen: pd.Series) -> float:
+    """Interner Zinsfuß unregelmäßiger Zahlungen (geldgewichtete Rendite, p.a.).
+
+    Formel: Σ_i C_i / (1 + r)^((t_i − t_0) / 365,25) = 0;  C_i aus Sicht des Anlegers (Einzahlung negativ, Endwert
+    positiv). Lösung per Bisektion auf [−0,99; 10]. Quelle: interner Zins, wissen/01 (Kapitalwert und IRR; `npv` in
+    tests/musterloesungen/referenz.py mit Jahresperioden); hier mit taggenauen Zeitpunkten.
+    """
+    z = zahlungen.sort_index()
+    t = np.array([(d - z.index[0]).days / 365.25 for d in z.index])
+    c = z.to_numpy(dtype=float)
+
+    def kapitalwert(r):
+        return float(np.sum(c / (1 + r) ** t))
+
+    unten, oben = -0.99, 10.0
+    if kapitalwert(unten) * kapitalwert(oben) > 0:
+        return float("nan")
+    for _ in range(200):
+        mitte = (unten + oben) / 2
+        if kapitalwert(unten) * kapitalwert(mitte) <= 0:
+            oben = mitte
+        else:
+            unten = mitte
+    return (unten + oben) / 2

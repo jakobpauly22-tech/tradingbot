@@ -72,6 +72,12 @@ class TeilportfolioDefinition:
     art: str = "echt"             # echt | schatten (virtuelles Kapital, getrennt ausgewiesen)
     steuergruppe: str = "depot"   # Teilportfolios einer Gruppe teilen Pauschbetrag und Verlusttöpfe
     rolle: str = "core"           # core | satellite: bestimmt, welche Limits der Bericht prüft
+    # Phase 2 (Jakob 03.11.2026): Einzahlungen (Datum → EUR, am Tagesbeginn in die EUR-Kasse), Kauf als Limit-Order
+    # (Vortagesschluss · (1 + Aufschlag), auf Cent abgerundet; ausgeführt nur, wenn die Eröffnung höchstens das Limit ist,
+    # sonst verfällt die Order) und Prüfung jeder Order durch den Risk-Manager (Funktion → Urteil; Veto = nicht ausführen).
+    einzahlungen: pd.Series | None = None
+    kauf_limit_aufschlag: float | None = None
+    risk_pruefung: object | None = None
 
     def __post_init__(self):
         if self.art not in ("echt", "schatten"):
@@ -137,6 +143,10 @@ class _Lauf:
         self.steuerereignisse: list[Steuerereignis] = []
         self.delisting_faelle: list[dict] = []
         self.tausche: list[dict] = []
+        self.verfallen: list[dict] = []
+        self.vetos: list[dict] = []
+        self.risk_geprueft = 0
+        self.orders_je_tag: dict = {}
 
     def _ereignis(self, datum, ticker, art, betrag, quellensteuer=0.0):
         self.steuerereignisse.append(Steuerereignis(pd.Timestamp(datum), self.d.name, ticker, art, self.steuerarten[ticker], betrag, quellensteuer))
@@ -333,25 +343,40 @@ class _Lauf:
             ziel_stueck = vorhanden + delta
             stueck = vorhanden if ziel_stueck <= TOLERANZ else vorhanden - self._stueck_runden_auf(ziel_stueck)
             if stueck > TOLERANZ:
-                self._verkaufen(tag, ticker, min(stueck, vorhanden), eroeffnung[ticker])
+                self._verkaufen(tag, ticker, min(stueck, vorhanden), eroeffnung[ticker], schluss_vortag.get(ticker))
 
         # Käufe, größte Lücke zuerst
         kaeufe = sorted(((t, d) for t, d in plan.items() if d > TOLERANZ), key=lambda x: -x[1] * eroeffnung[x[0]])
         self.tausch_fuer_kaeufe(tag, [(t, d, eroeffnung[t]) for t, d in kaeufe])
         for ticker, delta in kaeufe:
-            self._kaufen(tag, ticker, delta, eroeffnung[ticker])
+            self._kaufen(tag, ticker, delta, eroeffnung[ticker], schluss_vortag.get(ticker))
 
     def _stueck_runden_auf(self, stueck: float) -> float:
         """Zielbestand beim Verkauf aufrunden: Es wird nur so viel verkauft, wie das Ziel verlangt (weniger Umschlag)."""
         return math.ceil(stueck - 1e-9) if self.regeln.ganze_stuecke else stueck
 
-    def _verkaufen(self, tag, ticker, stueck, kurs):
+    def _risk(self, tag, ticker, richtung, stueck, letzter_kurs, limit) -> bool:
+        """Risk-Manager-Hook: True = frei; Veto wird mit Grund protokolliert."""
+        if self.d.risk_pruefung is None:
+            return True
+        self.risk_geprueft += 1
+        urteil = self.d.risk_pruefung(self, tag, ticker, richtung, int(round(stueck)), float(letzter_kurs), limit)
+        if not urteil.frei:
+            self.vetos.append({"datum": tag, "ticker": ticker, "richtung": richtung, "stueck": stueck, "gruende": "; ".join(urteil.gruende)})
+            self._verwerfen(tag, ticker, richtung, stueck, "Veto Risk-Manager: " + "; ".join(urteil.gruende))
+            return False
+        self.orders_je_tag[tag] = self.orders_je_tag.get(tag, 0) + 1
+        return True
+
+    def _verkaufen(self, tag, ticker, stueck, kurs, vortag=None):
         # Ausstiege und Reduzierungen sind immer erlaubt, auch wenn die Gebühr über 1 % liegt (Jakob, 01.11.2026)
         preis = self.kosten.ausfuehrungspreis(kurs, -1, self.klassen[ticker])
         kurswert = stueck * preis
         gebuehr = self._gebuehren(tag, ticker, stueck, kurswert)
         if gebuehr > kurswert:
             self._verwerfen(tag, ticker, -1, stueck, f"Gebühren {gebuehr:.2f} € übersteigen den Erlös {kurswert:.2f} €")
+            return
+        if not self._risk(tag, ticker, -1, stueck, vortag if vortag is not None and pd.notna(vortag) else kurs, None):
             return
         ergebnis = self.portfolio.verkaufen(tag, ticker, stueck, preis, gebuehr, *self._w(tag, ticker))
         vorabpauschalen = sum(p.stueck * p.vorabpauschale_je_stueck for p in ergebnis.verbrauchte_posten)
@@ -360,8 +385,17 @@ class _Lauf:
             tag, ticker, -1, stueck, kurs, preis, kurswert, gebuehr, stueck * (kurs - preis), ergebnis.einstand, ergebnis.gewinn, None,
         ])))
 
-    def _kaufen(self, tag, ticker, delta, kurs):
+    def _kaufen(self, tag, ticker, delta, kurs, vortag=None):
+        limit = None
+        if self.d.kauf_limit_aufschlag is not None and vortag is not None and pd.notna(vortag):
+            limit = math.floor(float(vortag) * (1 + self.d.kauf_limit_aufschlag) * 100 + 1e-9) / 100
+            if kurs > limit + 1e-12:
+                self.verfallen.append({"datum": tag, "ticker": ticker, "eroeffnung": kurs, "limit": limit, "kasse": self.portfolio.cash})
+                self._verwerfen(tag, ticker, +1, 0, f"Limit {limit:.2f} verfallen (Eröffnung {kurs:.2f})")
+                return
         preis = self.kosten.ausfuehrungspreis(kurs, +1, self.klassen[ticker])
+        if limit is not None:
+            preis = min(preis, limit)                     # Limit-Order: nie teurer als das Limit
         stueck = self._stueck_runden(delta * kurs / preis)  # Zielwert durch den teureren Ausführungspreis
         if stueck <= TOLERANZ:
             if self.portfolio.stueck(ticker) <= TOLERANZ:
@@ -388,6 +422,8 @@ class _Lauf:
             return
         if not self._gebuehrenregel_ok(gebuehr, kurswert):
             self._verwerfen(tag, ticker, +1, stueck, f"Gebühren {gebuehr:.2f} € > {self.regeln.max_gebuehr_anteil:.0%} von {kurswert:.2f} €")
+            return
+        if not self._risk(tag, ticker, +1, stueck, vortag if vortag is not None and pd.notna(vortag) else kurs, limit):
             return
         self.portfolio.kaufen(tag, ticker, stueck, preis, gebuehr, w, fx)
         self.trades.append(dict(zip(_TRADE_SPALTEN, [
@@ -436,9 +472,13 @@ def simuliere(
         offen: pd.Series | None = None
         werte, bestaende = [], []
         vorher = None
+        einzahlungen = definition.einzahlungen if definition.einzahlungen is not None else pd.Series(dtype=float)
         for tag in tage:
             if vorher is not None and tag.year != vorher.year:
                 lauf.jahresende(vorher.year)
+            einzahlung = float(einzahlungen.get(tag, 0.0)) if len(einzahlungen) else 0.0
+            if einzahlung:
+                lauf.portfolio.cash += einzahlung                 # Einzahlung am Tagesbeginn (externer Zufluss, kein Ertrag)
             lauf.dividenden_gutschreiben(tag)
             if marktdaten.delistings:
                 lauf.delistings_schliessen(tag)
@@ -448,7 +488,7 @@ def simuliere(
             schluss = marktdaten.schluss.loc[tag]
             kurse_fx = lauf.eur_kurse(tag)
             kasse = lauf.portfolio.kasse_eur(kurse_fx)
-            werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss, kurse_fx), "cash": kasse})
+            werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss, kurse_fx), "cash": kasse, "einzahlung": einzahlung})
             bestaende.append({"datum": tag, **lauf.portfolio.bestand()})
             ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag, lauf.portfolio.bestand(), kasse))
             if ziel is not None:
@@ -511,6 +551,9 @@ def simuliere(
             waehrungstausche=pd.DataFrame(lauf.tausche, columns=["datum", "von", "nach", "betrag_eur", "kosten"]),
             meta={"start": str(tage[0].date()), "ende": str(tage[-1].date()), "startkapital": definition.startkapital,
                   "delistings": pd.DataFrame(lauf.delisting_faelle, columns=["datum", "ticker", "letzter_tag", "grund", "rendite", "erloes"]),
+                  "verfallen": pd.DataFrame(lauf.verfallen, columns=["datum", "ticker", "eroeffnung", "limit", "kasse"]),
+                  "vetos": pd.DataFrame(lauf.vetos, columns=["datum", "ticker", "richtung", "stueck", "gruende"]),
+                  "risk_geprueft": lauf.risk_geprueft,
                   "art": definition.art, "steuergruppe": definition.steuergruppe, "rolle": definition.rolle, "kosten": kosten, "regeln": regeln,
                   "steuern_gezahlt": steuern_gezahlt,
                   "liquidationswert": liquidation[n]["liquidationswert"],

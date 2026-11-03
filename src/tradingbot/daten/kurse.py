@@ -242,3 +242,21 @@ def lade_kurse_eur(ticker: str, start, ende=None, *, konfig: dict | None = None,
     fx_start = pd.Timestamp(start) - pd.Timedelta(days=10)  # Puffer für das Auffüllen an Feiertagen
     fx = lade_kurse(fx_ticker, fx_start, ende, **kwargs)["close"]
     return in_euro(kurse, waehrung, fx)
+
+
+def echte_anteilspreise(kurse: pd.DataFrame, ticker: str, massnahmen: list[dict]) -> pd.DataFrame:
+    """Macht Splits rückgängig, die Yahoo rückwirkend bereinigt, aber nicht als Ereignis führt (config/daten.yaml
+    `kapitalmassnahmen`): Preise und Ausschüttungen vor dem Split-Tag × Verhältnis, Volumen ÷ Verhältnis. Für ganze Stücke
+    und Mindestorder zählen die echten Anteilspreise; Renditen bleiben unverändert."""
+    k = kurse.copy()
+    for m in massnahmen:
+        if m["ticker"] != ticker or m.get("art") != "split":
+            continue
+        vor = k.index < pd.Timestamp(str(m["datum"]))
+        v = float(m["verhaeltnis"])
+        for spalte in ("open", "high", "low", "close", "dividende"):
+            if spalte in k.columns:
+                k.loc[vor, spalte] = k.loc[vor, spalte] * v
+        if "volume" in k.columns:
+            k.loc[vor, "volume"] = k.loc[vor, "volume"] / v
+    return k
