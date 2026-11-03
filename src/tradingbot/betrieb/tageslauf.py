@@ -29,6 +29,11 @@ from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urte
 FREIGABE_VON = time(18, 0)
 
 
+def buch_freigeschaltet(betrieb: dict, buch: str) -> bool:
+    """Senden je Buch freigeschaltet (config/betrieb.yaml `buecher.<buch>.senden_freigeschaltet`, Jakob 03.11.2026) und global an."""
+    return bool(betrieb["ibkr"].get("senden_freigeschaltet", False)) and bool((betrieb["buecher"].get(buch) or {}).get("senden_freigeschaltet", False))
+
+
 @dataclass
 class Laufergebnis:
     jetzt: datetime
@@ -78,16 +83,33 @@ def abgleich(journal, buecher: list[str], positionen) -> list[str]:
 
 
 # --- Risiko-Kontext je Buch -----------------------------------------------------------------------------------------
-def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None) -> Kontext:
+def kasse_frei(journal, buch: str, fx: dict[str, float] | None = None) -> tuple[float, dict[str, float]]:
+    """Kasse des Buchs abzüglich Orders unterwegs (gesamt in EUR und je Währung); ein Tausch unterwegs zählt als
+    abgehende EUR und zugehende Fremdwährung."""
+    res = journal.reserviert(buch)
+    kassen = journal.kasse_je_waehrung(buch)
+    for w, betrag in res.items():
+        if w != "EUR_gesamt":
+            kassen[w] = kassen.get(w, 0.0) - betrag
+    for z in journal.unterwegs(buch):
+        if z["art"] == "fx":
+            kassen[z["waehrung"]] = kassen.get(z["waehrung"], 0.0) + z["stueck"] * (fx or {}).get(z["waehrung"], 1.0)
+    return journal.kasse(buch) - res["EUR_gesamt"], kassen
+
+
+def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None, fx=None) -> Kontext:
     werte = journal.buchwerte(buch)
     werte = pd.concat([werte, pd.Series({pd.Timestamp(tag): wert})]).groupby(level=0).last().sort_index()
     hoch = float(werte.max()) if len(werte) else wert
     monatsende = werte[werte.index < pd.Timestamp(tag).to_period("M").start_time]
     monat = wert / float(monatsende.iloc[-1]) - 1 if len(monatsende) else 0.0
-    return Kontext(buch=buch, kasse=journal.kasse(buch), wert=wert, bestand={t: int(round(s)) for t, s in journal.bestand(buch).items()},
-                   kasse_je_waehrung=journal.kasse_je_waehrung(buch),
+    kasse, kassen = kasse_frei(journal, buch, fx)
+    unterwegs = [(z["buch"], z["ticker"], z["richtung"]) for z in journal.unterwegs(buch)]
+    return Kontext(buch=buch, kasse=kasse, wert=wert, bestand={t: int(round(s)) for t, s in journal.bestand(buch).items()},
+                   kasse_je_waehrung=kassen,
                    monatsrendite=monat, vom_hoch=wert / hoch - 1 if hoch > 0 else 0.0, orders_heute=journal.orders_heute(buch, tag),
-                   gesendete_ids={r.split(":", 1)[1] for r in journal.gesendete_refs()}, offene_orders=list(offene), fundamental=fundamental or {})
+                   gesendete_ids={r.split(":", 1)[1] for r in journal.gesendete_refs()},
+                   offene_orders=list(offene) + [o for o in unterwegs if o not in offene], fundamental=fundamental or {})
 
 
 # --- Tageslauf --------------------------------------------------------------------------------------------------------
@@ -156,7 +178,9 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     if pruefen("real", k_real, xetra):
         kurs = float(k_real[etf]["close"].iloc[-1])
         werte_buch["real"] = journal.kasse("real") + sum(s * kurs for t, s in journal.bestand("real").items())
-        roh += realbuch(tag, etf, kurs, journal.kasse("real"), aufschlag, gebuehr_fuer("EUR"))
+        frei_real, _ = kasse_frei(journal, "real", fx)
+        if not any(z["ticker"] == etf for z in journal.unterwegs("real")):
+            roh += realbuch(tag, etf, kurs, frei_real, aufschlag, gebuehr_fuer("EUR"))
 
     # Technik-Bücher
     etfs = kt["universum"]["etfs"]
@@ -173,15 +197,16 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         bestand = journal.bestand(buch)
         werte_buch[buch] = journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
         vor = journal.zustand_fuer_signaltag(buch, tag)
-        v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, journal.kasse(buch), bestand, vor, kt,
-                           aufschlag, gebuehr_fuer("EUR"))
+        frei_buch, _ = kasse_frei(journal, buch, fx)
+        v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
+                           aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)})
         journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)
 
     # Fundamental-Bücher (Bewertung nur, wenn ein Buch sie heute braucht)
     fb = {n: v for n, v in (("fundamental_a", "A"), ("fundamental_b", "B")) if n in b["buecher"]}
-    braucht = [n for n in fb if not journal.bestand(n) or quartalsstichtag(nyse)]
+    braucht = [n for n in fb if (not journal.bestand(n) and not journal.unterwegs(n)) or quartalsstichtag(nyse)]
     kurse_usd: dict[str, float] = {}
     for n in fb:
         bestand = journal.bestand(n)
@@ -200,8 +225,9 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             bestand = journal.bestand(n)
             preise = {r.symbol: float(r.schluss_usd) for r in bewertung.itertuples() if r.symbol}
             preise.update({t: float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1]) for t in bestand if t not in preise})
-            v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, journal.kasse(n), bestand, journal.zustand(n), kf,
-                                          aufschlag, gebuehr_fuer("USD", eurusd))
+            v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, kasse_frei(journal, n, fx)[0], bestand,
+                                          journal.zustand(n), kf, aufschlag, gebuehr_fuer("USD", eurusd),
+                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)})
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue
@@ -213,13 +239,13 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     # Devisentausch je Buch vor den USD-Käufen (Entscheidung Jakob 03.11.2026)
     puffer = float(b.get("waehrung", {}).get("tausch_puffer", 0.02))
     for n in werte_buch:
-        t = tausch_vorschlag(n, tag, roh, journal.kasse_je_waehrung(n).get("USD", 0.0), eurusd, puffer,
+        t = tausch_vorschlag(n, tag, roh, kasse_frei(journal, n, fx)[1].get("USD", 0.0), eurusd, puffer,
                              lambda v: risk._gebuehr(v) * eurusd)
         if t is not None:
             roh.append(t)
 
     # Risk-Manager je Buch, Speichern
-    kontexte = {n: kontext(journal, n, tag, werte_buch[n], offene=offene, fundamental=fundamental_gruende) for n in werte_buch}
+    kontexte = {n: kontext(journal, n, tag, werte_buch[n], offene=offene, fundamental=fundamental_gruende, fx=fx) for n in werte_buch}
     urteile = risk.pruefe_alle([x.vorschlag for x in roh], kontexte)
     nach_id = {x.vorschlag.id: x for x in roh}
     freigabe_bis = f"{jetzt.date()}T23:59:59"
@@ -254,12 +280,18 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     meldungen = []
     if not probe and not (FREIGABE_VON <= jetzt.time()):
         return [f"Freigabe nur zwischen 18 und 24 Uhr (jetzt {jetzt:%H:%M})"]
-    messbeginn = (not probe) and bool(b["ibkr"].get("senden_freigeschaltet", False))
+    global_an = bool(b["ibkr"].get("senden_freigeschaltet", False))
     for i in ids:
+        z = journal.db.execute("SELECT buch FROM vorschlaege WHERE id=?", (i,)).fetchone()
+        buch_an = bool(z) and buch_freigeschaltet(b, z["buch"])
+        if not probe and z and not buch_an:
+            meldungen.append(f"{i}: Buch {z['buch']} ist zum Senden noch nicht freigeschaltet – nicht freigebbar")
+            continue
         try:
-            journal.freigeben(i, jetzt=jetzt, messbeginn=messbeginn)
+            journal.freigeben(i, jetzt=jetzt, messbeginn=(not probe) and global_an and buch_an)
         except ValueError as f:
             meldungen.append(str(f))
+    messbeginn = (not probe) and global_an
     if probe:
         return meldungen + [f"Probe: {len(ids)} Vorschläge freigegeben, nichts gesendet, kein Messbeginn"]
     if not messbeginn:

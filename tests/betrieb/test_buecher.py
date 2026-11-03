@@ -75,3 +75,26 @@ def test_thesen_kern_und_details():
     tv, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 160.0}, {}, {}, 10_000.0, {}, {}, k, 0.02, GEB)
     d = tv[0].details
     assert "SMA50" in d and "Stop" in d and "Maximaler Verlust bis Stop" in d and "des Buchs" in d
+
+
+def test_technikbuch_risiko_vom_limit_begrenzt_stueck():
+    """Stückzahl so, dass Stück · (Limit − Stop) ≤ 1 % des Buchwerts (Jakob 03.11.2026)."""
+    k = lade_konfiguration("technik")
+    kurse = {"A.DE": _kerzen(np.linspace(100, 160, 300) + np.tile([0.0, 6.0], 150))}      # hohe ATR → Risiko bindet
+    tag = kurse["A.DE"].index[-1]
+    schluss = float(kurse["A.DE"]["close"].iloc[-1])
+    tv, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": schluss}, {}, {}, 10_000.0, {}, {}, k, 0.02, GEB)
+    kaeufe = [b for b in tv if b.vorschlag.richtung > 0]
+    assert kaeufe
+    for b in kaeufe:
+        v = b.vorschlag
+        assert v.stueck * (b.limit_order - v.stop) <= 0.01 * 10_000.0 + 1e-6
+        assert (v.stueck + 1) * (b.limit_order - v.stop) > 0.01 * 10_000.0          # das Risiko bindet hier
+
+
+def test_technikbuch_titel_unterwegs_gesperrt():
+    k = lade_konfiguration("technik")
+    kurse = {"A.DE": _kerzen(np.linspace(100, 160, 300))}
+    tag = kurse["A.DE"].index[-1]
+    tv, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 160.0}, {}, {}, 10_000.0, {}, {}, k, 0.02, GEB, gesperrt_titel={"A.DE"})
+    assert not [b for b in tv if b.vorschlag.ticker == "A.DE"]

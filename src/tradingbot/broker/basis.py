@@ -88,6 +88,8 @@ def pruefe_senden(*, konto_id: str, port: int, modus: str | None, betrieb: dict,
     ib, gruende = betrieb["ibkr"], []
     if not ib.get("senden_freigeschaltet", False):
         gruende.append("Senden ist in config/betrieb.yaml nicht freigeschaltet (Phase 6b: nur lesen)")
+    elif not (betrieb.get("buecher", {}).get(auftrag.buch) or {}).get("senden_freigeschaltet", False):
+        gruende.append(f"Buch {auftrag.buch} ist zum Senden nicht freigeschaltet (config/betrieb.yaml, je Buch)")
     if (modus or "").strip().lower() != "paper":
         gruende.append(f"TRADING_MODE ist „{modus}“, erlaubt ist nur „paper“")
     if int(port) != int(ib["port_paper"]):

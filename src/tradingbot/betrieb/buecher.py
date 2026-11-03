@@ -160,7 +160,7 @@ def erster_handelstag_im_monat(boerse: str, tag) -> bool:
 
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
-                gebuehr) -> tuple[list[BuchVorschlag], dict]:
+                gebuehr, gesperrt_titel: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict]:
     from tradingbot.backtest.marktdaten import Marktdaten, Sicht
 
     tag = pd.Timestamp(tag)
@@ -181,7 +181,7 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
             w_ccy = waehrung.get(t, "EUR")
             f = fx.get(w_ccy, 1.0)
             grund = protokoll.get(t, {}).get("grund", "")
-            if w == 0 and bestand.get(t, 0) > 0:
+            if w == 0 and bestand.get(t, 0) > 0 and t not in gesperrt_titel:
                 these = f"{regel}: Ausstieg {t} – {grund}."
                 bv = _verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f)
                 bv.kern = f"Ausstieg: {grund}."
@@ -191,10 +191,13 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                 vorschlaege.append(bv)
             elif w > 0:
                 limit_eur = limit_preis(orderkurs[t], aufschlag) / (f if w_ccy != "EUR" else 1.0)
-                n = stueck_fuer(w * wert, frei, limit_eur, gebuehr)
-                if n <= 0:
-                    continue
                 stop = kurs_eur - float(konfig_technik["satellite"]["stop_atr_faktor"]) * float(z["atr"])
+                n = stueck_fuer(w * wert, frei, limit_eur, gebuehr)
+                # 1-%-Regel vom Limit aus (schlechtester Einstieg bis Stop, Jakob 03.11.2026)
+                if limit_eur > stop:
+                    n = min(n, int(math.floor(float(konfig_technik["satellite"]["risiko_je_trade"]) * wert / (limit_eur - stop) + 1e-9)))
+                if n <= 0 or t in gesperrt_titel:
+                    continue
                 these = (f"{regel}: Einstieg {t} ({grund}); Ziel {w:.1%} des Buchs, Stop etwa {stop:.2f} € (2 × ATR). "
                          f"Widerlegt bei Schluss unter dem Stop oder wenn das Signal erlischt"
                          + (" (SMA50 unter SMA200)." if regel == "crossover" else " (12−1 ≤ 0 bei der Monatsprüfung)."))
@@ -276,10 +279,11 @@ def quartalsstichtag(tag) -> bool:
 
 def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurse_usd: dict[str, float], eurusd: float,
                     kasse: float, bestand: dict[str, float], zustand: dict, konfig_fundamental: dict, aufschlag: float,
-                    gebuehr) -> tuple[list[BuchVorschlag], dict, str]:
+                    gebuehr, gesperrt_titel: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict, str]:
     """Erster Lauf: sofort aufbauen; danach nur am Quartalsstichtag. Gibt Vorschläge, neuen Zustand und Begründung zurück."""
     tag = pd.Timestamp(tag)
-    aufgebaut = any(v > 0 for v in bestand.values())      # aufgebaut erst mit Bestand (nicht ausgeführte Aufbauten wiederholen)
+    # aufgebaut mit Bestand oder mit gesendeten, noch nicht ausgeführten Orders („unterwegs“); verfallene Aufbauten wiederholen
+    aufgebaut = any(v > 0 for v in bestand.values()) or bool(gesperrt_titel)
     if aufgebaut and not quartalsstichtag(tag):
         return [], zustand, "kein Quartalsstichtag"
     sp = konfig_fundamental["schattenportfolio"]
@@ -295,7 +299,7 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
     median = rangliste.groupby("gruppe")[spalten_median].median() if "gruppe" in rangliste.columns and spalten_median else pd.DataFrame()
     vorschlaege, frei, nicht_kaufbar = [], kasse, []
     for t, w in sorted(ziel.items(), key=lambda x: x[1] if not math.isnan(x[1]) else 1):   # Verkäufe zuerst
-        if math.isnan(w):
+        if math.isnan(w) or t in gesperrt_titel:
             continue
         kurs_eur = kurse_usd[t] / eurusd
         if w == 0 and bestand.get(t, 0) > 0:

@@ -165,6 +165,23 @@ class Journal:
             self.ereignis("messbeginn", f"Messbeginn {jetzt.date():%d.%m.%Y} (erste Freigabe)", z["buch"])
             self.db.commit()
 
+    def unterwegs(self, buch: str | None = None) -> list[sqlite3.Row]:
+        """Gesendete, noch nicht ausgeführte Orders (Status „gesendet“): reservieren Kasse und sperren den Titel im Buch."""
+        return self.vorschlaege(status=("gesendet",), buch=buch)
+
+    def reserviert(self, buch: str) -> dict[str, float]:
+        """Durch Orders unterwegs reservierte Kasse (Jakob 03.11.2026). Käufe: je Währung Stück · Limit · 1,01 (Gebühr
+        höchstens 1 %), gesamt in EUR Stück · letzter Kurs · 1,02 · 1,01 (Limit = Vortagesschluss + 2 %). Tausch:
+        abgehende EUR (Stück = EUR-Betrag); der Gesamtwert ändert sich durch den Tausch nicht. Gesamt unter „EUR_gesamt“."""
+        res: dict[str, float] = {"EUR_gesamt": 0.0}
+        for z in self.unterwegs(buch):
+            if z["art"] == "fx":
+                res["EUR"] = res.get("EUR", 0.0) + z["stueck"]
+            elif z["richtung"] > 0:
+                res[z["waehrung"]] = res.get(z["waehrung"], 0.0) + z["stueck"] * (z["limit_preis"] or z["letzter_kurs_eur"]) * 1.01
+                res["EUR_gesamt"] += z["stueck"] * z["letzter_kurs_eur"] * 1.02 * 1.01
+        return res
+
     def gesendete_refs(self) -> set[str]:
         return {f"{z['buch']}:{z['id']}" for z in self.db.execute("SELECT buch, id FROM vorschlaege WHERE order_id IS NOT NULL OR status IN ('gesendet','ausgefuehrt','verfallen')")}
 

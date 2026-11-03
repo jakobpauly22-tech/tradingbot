@@ -30,7 +30,7 @@ def sat(buch="crossover", **kw):
 
 
 def sat_kauf(**kw):
-    basis = dict(buch="crossover", ticker="EUNK.DE", stueck=30, letzter_kurs=80.0, limit=81.0, stop=77.0)
+    basis = dict(buch="crossover", ticker="EUNK.DE", stueck=30, letzter_kurs=80.0, limit=81.0, stop=78.0)
     return kauf(**{**basis, **kw})
 
 
@@ -77,7 +77,7 @@ def test_positionsgrenzen_je_buch(rm):
     assert any("5 % des Buchwerts" in g for g in rm.pruefe(aktie, k).gruende)     # 600 € > 500 €
     assert any("25 % des Buchwerts" in g for g in rm.pruefe(sat_kauf(stueck=32), sat()).gruende)   # 2.560 € > 2.500 €
     assert any("ohne Stop" in g for g in rm.pruefe(sat_kauf(stop=None), sat()).gruende)
-    assert any("Risiko" in g for g in rm.pruefe(sat_kauf(stop=70.0), sat()).gruende)                # 300 € > 100 €
+    assert any("Risiko" in g for g in rm.pruefe(sat_kauf(stop=70.0), sat()).gruende)                # 30 · (81 − 70) = 330 € > 100 €
     assert rm.pruefe(sat_kauf(), sat()).frei
 
 
@@ -167,3 +167,11 @@ def test_kasse_je_waehrung_keine_darf_negativ_werden(rm):
     assert urteile["t1"].frei and urteile["u1"].frei                  # Tausch wird vor den Käufen geprüft und verbucht
     zu_gross = OrderVorschlag("t2", TAG, "fundamental_a", "EUR.USD", -1, 20_000, 1.0, "fx", eur_kurs=1.1, waehrung="USD")
     assert any("Hebel: EUR-Kasse" in g for g in rm.pruefe(zu_gross, k).gruende)
+
+
+def test_risiko_vom_limit_gemessen(rm):
+    """1-%-Regel vom Limit als schlechtestem Einstieg (Jakob 03.11.2026): vom Schluss 30 · (80 − 77) = 90 € wäre erlaubt,
+    vom Limit 30 · (81 − 77) = 120 € liegt über 1 % von 10.000 €."""
+    u = rm.pruefe(sat_kauf(stop=77.0), sat())
+    assert not u.frei and any("vom Limit 81.00" in g for g in u.gruende)
+    assert rm.pruefe(sat_kauf(stop=77.0, stueck=24), sat()).frei                                     # 24 · 4 = 96 €

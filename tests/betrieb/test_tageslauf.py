@@ -76,6 +76,16 @@ def umgebung(tmp_path):
     j.schliessen()
 
 
+def betrieb_mit(global_an=True, buecher=("real", "crossover")):
+    b = lade_konfiguration("betrieb")
+    b["ibkr"] = {**b["ibkr"], "senden_freigeschaltet": global_an}
+    b["buecher"] = {n: {**bk, "senden_freigeschaltet": n in buecher} for n, bk in b["buecher"].items()}
+    return b
+
+
+AUS, AN = betrieb_mit(False), betrieb_mit(True)
+
+
 def lauf(j, rm, jetzt=ABEND, **kw):
     kurse = kw.pop("kurse", kurse_attrappe())
     return tageslauf(jetzt, j, kurse_laden=kurse, fundamental_bewertung=bewertung_attrappe, risk=rm, sichern=False, **kw)
@@ -119,13 +129,16 @@ def test_freigabe_und_senden(umgebung):
     real_id = next(z["id"] for z in j.vorschlaege(buch="real"))
     k = kurse_attrappe()
     assert "18 und 24 Uhr" in freigeben_und_senden(j, [real_id], BrokerAttrappe(), ABEND.replace(hour=17), risk=rm, kurse_laden=k)[0]
-    m = freigeben_und_senden(j, [real_id], BrokerAttrappe(verbunden=False), ABEND, risk=rm, kurse_laden=k)
+    m = freigeben_und_senden(j, [real_id], BrokerAttrappe(), ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AUS)
+    assert any("nicht freigebbar" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "vorgeschlagen"
+    assert j.messbeginn("real") is None                     # Senden aus: nicht freigebbar, kein Messbeginn
+    m = freigeben_und_senden(j, [real_id], BrokerAttrappe(verbunden=False), ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
     assert "Gateway nicht verbunden" in m[-1] and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
-    assert j.messbeginn("real") is None                     # Senden ist in der Konfiguration aus: kein Messbeginn (03.11.2026)
-    m = freigeben_und_senden(j, [], BrokerAttrappe(sperre=True), ABEND, risk=rm, kurse_laden=k)
+    assert j.messbeginn("real") is not None                 # Buch freigeschaltet: Freigabe ist Messbeginn
+    m = freigeben_und_senden(j, [], BrokerAttrappe(sperre=True), ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
     assert any("nicht freigeschaltet" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
     b = BrokerAttrappe()
-    m = freigeben_und_senden(j, [], b, ABEND, risk=rm, kurse_laden=k)
+    m = freigeben_und_senden(j, [], b, ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
     assert any("gesendet" in x for x in m) and b.gesendet[0].order_ref == f"real:{real_id}" and b.gesendet[0].limit is not None
     assert j.vorschlaege(buch="real")[0]["status"] == "gesendet"
     lauf(j, rm)                                            # zweiter Tageslauf am selben Abend
@@ -211,3 +224,47 @@ def test_momentum_baut_beim_ersten_lauf_mitten_im_monat_auf(umgebung):
     mitte = datetime(2026, 11, 17, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))
     e = lauf(j, rm, jetzt=mitte)
     assert any(bv.vorschlag.buch == "momentum" for bv, _ in e.vorschlaege)
+
+
+def test_gesperrte_buecher_nicht_freigebbar(umgebung):
+    """Fundamental A/B und Momentum heute gesperrt (03.11.2026): Vorschläge erscheinen, Freigabe wird abgelehnt."""
+    j, rm = umgebung
+    lauf(j, rm)
+    fa = [z["id"] for z in j.vorschlaege(buch="fundamental_a") if z["status"] == "vorgeschlagen"]
+    assert fa
+    m = freigeben_und_senden(j, fa[:2], BrokerAttrappe(), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    assert sum("nicht freigebbar" in x for x in m) == 2
+    assert {z["status"] for z in j.vorschlaege(buch="fundamental_a")} <= {"vorgeschlagen", "veto"}
+    assert j.messbeginn("fundamental_a") is None
+
+
+def test_orders_unterwegs_keine_doppelten_kaeufe(umgebung):
+    """Lauf, Freigabe, Senden mit Fake-Broker, zweiter Lauf am selben Tag → keine doppelten Vorschläge; die Kasse ist
+    um die Orders unterwegs reserviert (Jakob 03.11.2026)."""
+    from tradingbot.betrieb.tageslauf import kasse_frei
+
+    j, rm = umgebung
+    lauf(j, rm)
+    k = kurse_attrappe()
+    real = [z["id"] for z in j.vorschlaege(buch="real") if z["status"] == "vorgeschlagen"]
+    cross = [z["id"] for z in j.vorschlaege(buch="crossover") if z["status"] == "vorgeschlagen" and z["richtung"] > 0]
+    assert real and cross, "Testdaten müssen Käufe in real und crossover erzeugen"
+    b = BrokerAttrappe()
+    m = freigeben_und_senden(j, real + cross, b, ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
+    gesendet = {(a.buch, a.ticker) for a in b.gesendet}
+    assert len(b.gesendet) == len(real) + len(cross), m
+    kasse_vorher = {n: j.kasse(n) for n in ("real", "crossover")}
+    reserve = sum(z["stueck"] * z["letzter_kurs_eur"] for z in j.unterwegs("crossover"))
+    assert kasse_frei(j, "real")[0] < kasse_vorher["real"]
+    assert kasse_frei(j, "crossover")[0] <= kasse_vorher["crossover"] - reserve
+
+    e2 = lauf(j, rm, broker=BrokerAttrappe())                       # zweiter Lauf, Orders noch nicht ausgeführt
+    assert e2.gestoppt is None
+    neu = {(bv.vorschlag.buch, bv.vorschlag.ticker) for bv, _ in e2.vorschlaege if bv.vorschlag.richtung > 0 and bv.vorschlag.art != "fx"}
+    assert not (neu & gesendet), f"doppelte Käufe: {neu & gesendet}"
+    assert not any(bv.vorschlag.buch == "real" for bv, _ in e2.vorschlaege)
+    assert sum(1 for z in j.vorschlaege(buch="real") if z["status"] == "gesendet") == 1
+    assert sum(1 for z in j.vorschlaege(buch="crossover") if z["status"] == "gesendet") == len(cross)
+    b2 = BrokerAttrappe()                                            # erneutes Senden ohne neue Freigabe sendet nichts
+    freigeben_und_senden(j, [], b2, ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
+    assert b2.gesendet == []

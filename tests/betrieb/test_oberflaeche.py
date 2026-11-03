@@ -83,3 +83,15 @@ def test_kurzzeile_und_details_aufklappbar(wurzel):
     knopf.invoke()
     assert knopf.cget("text") == "Details ▸"
     assert "PROBE" in wurzel.title()
+
+
+def test_gesperrte_buecher_nicht_auswaehlbar(wurzel):
+    from tradingbot.betrieb.oberflaeche import Freigabefenster
+    b = lade_konfiguration("betrieb")
+    b["ibkr"] = {**b["ibkr"], "senden_freigeschaltet": True}
+    b["buecher"] = {n: {**bk, "senden_freigeschaltet": n in ("real", "crossover")} for n, bk in b["buecher"].items()}
+    erg = _erg(50)
+    f = Freigabefenster(wurzel, erg, JournalAttrappe(), b, probe=False, senden_fn=lambda ids: [])
+    buch_von = {bv.vorschlag.id: bv.vorschlag.buch for bv, _ in erg.vorschlaege}
+    assert {buch_von[i] for i in f.auswahl} == {"real", "crossover"}
+    assert f.modus == "Senden AN für: real, crossover"

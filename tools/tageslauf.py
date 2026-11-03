@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 from tradingbot.backtest.tresor import betriebsmodus
 from tradingbot.betrieb.journal import Journal, konto_kurz
+from tradingbot.betrieb.sperre import LaufGesperrt, laufsperre
 from tradingbot.betrieb.speicher import betriebspfad
 from tradingbot.betrieb.tageslauf import freigeben_und_senden, tageslauf
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
@@ -66,17 +67,33 @@ def bericht(erg, journal, betrieb: dict) -> str:
     return "\n".join(zeilen)
 
 
+def sperrdatei(probe: bool):
+    """Sperre gegen zwei gleichzeitige Läufe auf demselben Journal (echt und Probe getrennt), gilt für die ganze Sitzung."""
+    with betriebsmodus("Laufsperre"):
+        return betriebspfad("probe/tageslauf.sperre" if probe else "tageslauf.sperre")
+
+
 def rechnen(probe: bool):
     meldungen = []
     with betriebsmodus("Probelauf" if probe else "Tageslauf"):
         journal = Journal(betriebspfad("probe/journal.sqlite" if probe else "journal.sqlite"))
         broker = broker_oder_none(meldungen)
         erg = tageslauf(datetime.now(BERLIN), journal, broker=broker, sichern=not probe)
-        erg.meldungen = meldungen + erg.meldungen
+        gateway = getattr(broker, "gateway_meldungen", [])
+        erg.meldungen = meldungen + erg.meldungen + [f"(kein Abbruch) {m}" for m in gateway]
         return erg, journal, broker
 
 
 def ohne_fenster(probe: bool) -> int:
+    try:
+        with laufsperre(sperrdatei(probe), zweck="Probelauf" if probe else "Tageslauf"):
+            return _ohne_fenster(probe)
+    except LaufGesperrt as f:
+        print(f"ABGEBROCHEN: {f}")
+        return 2
+
+
+def _ohne_fenster(probe: bool) -> int:
     erg, journal, broker = rechnen(probe)
     text = bericht(erg, journal, lade_konfiguration("betrieb"))
     print(text)
@@ -97,8 +114,19 @@ def fenster(probe: bool = False) -> int:
 
     betrieb = lade_konfiguration("betrieb")
     wurzel = tk.Tk()
+    hinweise: list[str] = []
+    try:
+        with laufsperre(sperrdatei(probe), zweck="Probefenster" if probe else "Tageslauf-Fenster", meldungen=hinweise):
+            return _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise)
+    except LaufGesperrt as f:
+        messagebox.showerror("Tageslauf läuft schon", str(f))
+        return 2
+
+
+def _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise) -> int:
     try:
         erg, journal, broker = rechnen(probe=probe)
+        erg.meldungen = hinweise + erg.meldungen
     except Exception:  # noqa: BLE001
         messagebox.showerror("Tageslauf fehlgeschlagen", traceback.format_exc()[-1500:])
         return 1

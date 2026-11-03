@@ -10,7 +10,8 @@ dazu Hinweise (kein Veto). Regeln (CLAUDE.md „Feste Regeln“, config/risiko.y
 4. Gebührenregel: Käufe und Aufstockungen nur, wenn die Gebühr ≤ 1 % des Orderwerts ist; Ausstiege immer erlaubt.
 5. Positionsgrenzen nach dem Kauf, bezogen auf den Wert des Buchs: Core höchstens 5 % je Einzelaktie (breite ETFs
    ausgenommen); Satellite höchstens 25 % je ETF und 10 % je Einzelaktie; Satellite-Käufe brauchen einen Stop und
-   riskieren höchstens 1 % des Buchwerts: Stück · (Kurs − Stop) ≤ 0,01 · Buchwert.
+   riskieren höchstens 1 % des Buchwerts, gemessen vom Limit als schlechtestem Einstiegskurs (Jakob 03.11.2026):
+   Stück · (Limit − Stop) ≤ 0,01 · Buchwert (ohne Limit: letzter Kurs).
 6. Fundamental-Veto für Einzelaktien: Piotroski ≤ 3, Z'' mit zweitem Signal, Altman Z (Industrie); Beneish nur Hinweis;
    ruht bei ETFs (config/risiko.yaml `fundamental_veto`).
 7. Satellite-Limits je Buch (eigene Höchststände): Monat ≤ −10 % → Pause; −20 % vom Höchststand → Stopp; jeweils nur
@@ -188,8 +189,11 @@ class RiskManager:
                 g.append(f"Satellite: Position {v.ticker} über {grenze * 100:.0f} % des Buchwerts")
             if v.stop is None:
                 g.append("Satellite-Kauf ohne Stop")
-            elif v.stueck * (v.letzter_kurs - v.stop) > float(sat["risiko_je_trade"]) * k.wert + 1e-9:
-                g.append(f"Risiko {v.stueck * (v.letzter_kurs - v.stop):.2f} € über 1 % des Buchwerts")
+            else:
+                einstieg = v.limit if v.limit else v.letzter_kurs          # schlechtester Einstiegskurs
+                risiko = v.stueck * (einstieg - v.stop)
+                if risiko > float(sat["risiko_je_trade"]) * k.wert + 1e-9:
+                    g.append(f"Risiko {risiko:.2f} € (vom Limit {einstieg:.2f} bis Stop {v.stop:.2f}) über 1 % des Buchwerts")
             if k.monatsrendite <= -0.10:
                 limit_ziel.append(f"{vorsatz}Satellite-Buch {v.buch} pausiert: Monat {k.monatsrendite:.1%} (Grenze −10 %)")
             if k.vom_hoch <= -0.20:

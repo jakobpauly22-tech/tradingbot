@@ -46,12 +46,30 @@ class IbkrBroker:
 
             ib = IB()
         self.ib = ib
+        self.gateway_meldungen: list[str] = []          # Fehlermeldungen des Gateways (z. B. Read-Only-Ablehnungen) fürs Protokoll
+        ereignis = getattr(ib, "errorEvent", None)
+        if ereignis is not None:
+            ereignis += self._gateway_fehler
+
+    def _gateway_fehler(self, req_id, code, text, *rest) -> None:
+        if code in (2104, 2106, 2107, 2108, 2158):        # reine Statusmeldungen der Datenfarmen
+            return
+        self.gateway_meldungen.append(f"Gateway-Meldung {code}: {text}")
 
     def verbinden(self) -> None:
+        """Verbindet mit dem lokalen Gateway.
+
+        readonly, solange Senden nicht freigeschaltet ist (zusätzlich zur Read-Only-Einstellung im Gateway). Beim Start
+        ruft ib_async Positionen, offene Orders, Kontodaten und Ausführungen (reqExecutions) ab; den Abruf abgeschlossener
+        Orders (ReqCompletedOrders) lassen wir bewusst weg: der Bot braucht ihn nicht (Ausführungen kommen aus
+        reqExecutions, der Abgleich aus den Positionen), und IBKR wertet ihn im Read-Only-Modus als Schreibzugriff
+        (Hinweis vom Gateway, 03.11.2026)."""
+        from ib_async.ib import StartupFetch, StartupFetchALL
+
         pruefe_verbindung(self.host, self.port, self.betrieb)
-        # readonly, solange Senden nicht freigeschaltet ist (zusätzlich zur Read-Only-Einstellung im Gateway)
         readonly = not self.betrieb["ibkr"].get("senden_freigeschaltet", False)
-        self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=10, readonly=readonly)
+        self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=10, readonly=readonly,
+                        fetchFields=StartupFetchALL & ~StartupFetch.ORDERS_COMPLETE)
 
     def trennen(self) -> None:
         self.ib.disconnect()

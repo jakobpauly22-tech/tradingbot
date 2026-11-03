@@ -12,8 +12,8 @@ class IBAttrappe:
     def __init__(self, konto="DU1234567", offen=()):
         self.konto, self.offen, self.gesendet, self.verbunden = konto, list(offen), [], None
 
-    def connect(self, host, port, clientId, timeout, readonly):
-        self.verbunden = dict(host=host, port=port, readonly=readonly)
+    def connect(self, host, port, clientId, timeout, readonly, fetchFields=None):
+        self.verbunden = dict(host=host, port=port, readonly=readonly, fetchFields=fetchFields)
 
     def managedAccounts(self):
         return [self.konto]
@@ -50,7 +50,8 @@ def test_live_port_und_fremder_host_gesperrt(tmp_path):
 def test_verbindung_nur_lesend_solange_senden_aus(tmp_path):
     b = broker(tmp_path, senden=False)
     b.verbinden()
-    assert b.ib.verbunden == {"host": "127.0.0.1", "port": 4002, "readonly": True}
+    v = b.ib.verbunden
+    assert (v["host"], v["port"], v["readonly"]) == ("127.0.0.1", 4002, True)
 
 
 def test_senden_aus_in_der_konfiguration(tmp_path):
@@ -82,7 +83,7 @@ def test_doppel_orders(tmp_path):
     with pytest.raises(SendenGesperrt, match="derselben Richtung"):
         broker(tmp_path, offen=offen).sende(Auftrag("real", "v9", "SPYI.DE", 1, 1, 204.0), set())
     # anderes Buch darf denselben Ticker kaufen
-    broker(tmp_path, offen=offen).sende(Auftrag("fundamental_a", "v9", "SPYI.DE", 1, 1, 204.0), set())
+    broker(tmp_path, offen=offen).sende(Auftrag("crossover", "v9", "SPYI.DE", 1, 1, 204.0), set())
 
 
 def test_orderaufbau(tmp_path):
@@ -103,3 +104,34 @@ def test_kontrakte_xetra_aktie_und_us():
     assert kontrakt("BF-B", "aktie").symbol == "BF B"
     us = kontrakt("AAPL", "aktie")
     assert (us.exchange, us.currency) == ("SMART", "USD")
+
+
+def test_senden_je_buch_freigeschaltet(tmp_path):
+    """Freischaltung je Buch (03.11.2026): real und crossover an, Fundamental A/B und Momentum gesperrt."""
+    b = broker(tmp_path)
+    for buch in ("fundamental_a", "fundamental_b", "momentum"):
+        with pytest.raises(SendenGesperrt, match=f"Buch {buch} ist zum Senden nicht freigeschaltet"):
+            b.sende(Auftrag(buch, "v5", "SPYI.DE", 1, 1, 204.0), set())
+    b.sende(Auftrag("crossover", "v6", "SPYI.DE", 1, 1, 204.0), set())
+    with pytest.raises(SendenGesperrt, match="nicht freigeschaltet"):          # global aus sperrt alle Bücher
+        broker(tmp_path, senden=False).sende(Auftrag("real", "v7", "SPYI.DE", 1, 1, 204.0), set())
+
+
+def test_verbinden_ohne_abruf_abgeschlossener_orders(tmp_path):
+    """ReqCompletedOrders wird im Read-Only-Modus abgelehnt (03.11.2026) und nie gebraucht: beim Start weglassen,
+    Ausführungen (reqExecutions), Positionen und offene Orders bleiben."""
+    pytest.importorskip("ib_async")
+    from ib_async.ib import StartupFetch
+
+    b = broker(tmp_path)
+    b.verbinden()
+    f = b.ib.verbunden["fetchFields"]
+    assert not (f & StartupFetch.ORDERS_COMPLETE)
+    assert f & StartupFetch.EXECUTIONS and f & StartupFetch.POSITIONS and f & StartupFetch.ORDERS_OPEN
+
+
+def test_gateway_fehler_landen_im_protokoll(tmp_path):
+    b = broker(tmp_path)
+    b._gateway_fehler(-1, 321, "Die API befindet sich im schreibgeschützten Modus")
+    b._gateway_fehler(-1, 2104, "Market data farm connection is OK")
+    assert b.gateway_meldungen == ["Gateway-Meldung 321: Die API befindet sich im schreibgeschützten Modus"]

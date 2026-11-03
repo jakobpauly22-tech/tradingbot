@@ -38,7 +38,8 @@ class Freigabefenster:
             wurzel.configure(bg="#ffebee")
         kopf = tk.Frame(wurzel, bg="#ffebee" if probe else None)
         kopf.pack(side="top", fill="x", padx=8, pady=4)
-        modus = "PROBE – sendet nie, kein Messbeginn" if probe else ("Senden AN" if betrieb["ibkr"].get("senden_freigeschaltet") else "Senden AUS (nur Freigabe)")
+        an = [n for n, bk in betrieb["buecher"].items() if betrieb["ibkr"].get("senden_freigeschaltet") and bk.get("senden_freigeschaltet")]
+        self.modus = modus = "PROBE – sendet nie, kein Messbeginn" if probe else (f"Senden AN für: {', '.join(an)}" if an else "Senden AUS – nichts freigebbar")
         tk.Label(kopf, text=f"Tageslauf {erg.jetzt:%d.%m.%Y %H:%M} – {modus}", font=("Segoe UI", 12, "bold")).pack(side="left")
         self.auswahl_text = tk.StringVar(value="0 Vorschläge ausgewählt")
         tk.Label(kopf, textvariable=self.auswahl_text, font=("Segoe UI", 11)).pack(side="right")
@@ -83,7 +84,10 @@ class Freigabefenster:
         zusammen = (f"{buch}: {len(vs)} Vorschläge, Orderwert {summe:,.2f} €, {vetos} Vetos – Kasse {self.journal.kasse(buch):,.2f} € – "
                     f"Messbeginn {self.journal.messbeginn(buch) or 'noch nicht'}")
         tk.Label(zeile, text=zusammen, font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
-        if bk["freigabe"] == "sammel" and frei:
+        gesperrt = not self.probe and not (self.betrieb["ibkr"].get("senden_freigeschaltet") and bk.get("senden_freigeschaltet"))
+        if gesperrt:
+            tk.Label(zeile, text="zum Senden noch nicht freigeschaltet – nicht freigebbar", fg="#c62828").pack(side="right")
+        elif bk["freigabe"] == "sammel" and frei:
             var = tk.BooleanVar(value=False)
             var.trace_add("write", lambda *a: self._zaehlen())
             tk.Checkbutton(zeile, text=f"Sammelfreigabe ({len(frei)})", variable=var).pack(side="right")
@@ -95,7 +99,7 @@ class Freigabefenster:
         if buch in self.erg.befunde:
             tk.Label(inhalt, text="Datenprüfung: " + "; ".join(self.erg.befunde[buch][:3]), fg="red").pack(anchor="w")
         for bv, u in vs:
-            self._vorschlag(inhalt, buch, bk, bv, u)
+            self._vorschlag(inhalt, buch, bk if not gesperrt else {**bk, "freigabe": "gesperrt"}, bv, u)
 
     @staticmethod
     def kurzzeile(buch: str, bv, u) -> str:
