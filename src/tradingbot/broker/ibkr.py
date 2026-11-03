@@ -69,7 +69,8 @@ class IbkrBroker:
         raise RuntimeError("NetLiquidation in EUR nicht gefunden")
 
     def positionen(self) -> list[Position]:
-        return [Position(p.account, ticker_aus(p.contract), float(p.position), float(p.avgCost)) for p in self.ib.positions()]
+        return [Position(p.account, ticker_aus(p.contract), float(p.position), float(p.avgCost)) for p in self.ib.positions()
+                if getattr(p.contract, "secType", "STK") != "CASH"]              # Devisenbestände sind Kasse, keine Position
 
     def offene_orders(self) -> list[OffeneOrder]:
         ergebnis = []
@@ -83,13 +84,20 @@ class IbkrBroker:
         return bool(self.ib.isConnected())
 
     def ausfuehrungen(self) -> list[dict]:
-        """Ausführungen der Bot-Orders (orderRef „<Buch>:<ID>“) mit Preis und Gebühr in der Handelswährung."""
+        """Ausführungen der Bot-Orders (orderRef „<Buch>:<ID>“) mit Preis und Gebühr in der Handelswährung.
+        Devisentausch (secType CASH): art „fx“, Stück = verkaufte EUR, Preis = USD je EUR."""
         ergebnis = []
         for f in self.ib.fills():
             e = f.execution
             if not e.orderRef or ":" not in e.orderRef:
                 continue
             gebuehr = float(f.commissionReport.commission or 0.0) if f.commissionReport else 0.0
+            if getattr(f.contract, "secType", "") == "CASH":
+                ergebnis.append({"art": "fx", "exec_id": e.execId, "order_ref": e.orderRef, "von": f.contract.symbol, "nach": f.contract.currency,
+                                 "betrag_von": float(e.shares), "betrag_nach": float(e.shares) * float(e.price), "kurs": float(e.price),
+                                 "gebuehr": gebuehr, "gebuehr_waehrung": (f.commissionReport.currency if f.commissionReport else None) or f.contract.currency,
+                                 "zeit": str(e.time)})
+                continue
             ergebnis.append({"exec_id": e.execId, "order_ref": e.orderRef, "ticker": ticker_aus(f.contract),
                              "richtung": 1 if e.side == "BOT" else -1, "stueck": float(e.shares), "preis": float(e.price),
                              "waehrung": f.contract.currency, "gebuehr": gebuehr,
@@ -104,6 +112,12 @@ class IbkrBroker:
         pruefe_senden(konto_id=self.konto_id(), port=self.port, modus=self.modus, betrieb=self.betrieb, projekt_wurzel=self.wurzel,
                       auftrag=auftrag, offene=self.offene_orders(), gesendete_refs=gesendete_refs)
         aktion = "BUY" if auftrag.richtung > 0 else "SELL"
+        if auftrag.art == "fx":
+            from ib_async import Forex
+
+            trade = self.ib.placeOrder(Forex(f"EUR{auftrag.waehrung or 'USD'}"), MarketOrder("SELL", auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref))
+            gesendete_refs.add(auftrag.order_ref)
+            return str(trade.order.orderId)
         if auftrag.richtung > 0:
             order = LimitOrder(aktion, auftrag.stueck, round(auftrag.limit, 2), tif="DAY", orderRef=auftrag.order_ref)
         else:

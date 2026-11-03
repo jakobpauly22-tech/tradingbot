@@ -61,3 +61,13 @@ def test_sicherung_ausserhalb_und_konto_gekuerzt(j, tmp_path):
     assert ziel.exists() and sqlite3.connect(ziel).execute("SELECT COUNT(*) FROM buecher").fetchone()[0] == 2
     assert j.sichern("") is None                                       # nicht gesetzt: Ereignis statt Fehler
     assert konto_kurz("DUR3123456") == "DUR3…"
+
+
+def test_kasse_je_waehrung_mit_tausch_und_usd_kauf(j):
+    j.buch_anlegen("fundamental_a", 10_000.0)
+    j.tausch("fx1", "fundamental_a:t1", "EUR", "USD", 1000.0, 1100.0, 1.82, "2026-11-03T19:00")
+    j.ausfuehrung("e9", "fundamental_a:k1", "AAPL", 1, 5, 200.0 / 1.1, 1.0 / 1.1, "2026-11-04T15:30", waehrung="USD", preis=200.0,
+                  gebuehr=1.0, gebuehr_waehrung="USD")
+    kassen = j.kasse_je_waehrung("fundamental_a")
+    assert kassen["EUR"] == pytest.approx(10_000 - 1000 - 1.82) and kassen["USD"] == pytest.approx(1100 - 1000 - 1.0)
+    assert j.kasse("fundamental_a") == pytest.approx(10_000 - 1.82 - 1000 / 1.1 - 1.0 / 1.1)

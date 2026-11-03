@@ -88,7 +88,13 @@ def test_erster_tageslauf_ohne_gateway(umgebung):
     assert {"real", "fundamental_a", "fundamental_b"} <= buecher
     real = [bv for bv, u in e.vorschlaege if bv.vorschlag.buch == "real"]
     assert len(real) == 1 and real[0].vorschlag.ticker == "SPYI.DE"
-    assert sum(1 for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a") == 20
+    assert sum(1 for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx") == 20
+    tausch = [(bv, u) for bv, u in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art == "fx"]
+    assert len(tausch) == 1 and tausch[0][1].frei
+    kaeufe_usd = sum(bv.vorschlag.stueck * bv.limit_order for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx")
+    assert tausch[0][0].vorschlag.stueck * 1.10 >= kaeufe_usd * 1.02                # deckt Käufe plus Puffer
+    assert all(u.frei for bv, u in e.vorschlaege if bv.vorschlag.buch == "fundamental_a")   # USD-Käufe frei, weil der Tausch vorher geprüft wird
+    assert not any(bv.vorschlag.art == "fx" for bv, _ in e.vorschlaege if bv.vorschlag.buch == "real")
     assert any("ohne Gateway" in m for m in e.meldungen)
     assert all(z["status"] in ("vorgeschlagen", "veto") for z in j.vorschlaege())
 

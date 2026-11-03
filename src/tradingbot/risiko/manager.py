@@ -21,6 +21,9 @@ dazu Hinweise (kein Veto). Regeln (CLAUDE.md „Feste Regeln“, config/risiko.y
    Skalierungsbücher 25); Kauflimit vorhanden und höchstens 2 % über dem letzten Kurs; Verkäufe ohne Limit.
 9. Doppel-Orders: Ein Vorschlag (ID) kann nur einmal gesendet werden; keine zweite Order, solange im selben Buch für
    denselben Ticker und dieselbe Richtung eine offene Order besteht (andere Bücher dürfen denselben Ticker handeln).
+10. Kasse je Währung (Jakob 03.11.2026): Käufe werden in ihrer Handelswährung bezahlt (USD-Aktien, SXRM auf Xetra in USD).
+   Keine Währung darf negativ werden, sonst Veto „Hebel“. USD entsteht über einen Tausch-Vorschlag (art „fx“: Verkauf von
+   EUR gegen USD, Stück = EUR-Betrag), der vor den Käufen geprüft und gesendet wird.
 """
 from __future__ import annotations
 
@@ -45,7 +48,8 @@ class OrderVorschlag:
     limit: float | None = None    # Kauflimit in EUR; Verkäufe ohne Limit
     stop: float | None = None     # Satellite: Stopkurs (für die 1-%-Risikoregel)
     gebuehrenplan: str = "EUR"    # Schlüssel in config/backtest.yaml `kosten.gebuehren` (USD für US-Aktien)
-    eur_kurs: float = 1.0         # Einheiten der Plan-Währung je 1 EUR
+    eur_kurs: float = 1.0         # Einheiten der Handelswährung je 1 EUR (auch für den USD-Gebührenplan)
+    waehrung: str = "EUR"         # Handelswährung: Kasse, aus der bezahlt bzw. in die gutgeschrieben wird
     these: str = ""               # Investment-These (Grund und was sie widerlegt)
 
     @property
@@ -67,6 +71,10 @@ class Kontext:
     gesendete_ids: set[str] = field(default_factory=set)             # kontoweit
     offene_orders: list[tuple[str, str, int]] = field(default_factory=list)   # kontoweit: (Buch, Ticker, Richtung)
     fundamental: dict[str, list[str]] = field(default_factory=dict)  # Ticker → Ausschlussgründe aus filter.anwenden
+    kasse_je_waehrung: dict[str, float] | None = None                # Kasse des Buchs je Währung (ohne Angabe: alles EUR)
+
+    def waehrungskasse(self) -> dict[str, float]:
+        return dict(self.kasse_je_waehrung) if self.kasse_je_waehrung is not None else {"EUR": self.kasse}
 
 
 @dataclass
@@ -94,7 +102,20 @@ class RiskManager:
         return (self.b.get("buecher") or {}).get(name)
 
     def _gebuehr(self, v: OrderVorschlag) -> float:
+        if v.art == "fx":
+            return self.kosten.tauschkosten_eur("USD", v.stueck * v.eur_kurs, v.eur_kurs)
         return self.kosten.gebuehren_eur(v.gebuehrenplan, v.stueck, v.orderwert, v.eur_kurs)
+
+    def _fx_pruefen(self, v: OrderVorschlag, k: Kontext, b: dict, g: list) -> None:
+        """Tausch EUR → Handelswährung: nur aus vorhandener EUR-Kasse, Plausibilität wie bei Orders."""
+        gebuehr = self._gebuehr(v)
+        eur = k.waehrungskasse().get("EUR", 0.0)
+        if v.orderwert + gebuehr > eur + 1e-9:
+            g.append(f"Hebel: EUR-Kasse {eur:.2f} € reicht nicht für den Tausch von {v.orderwert:.2f} € (keine Währung darf negativ werden)")
+        if v.orderwert > float(b["budget_eur"]) + 1e-9:
+            g.append(f"Tausch {v.orderwert:.2f} € über dem Budget des Buchs ({float(b['budget_eur']):.2f} €)")
+        if k.orders_heute + 1 > int(b["max_orders_pro_tag"]):
+            g.append(f"mehr als {int(b['max_orders_pro_tag'])} Orders an einem Tag im Buch {v.buch}")
 
     def pruefe(self, v: OrderVorschlag, k: Kontext) -> Urteil:
         g, h = [], []
@@ -105,6 +126,11 @@ class RiskManager:
             return Urteil(False, g + [f"unbekanntes Buch {v.buch}"], h)
         if k.buch != v.buch:
             return Urteil(False, g + [f"Vorschlag für Buch {v.buch}, geprüft gegen Buch {k.buch}"], h)
+        if v.art == "fx":
+            if v.id in k.gesendete_ids:
+                g.append(f"Vorschlag {v.id} wurde schon gesendet")
+            self._fx_pruefen(v, k, b, g)
+            return Urteil(not g, g, h)
         # 9. Doppel-Orders
         if v.id in k.gesendete_ids:
             g.append(f"Vorschlag {v.id} wurde schon gesendet")
@@ -119,6 +145,11 @@ class RiskManager:
         gebuehr = self._gebuehr(v)
         if v.richtung > 0 and v.orderwert + gebuehr > k.kasse + 1e-9:
             g.append(f"Kasse des Buchs {k.kasse:.2f} € reicht nicht für {v.orderwert + gebuehr:.2f} € (kein Hebel)")
+        if v.richtung > 0:
+            bedarf = (v.orderwert + gebuehr) * (v.eur_kurs if v.waehrung != "EUR" else 1.0)
+            vorhanden = k.waehrungskasse().get(v.waehrung, 0.0)
+            if bedarf > vorhanden + 1e-6:
+                g.append(f"Hebel: {v.waehrung}-Kasse {vorhanden:.2f} reicht nicht für {bedarf:.2f} {v.waehrung} (keine Währung darf negativ werden)")
         # 4. Gebührenregel (nur Käufe)
         if v.richtung > 0 and gebuehr > 0.01 * v.orderwert + 1e-12:
             g.append(f"Gebühr {gebuehr:.2f} € > 1 % von {v.orderwert:.2f} €")
@@ -176,13 +207,29 @@ class RiskManager:
                 else:
                     g.append(f"Fundamental: {grund}")
 
+    def verbuchen(self, v: OrderVorschlag, k: Kontext) -> None:
+        """Wirkung eines freigegebenen Vorschlags auf die Kasse des Buchs (gesamt in EUR und je Währung)."""
+        gebuehr = self._gebuehr(v)
+        kassen = k.waehrungskasse()
+        if v.art == "fx":
+            kassen["EUR"] = kassen.get("EUR", 0.0) - v.orderwert - gebuehr
+            kassen[v.waehrung] = kassen.get(v.waehrung, 0.0) + v.stueck * v.eur_kurs
+            k.kasse -= gebuehr
+        else:
+            f = v.eur_kurs if v.waehrung != "EUR" else 1.0
+            betrag = (v.orderwert - gebuehr) if v.richtung < 0 else -(v.orderwert + gebuehr)
+            kassen[v.waehrung] = kassen.get(v.waehrung, 0.0) + betrag * f
+            k.kasse += betrag
+        k.kasse_je_waehrung = kassen
+
     def pruefe_alle(self, vorschlaege: list[OrderVorschlag], kontexte: dict[str, Kontext]) -> list[tuple[OrderVorschlag, Urteil]]:
         """Prüft je Buch nacheinander (Verkäufe zuerst); freigegebene Orders verbrauchen Kasse und zählen als Order des
         Tages ihres Buchs. Freigegebene Vorschläge gelten danach kontoweit als offen (Doppel-Order-Schutz)."""
-        stand = {n: replace(k) for n, k in kontexte.items()}
+        stand = {n: replace(k, kasse_je_waehrung=k.waehrungskasse()) for n, k in kontexte.items()}
         offen = [o for k in kontexte.values() for o in k.offene_orders]
         ergebnis = []
-        for v in sorted(vorschlaege, key=lambda x: (x.buch, x.richtung)):
+        reihenfolge = lambda x: (x.buch, 1 if x.art == "fx" else (0 if x.richtung < 0 else 2))   # noqa: E731 – Verkäufe, Tausch, Käufe
+        for v in sorted(vorschlaege, key=reihenfolge):
             k = stand.get(v.buch)
             if k is None:
                 ergebnis.append((v, Urteil(False, [f"kein Stand für Buch {v.buch}"])))
@@ -191,8 +238,7 @@ class RiskManager:
             u = self.pruefe(v, k)
             if u.frei:
                 k.orders_heute += 1
-                gebuehr = self._gebuehr(v)
-                k.kasse += (v.orderwert - gebuehr) if v.richtung < 0 else -(v.orderwert + gebuehr)
+                self.verbuchen(v, k)
                 offen.append((v.buch, v.ticker, v.richtung))
             ergebnis.append((v, u))
         return ergebnis

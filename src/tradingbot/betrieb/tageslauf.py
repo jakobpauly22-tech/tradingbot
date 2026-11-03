@@ -21,7 +21,7 @@ from datetime import datetime, time, timedelta
 
 import pandas as pd
 
-from tradingbot.betrieb.buecher import BuchVorschlag, fundamentalbuch, quartalsstichtag, realbuch, technikbuch
+from tradingbot.betrieb.buecher import BuchVorschlag, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
 from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung, pruefe_tageskurse
 from tradingbot.broker.basis import Auftrag, SendenGesperrt
 from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urteil
@@ -43,9 +43,14 @@ def einlesen(journal, broker, fx: dict[str, float]) -> list[str]:
     """Ausführungen der Bot-Orders ins Journal; gibt die Bücher mit neuen Ausführungen zurück."""
     neu = []
     for a in broker.ausfuehrungen():
-        f = fx.get(a["waehrung"], 1.0) if a["waehrung"] != "EUR" else 1.0
         fg = fx.get(a["gebuehr_waehrung"], 1.0) if a["gebuehr_waehrung"] != "EUR" else 1.0
-        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], a["preis"] / f, a["gebuehr"] / fg, a["zeit"]):
+        if a.get("art") == "fx":
+            if journal.tausch(a["exec_id"], a["order_ref"], a["von"], a["nach"], a["betrag_von"], a["betrag_nach"], a["gebuehr"] / fg, a["zeit"]):
+                neu.append(a["order_ref"].split(":")[0])
+            continue
+        f = fx.get(a["waehrung"], 1.0) if a["waehrung"] != "EUR" else 1.0
+        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], a["preis"] / f, a["gebuehr"] / fg, a["zeit"],
+                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=a["gebuehr"], gebuehr_waehrung=a["gebuehr_waehrung"]):
             neu.append(a["order_ref"].split(":")[0])
     return sorted(set(neu))
 
@@ -80,6 +85,7 @@ def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None
     monatsende = werte[werte.index < pd.Timestamp(tag).to_period("M").start_time]
     monat = wert / float(monatsende.iloc[-1]) - 1 if len(monatsende) else 0.0
     return Kontext(buch=buch, kasse=journal.kasse(buch), wert=wert, bestand={t: int(round(s)) for t, s in journal.bestand(buch).items()},
+                   kasse_je_waehrung=journal.kasse_je_waehrung(buch),
                    monatsrendite=monat, vom_hoch=wert / hoch - 1 if hoch > 0 else 0.0, orders_heute=journal.orders_heute(buch, tag),
                    gesendete_ids={r.split(":", 1)[1] for r in journal.gesendete_refs()}, offene_orders=list(offene), fundamental=fundamental or {})
 
@@ -203,6 +209,14 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.meldungen.append(f"{n}: {grund}, {len(v)} Vorschläge")
             roh += v
 
+    # Devisentausch je Buch vor den USD-Käufen (Entscheidung Jakob 03.11.2026)
+    puffer = float(b.get("waehrung", {}).get("tausch_puffer", 0.02))
+    for n in werte_buch:
+        t = tausch_vorschlag(n, tag, roh, journal.kasse_je_waehrung(n).get("USD", 0.0), eurusd, puffer,
+                             lambda v: risk._gebuehr(v) * eurusd)
+        if t is not None:
+            roh.append(t)
+
     # Risk-Manager je Buch, Speichern
     kontexte = {n: kontext(journal, n, tag, werte_buch[n], offene=offene, fundamental=fundamental_gruende) for n in werte_buch}
     urteile = risk.pruefe_alle([x.vorschlag for x in roh], kontexte)
@@ -257,19 +271,22 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     offene_liste = broker.offene_orders()
     offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offene_liste]
     gesendet = journal.gesendete_refs()
-    kasse_rest = {n: journal.kasse(n) for n in {z["buch"] for z in freigegeben}}
-    for z in sorted(freigegeben, key=lambda z: (z["buch"], z["richtung"])):     # Verkäufe zuerst
+    stand = {}                                                                     # Kasse je Buch und Währung im Durchgang
+    reihenfolge = lambda z: (z["buch"], 1 if z["art"] == "fx" else (0 if z["richtung"] < 0 else 2))   # noqa: E731 – Verkäufe, Tausch, Käufe
+    for z in sorted(freigegeben, key=reihenfolge):
         if z["buch"] in betroffen:
             continue
         letzte = journal.buchwerte(z["buch"])
         wert = float(letzte.iloc[-1]) if len(letzte) else journal.kasse(z["buch"])
+        fremd = z["waehrung"] != "EUR"
         v = OrderVorschlag(z["id"], pd.Timestamp(z["signaltag"]), z["buch"], z["ticker"], z["richtung"], z["stueck"], z["letzter_kurs_eur"],
-                           z["art"], limit=(z["limit_preis"] / fx.get(z["waehrung"], 1.0) if z["waehrung"] != "EUR" else z["limit_preis"]) if z["limit_preis"] else None,
+                           z["art"], limit=(z["limit_preis"] / fx.get(z["waehrung"], 1.0) if fremd else z["limit_preis"]) if z["limit_preis"] else None,
                            stop=z["stop"], gebuehrenplan="USD" if z["art"] == "aktie" and z["waehrung"] == "USD" else "EUR",
-                           eur_kurs=fx.get(z["waehrung"], 1.0) if z["art"] == "aktie" and z["waehrung"] == "USD" else 1.0, these=z["these"])
+                           eur_kurs=fx.get(z["waehrung"], 1.0) if fremd else 1.0, waehrung=z["waehrung"], these=z["these"])
         k = kontext(journal, z["buch"], pd.Timestamp(z["signaltag"]), wert, offene=offene)
         k.orders_heute -= 1                                          # die eigene Freigabe nicht doppelt zählen
-        k.kasse = kasse_rest[z["buch"]]                              # Käufe desselben Durchgangs verbrauchen die Kasse
+        if z["buch"] in stand:                                       # Orders desselben Durchgangs verbrauchen die Kasse
+            k.kasse, k.kasse_je_waehrung = stand[z["buch"]]
         u = risk.pruefe(v, k)
         if not u.frei:
             journal.status_setzen(z["id"], "veto")
@@ -283,8 +300,8 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
             meldungen.append(f"{z['id']}: nicht gesendet – {f}")
             continue
         journal.status_setzen(z["id"], "gesendet", order_id=order_id)
-        geb = risk._gebuehr(v)
-        kasse_rest[z["buch"]] += (v.orderwert - geb) if v.richtung < 0 else -(v.orderwert + geb)
+        risk.verbuchen(v, k)
+        stand[z["buch"]] = (k.kasse, k.kasse_je_waehrung)
         offene.append((z["buch"], z["ticker"], z["richtung"]))
         meldungen.append(f"{z['id']}: gesendet (Order {order_id})")
     return meldungen

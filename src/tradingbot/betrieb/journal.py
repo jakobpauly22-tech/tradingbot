@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS dividenden (buch TEXT, ticker TEXT, ex_tag TEXT, stue
 CREATE TABLE IF NOT EXISTS ereignisse (zeit TEXT NOT NULL, art TEXT NOT NULL, buch TEXT, text TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS zustand (buch TEXT PRIMARY KEY, json TEXT NOT NULL, aktualisiert TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS buchwerte (buch TEXT, tag TEXT, wert REAL, kasse REAL, PRIMARY KEY (buch, tag));
+CREATE TABLE IF NOT EXISTS tausche (exec_id TEXT PRIMARY KEY, order_ref TEXT, buch TEXT, von TEXT, nach TEXT, betrag_von REAL,
+    betrag_nach REAL, gebuehr_eur REAL, zeit TEXT);
 """
 
 
@@ -46,6 +48,10 @@ class Journal:
         self.db = sqlite3.connect(self.datei)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
+        for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT")):
+            if name not in spalten:                                   # ältere Journale ergänzen
+                self.db.execute(f"ALTER TABLE ausfuehrungen ADD COLUMN {name} {typ}")
         self.db.commit()
 
     def schliessen(self):
@@ -69,10 +75,37 @@ class Journal:
         return {z["ticker"]: z["s"] for z in zeilen if abs(z["s"]) > 1e-9}
 
     def kasse(self, buch: str) -> float:
+        """Kasse des Buchs gesamt in EUR (Fremdwährung zum Kurs der jeweiligen Ausführung bzw. des Tauschs)."""
         handel = self.db.execute("SELECT COALESCE(SUM(-richtung * stueck * preis_eur - gebuehr_eur), 0) AS k FROM ausfuehrungen WHERE buch=?",
                                  (buch,)).fetchone()["k"]
         div = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
-        return self.startkapital(buch) + handel + div
+        tausch = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur), 0) AS t FROM tausche WHERE buch=?", (buch,)).fetchone()["t"]
+        return self.startkapital(buch) + handel + div - tausch
+
+    def kasse_je_waehrung(self, buch: str) -> dict[str, float]:
+        """Kasse des Buchs je Währung (keine darf negativ werden, Risk-Manager Regel 10)."""
+        kassen = {"EUR": self.startkapital(buch)}
+        for z in self.db.execute("SELECT waehrung, richtung, stueck, preis, preis_eur, gebuehr, gebuehr_eur, gebuehr_waehrung FROM ausfuehrungen WHERE buch=?", (buch,)):
+            w = z["waehrung"] or "EUR"
+            preis = z["preis"] if z["preis"] is not None else z["preis_eur"]
+            kassen[w] = kassen.get(w, 0.0) - z["richtung"] * z["stueck"] * preis
+            gw = z["gebuehr_waehrung"] or "EUR"
+            kassen[gw] = kassen.get(gw, 0.0) - (z["gebuehr"] if z["gebuehr"] is not None and gw != "EUR" else z["gebuehr_eur"])
+        for z in self.db.execute("SELECT von, nach, betrag_von, betrag_nach, gebuehr_eur FROM tausche WHERE buch=?", (buch,)):
+            kassen[z["von"]] = kassen.get(z["von"], 0.0) - z["betrag_von"]
+            kassen[z["nach"]] = kassen.get(z["nach"], 0.0) + z["betrag_nach"]
+            kassen["EUR"] -= z["gebuehr_eur"]
+        kassen["EUR"] += self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
+        return kassen
+
+    def tausch(self, exec_id, order_ref, von, nach, betrag_von, betrag_nach, gebuehr_eur, zeit) -> bool:
+        buch, _, vid = order_ref.partition(":")
+        neu = self.db.execute("INSERT OR IGNORE INTO tausche VALUES (?,?,?,?,?,?,?,?,?)",
+                              (exec_id, order_ref, buch, von, nach, betrag_von, betrag_nach, gebuehr_eur, str(zeit))).rowcount > 0
+        if neu:
+            self.status_setzen(vid, "ausgefuehrt")
+        self.db.commit()
+        return neu
 
     # --- Vorschläge ----------------------------------------------------------------------------------------
     def vorschlag_speichern(self, v, urteil, *, waehrung: str, freigabe_bis: str, limit_order: float | None = None,
@@ -133,10 +166,13 @@ class Journal:
         self.db.commit()
 
     # --- Ausführungen und Dividenden --------------------------------------------------------------------------
-    def ausfuehrung(self, exec_id, order_ref, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit) -> bool:
+    def ausfuehrung(self, exec_id, order_ref, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, *, waehrung="EUR", preis=None,
+                    gebuehr=None, gebuehr_waehrung=None) -> bool:
         buch, _, vid = order_ref.partition(":")
-        neu = self.db.execute("INSERT OR IGNORE INTO ausfuehrungen VALUES (?,?,?,?,?,?,?,?,?)",
-                              (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, str(zeit))).rowcount > 0
+        neu = self.db.execute("INSERT OR IGNORE INTO ausfuehrungen (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, "
+                              "waehrung, preis, gebuehr, gebuehr_waehrung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, str(zeit), waehrung,
+                               preis if preis is not None else preis_eur, gebuehr, gebuehr_waehrung or waehrung)).rowcount > 0
         if neu:
             self.status_setzen(vid, "ausgefuehrt")
         self.db.commit()

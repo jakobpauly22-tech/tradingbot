@@ -62,6 +62,11 @@ orders:
   verkauf: {typ: market}               # ohne Limit
   gueltigkeit: naechster_handelstag    # gültig für den nächsten Handelstag; nicht ausgeführte verfallen und stehen im Journal
 
+waehrung:
+  # Entscheidung Jakob 03.11.2026: vor den Käufen je Buch EUR → USD tauschen (geplante Käufe plus Puffer), wie im Backtest;
+  # Kasse je Währung, keine darf negativ werden (Risk-Manager Regel 10). Tausch als Market-Order (IDEALPRO), gültig DAY.
+  tausch_puffer: 0.02
+
 freigabe:
   # Tageslauf abends nach Börsenschluss; Freigabe 18–24 Uhr; Orders werden sofort nach der Freigabe gesendet, gültig für
   # den nächsten Handelstag. Das IB Gateway muss nur während der Freigabe laufen, morgens ist nichts nötig (02.11.2026).

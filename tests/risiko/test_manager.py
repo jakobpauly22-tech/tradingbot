@@ -154,3 +154,16 @@ def test_pruefe_alle_je_buch(rm):
     assert [i for i, u in sorted(urteile.items()) if u.frei] == ["a", "c", "d"]
     assert any("offene Order" in g for g in urteile["b"].gruende) and any("kein Hebel" in g for g in urteile["e"].gruende)
     assert kontexte["real"].kasse == 420.0                  # Eingangsstand bleibt unverändert
+
+
+def test_kasse_je_waehrung_keine_darf_negativ_werden(rm):
+    usd_kauf = kauf(id="u1", buch="fundamental_a", ticker="AAPL", art="aktie", stueck=2, letzter_kurs=200.0, limit=204.0,
+                    gebuehrenplan="USD", eur_kurs=1.1, waehrung="USD")
+    k = Kontext(buch="fundamental_a", kasse=10_000.0, wert=10_000.0, fundamental={"AAPL": []}, kasse_je_waehrung={"EUR": 10_000.0, "USD": 0.0})
+    u = rm.pruefe(usd_kauf, k)
+    assert not u.frei and any(g.startswith("Hebel: USD-Kasse") for g in u.gruende)
+    tausch = OrderVorschlag("t1", TAG, "fundamental_a", "EUR.USD", -1, 500, 1.0, "fx", eur_kurs=1.1, waehrung="USD")
+    urteile = {v.id: x for v, x in rm.pruefe_alle([usd_kauf, tausch], {"fundamental_a": k})}
+    assert urteile["t1"].frei and urteile["u1"].frei                  # Tausch wird vor den Käufen geprüft und verbucht
+    zu_gross = OrderVorschlag("t2", TAG, "fundamental_a", "EUR.USD", -1, 20_000, 1.0, "fx", eur_kurs=1.1, waehrung="USD")
+    assert any("Hebel: EUR-Kasse" in g for g in rm.pruefe(zu_gross, k).gruende)

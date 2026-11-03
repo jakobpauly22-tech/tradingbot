@@ -44,13 +44,13 @@ def _kauf(buch, tag, ticker, stueck, kurs_eur, kurs_order, waehrung, aufschlag, 
     limit_order = limit_preis(kurs_order, aufschlag)
     v = OrderVorschlag(vorschlag_id(buch, tag, ticker, 1), pd.Timestamp(tag), buch, ticker, 1, int(stueck), float(kurs_eur), art,
                        limit=limit_order / fx if waehrung != "EUR" else limit_order, stop=stop, gebuehrenplan=plan,
-                       eur_kurs=fx if plan != "EUR" else 1.0, these=these)
+                       eur_kurs=fx if (plan != "EUR" or waehrung != "EUR") else 1.0, waehrung=waehrung, these=these)
     return BuchVorschlag(v, waehrung, limit_order)
 
 
 def _verkauf(buch, tag, ticker, stueck, kurs_eur, waehrung, art, these, *, fx=1.0, plan="EUR"):
     v = OrderVorschlag(vorschlag_id(buch, tag, ticker, -1), pd.Timestamp(tag), buch, ticker, -1, int(stueck), float(kurs_eur), art,
-                       gebuehrenplan=plan, eur_kurs=fx if plan != "EUR" else 1.0, these=these)
+                       gebuehrenplan=plan, eur_kurs=fx if (plan != "EUR" or waehrung != "EUR") else 1.0, waehrung=waehrung, these=these)
     return BuchVorschlag(v, waehrung, None)
 
 
@@ -60,6 +60,26 @@ def stueck_fuer(zielwert: float, kasse: float, limit_eur: float, gebuehr) -> int
     while n > 0 and n * limit_eur + gebuehr(n, n * limit_eur) > kasse + 1e-9:
         n -= 1
     return n
+
+
+# --- Devisentausch -----------------------------------------------------------------------------------------------
+def tausch_vorschlag(buch: str, tag, vorschlaege: list[BuchVorschlag], kasse_waehrung: float, fx: float, puffer: float,
+                     gebuehr_usd, waehrung: str = "USD") -> BuchVorschlag | None:
+    """Tausch EUR → Fremdwährung vor den Käufen (Entscheidung Jakob 03.11.2026): geplante Käufe zum Limit plus Gebühren,
+    plus Puffer, abzüglich vorhandener Kasse und Erlöse aus Verkäufen derselben Währung. Stück = zu verkaufende EUR."""
+    eigene = [x for x in vorschlaege if x.vorschlag.buch == buch and x.waehrung == waehrung]
+    kaeufe = sum(x.vorschlag.stueck * x.limit_order + gebuehr_usd(x.vorschlag) for x in eigene if x.vorschlag.richtung > 0)
+    erloese = sum(x.vorschlag.stueck * x.vorschlag.letzter_kurs * fx for x in eigene if x.vorschlag.richtung < 0)
+    netto = kaeufe * (1 + puffer) - kasse_waehrung - erloese
+    if kaeufe <= 0 or netto <= 0:
+        return None
+    eur = int(math.ceil(netto / fx))
+    these = (f"Devisentausch {eur} EUR → etwa {eur * fx:,.0f} {waehrung} für die geplanten Käufe ({kaeufe:,.0f} {waehrung} zum Limit "
+             f"inkl. Gebühren, Puffer {puffer:.0%}, abzüglich vorhandener {waehrung}-Kasse {kasse_waehrung:,.0f} und Verkaufserlöse "
+             f"{erloese:,.0f}). Keine Währung darf negativ werden.")
+    v = OrderVorschlag(vorschlag_id(buch, tag, f"EUR.{waehrung}", -1), pd.Timestamp(tag), buch, f"EUR.{waehrung}", -1, eur, 1.0, "fx",
+                       eur_kurs=fx, waehrung=waehrung, these=these)
+    return BuchVorschlag(v, waehrung, None)
 
 
 # --- Realbuch ---------------------------------------------------------------------------------------------------

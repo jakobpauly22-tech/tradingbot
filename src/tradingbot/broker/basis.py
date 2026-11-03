@@ -102,7 +102,7 @@ def pruefe_senden(*, konto_id: str, port: int, modus: str | None, betrieb: dict,
         gruende.append(f"offene Order mit Kennung {auftrag.order_ref} besteht schon")
     if any(o.order_ref.split(":")[0] == auftrag.buch and o.ticker == auftrag.ticker and o.richtung == auftrag.richtung for o in offene):
         gruende.append(f"offene Order im Buch {auftrag.buch} für {auftrag.ticker} in derselben Richtung besteht schon")
-    if auftrag.richtung > 0 and auftrag.limit is None:
+    if auftrag.richtung > 0 and auftrag.limit is None and auftrag.art != "fx":
         gruende.append("Kauf ohne Limit")
     if auftrag.richtung < 0 and auftrag.limit is not None:
         gruende.append("Verkauf mit Limit (Verkäufe ohne Limit)")
