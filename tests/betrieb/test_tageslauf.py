@@ -133,7 +133,7 @@ def test_freigabe_und_senden(umgebung):
     assert any("nicht freigebbar" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "vorgeschlagen"
     assert j.messbeginn("real") is None                     # Senden aus: nicht freigebbar, kein Messbeginn
     m = freigeben_und_senden(j, [real_id], BrokerAttrappe(verbunden=False), ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
-    assert "Gateway nicht verbunden" in m[-1] and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
+    assert any("Gateway nicht verbunden" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
     assert j.messbeginn("real") is not None                 # Buch freigeschaltet: Freigabe ist Messbeginn
     m = freigeben_und_senden(j, [], BrokerAttrappe(sperre=True), ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
     assert any("nicht freigeschaltet" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
@@ -268,3 +268,23 @@ def test_orders_unterwegs_keine_doppelten_kaeufe(umgebung):
     b2 = BrokerAttrappe()                                            # erneutes Senden ohne neue Freigabe sendet nichts
     freigeben_und_senden(j, [], b2, ABEND, risk=rm, kurse_laden=k, konfig_betrieb=AN)
     assert b2.gesendet == []
+
+
+def test_abgleichzeile_und_sicherung_nach_senden(umgebung, tmp_path, monkeypatch):
+    """Abgleichzeile in jedem Lauf im Protokoll, auch bei leerem Bestand; Sicherung direkt nach Freigabe/Senden (03.11.2026)."""
+    j, rm = umgebung
+    e = lauf(j, rm, broker=BrokerAttrappe())
+    assert any(m.startswith("Abgleich: Bestände aller Bücher stimmen") and "ohne Bestand" in m for m in e.meldungen)
+    e = lauf(j, rm)
+    assert any(m.startswith("Abgleich: nicht möglich") for m in e.meldungen)
+    monkeypatch.setenv("JOURNAL_BACKUP_DIR", str(tmp_path / "sicherung"))
+    rid = next(z["id"] for z in j.vorschlaege(buch="real") if z["status"] == "vorgeschlagen")
+    b = BrokerAttrappe()
+    m = freigeben_und_senden(j, [rid], b, ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    assert b.gesendet and any(x.startswith("Abgleich vor dem Senden") for x in m)
+    assert m[-1].startswith("Journal gesichert nach Freigabe/Senden")
+    kopie = list((tmp_path / "sicherung").glob("*.sqlite"))
+    assert len(kopie) == 1
+    import sqlite3
+    with sqlite3.connect(kopie[0]) as k:                     # die Kopie enthält den Status „gesendet“
+        assert k.execute("SELECT status FROM vorschlaege WHERE id=?", (rid,)).fetchone()[0] == "gesendet"

@@ -82,6 +82,11 @@ def abgleich(journal, buecher: list[str], positionen) -> list[str]:
             if abs(soll.get(t, 0) - ist.get(t, 0)) > 1e-6]
 
 
+def _bestand_text(journal, b) -> str:
+    n = sum(1 for buch in b["buecher"] for s in journal.bestand(buch).values() if abs(s) > 1e-9)
+    return "alle Bücher ohne Bestand" if n == 0 else f"{n} Positionen in den Büchern"
+
+
 # --- Risiko-Kontext je Buch -----------------------------------------------------------------------------------------
 def kasse_frei(journal, buch: str, fx: dict[str, float] | None = None) -> tuple[float, dict[str, float]]:
     """Kasse des Buchs abzüglich Orders unterwegs (gesamt in EUR und je Währung); ein Tausch unterwegs zählt als
@@ -151,12 +156,16 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             if diff:
                 erg.gestoppt = "Abgleich mit IBKR weicht ab – Tageslauf gestoppt: " + "; ".join(diff)
                 journal.ereignis("abgleich", erg.gestoppt)
+                erg.meldungen.append(erg.gestoppt)
                 return erg
             journal.ereignis("abgleich", "Bestände aller Bücher stimmen mit IBKR überein")
+            erg.meldungen.append(f"Abgleich: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
         except Exception as f:  # noqa: BLE001 – Gateway nicht erreichbar: Vorschläge trotzdem, Abgleich vor dem Senden
             erg.meldungen.append(f"Gateway nicht verbunden ({type(f).__name__}): Ausführungen nicht eingelesen; Abgleich vor dem Senden")
+            erg.meldungen.append("Abgleich: nicht möglich (Gateway nicht verbunden), wird vor dem Senden nachgeholt")
     else:
         erg.meldungen.append("ohne Gateway: Ausführungen nicht eingelesen; Abgleich vor dem Senden")
+        erg.meldungen.append("Abgleich: nicht möglich (ohne Gateway), wird vor dem Senden nachgeholt")
 
     def gebuehr_fuer(plan, f=1.0):
         return lambda n, wert_eur: risk.kosten.gebuehren_eur(plan, n, wert_eur, f)
@@ -296,6 +305,17 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
         return meldungen + [f"Probe: {len(ids)} Vorschläge freigegeben, nichts gesendet, kein Messbeginn"]
     if not messbeginn:
         meldungen.append("Senden ist ausgeschaltet: Freigaben zählen nicht als Messbeginn")
+    meldungen = _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen)
+    try:                                                     # Sicherung nach Freigabe/Senden (Jakob 03.11.2026)
+        ziel = journal.sichern(None, jetzt=datetime.now())
+        meldungen.append(f"Journal gesichert nach Freigabe/Senden: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
+    except Exception as f:  # noqa: BLE001 – Sicherung darf das Senden nie rückgängig machen oder abbrechen
+        meldungen.append(f"Journal-Sicherung fehlgeschlagen ({type(f).__name__}: {f})")
+    return meldungen
+
+
+def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str]:
+    """Senden nach der Freigabe (unverändert aus freigeben_und_senden ausgelagert, damit danach gesichert wird)."""
     try:
         if not broker.verbunden():
             broker.verbinden()
@@ -313,6 +333,7 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     diff = abgleich(journal, list(b["buecher"]), broker.positionen())
     if diff:
         return meldungen + ["Abgleich mit IBKR weicht ab – nichts gesendet: " + "; ".join(diff)]
+    meldungen.append(f"Abgleich vor dem Senden: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
     offene_liste = broker.offene_orders()
     offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offene_liste]
     gesendet = journal.gesendete_refs()
