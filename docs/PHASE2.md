@@ -43,3 +43,19 @@ Festgeschrieben vor dem Lauf am 03.11.2026 (Entscheidungen Jakob 03.11.2026). Pa
 Eine Phase gilt als fertig, wenn ihr Backtest sauber gegen die Benchmark läuft (CLAUDE.md). Dieser Backtest prüft vor
 allem die Technik des Realbuchs (Risk-Manager, Limit-Logik, ganze Stücke, Kosten, Steuern); eine Renditeaussage zum Core
 ist er nicht, weil der Core der Benchmark ist.
+
+## Ergebnis (03.11.2026)
+
+Bericht `docs/berichte/2026-11-03_phase2_gesamtdepot.md`. Kriterien 1, 3, 4 und 5 bestanden, **Kriterium 2 knapp verfehlt:
+−0,51 Pp. p.a.** (Grenze 0,5).
+
+- **Lauf 1** (`docs/berichte/2026-11-03_phase2_gesamtdepot_lauf1_vor_korrektur.md`): ebenfalls −0,51 Pp. Dabei gefunden und
+  korrigiert (Modellfehler, keine Strategieänderung): Der Simulator prüfte die 1-%-Regel bei Limit-Orders am
+  Ausführungswert und verwarf 17 Käufe, wenn die Eröffnung unter dem Limit lag (Orderwert dann knapp unter 125 €). Im
+  Paper Trading wird die Regel vor dem Senden am Limit geprüft, die gesendete Order wird nicht storniert. Seit der
+  Korrektur gilt die Regel bei Limit-Orders am Orderwert zum Limit (Test). Auswirkung auf Kriterium 2: unter 0,01 Pp.
+- **Ursache der Abweichung:** strukturell, nicht Limit oder Risk-Manager – der Zwilling (Market-Order, ohne Risk-Manager)
+  liegt gleich (−0,52 Pp.). Restkasse im Mittel 2,81 % (100 € reichen oft nicht für einen Anteil zu 180–235 €) kostet bei
+  rund 11 % Marktrendite etwa 0,3 Pp. p.a.; Kosten 80 € auf ein mittleres Depot von rund 7.500 € über 8,25 Jahre etwa
+  0,13 Pp. p.a.; dazu Spread, Slippage und der erste Tag in Kasse.
+- Nach der Regel: Ergebnis dokumentieren und mit Jakob besprechen; keine Anpassung von Kriterien oder Parametern.
