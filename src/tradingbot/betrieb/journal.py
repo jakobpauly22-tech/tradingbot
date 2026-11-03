@@ -142,8 +142,9 @@ class Journal:
                         (status, order_id, (jetzt or datetime.now()).isoformat(timespec="seconds"), vorschlag_id))
         self.db.commit()
 
-    def freigeben(self, vorschlag_id: str, *, jetzt: datetime | None = None):
-        """Freigabe durch Jakob; setzt beim ersten Mal den Messbeginn des Buchs."""
+    def freigeben(self, vorschlag_id: str, *, jetzt: datetime | None = None, messbeginn: bool = True):
+        """Freigabe durch Jakob; setzt beim ersten Mal den Messbeginn des Buchs – aber nur mit `messbeginn=True`
+        (echtes Senden möglich). Freigaben im Probe-Modus oder bei ausgeschaltetem Senden zählen nie (03.11.2026)."""
         jetzt = jetzt or datetime.now()
         z = self.db.execute("SELECT buch, status, freigabe_bis FROM vorschlaege WHERE id=?", (vorschlag_id,)).fetchone()
         if z is None or z["status"] != "vorgeschlagen":
@@ -152,7 +153,7 @@ class Journal:
             self.status_setzen(vorschlag_id, "abgelaufen", jetzt=jetzt)
             raise ValueError(f"Freigabefenster für {vorschlag_id} ist abgelaufen ({z['freigabe_bis']})")
         self.status_setzen(vorschlag_id, "freigegeben", jetzt=jetzt)
-        if self.messbeginn(z["buch"]) is None:
+        if messbeginn and self.messbeginn(z["buch"]) is None:
             self.db.execute("UPDATE buecher SET messbeginn=? WHERE buch=?", (jetzt.date().isoformat(), z["buch"]))
             self.ereignis("messbeginn", f"Messbeginn {jetzt.date():%d.%m.%Y} (erste Freigabe)", z["buch"])
             self.db.commit()

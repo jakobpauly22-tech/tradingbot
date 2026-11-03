@@ -5,9 +5,10 @@ Risk-Managers anzeigen → Freigabe (Realbuch einzeln je Order, Skalierungsbüch
 über das IB Gateway (nur wenn alle Riegel offen sind; `senden_freigeschaltet` steht bis zu Jakobs Freigabe auf aus).
 
 Aufrufe:
-  Tageslauf.bat                                              Fenster (pythonw, ohne Konsole)
-  .venv\Scripts\python tools\tageslauf.py --probe --ohne-fenster   Probelauf mit eigenem Journal (daten/betrieb/probe),
-                                                             Bericht auf der Konsole und in daten/betrieb/probe/, sendet nie
+  Tageslauf.bat                 Fenster (pythonw, ohne Konsole), echtes Journal, Freigabe 18–24 Uhr
+  Tageslauf_Probe.bat           Fenster im Probe-Modus: Probe-Journal (daten/betrieb/probe), jederzeit bedienbar, sendet nie,
+                                setzt nie einen Messbeginn
+  .venv\Scripts\python tools\tageslauf.py --probe --ohne-fenster   Probelauf als Bericht auf der Konsole und in daten/betrieb/probe/
 """
 import argparse
 import logging
@@ -87,20 +88,21 @@ def ohne_fenster(probe: bool) -> int:
     return 0
 
 
-def fenster() -> int:
+def fenster(probe: bool = False) -> int:
     import tkinter as tk
     from tkinter import messagebox, scrolledtext
 
     betrieb = lade_konfiguration("betrieb")
     wurzel = tk.Tk()
-    wurzel.title("Trading-Bot – Tageslauf (Paper)")
+    wurzel.title("Trading-Bot – " + ("PROBELAUF (nichts wird gesendet)" if probe else "Tageslauf (Paper)"))
     wurzel.geometry("1100x800")
     try:
-        erg, journal, broker = rechnen(probe=False)
+        erg, journal, broker = rechnen(probe=probe)
     except Exception:  # noqa: BLE001
         messagebox.showerror("Tageslauf fehlgeschlagen", traceback.format_exc()[-1500:])
         return 1
-    kopf = tk.Label(wurzel, text=f"Tageslauf {erg.jetzt:%d.%m.%Y %H:%M} – Senden {'AN' if betrieb['ibkr'].get('senden_freigeschaltet') else 'AUS (nur Freigabe)'}",
+    modus = "PROBE – sendet nie, kein Messbeginn" if probe else ("Senden AN" if betrieb["ibkr"].get("senden_freigeschaltet") else "Senden AUS (nur Freigabe)")
+    kopf = tk.Label(wurzel, text=f"Tageslauf {erg.jetzt:%d.%m.%Y %H:%M} – {modus}",
                     font=("Segoe UI", 12, "bold"))
     kopf.pack(anchor="w", padx=8, pady=4)
     if erg.gestoppt:
@@ -142,18 +144,22 @@ def fenster() -> int:
         if not ids:
             messagebox.showinfo("Freigabe", "Nichts ausgewählt.")
             return
-        if not messagebox.askyesno("Freigabe bestätigen", f"{len(ids)} Vorschläge freigeben und senden?"):
+        if not messagebox.askyesno("Freigabe bestätigen", f"{len(ids)} Vorschläge freigeben" + ("" if probe else " und senden") + "?"):
             return
-        from tradingbot.broker.ibkr import IbkrBroker
-        with betriebsmodus("Freigabe"):
-            b = broker or IbkrBroker(betrieb, PROJEKT_WURZEL)
-            m = freigeben_und_senden(journal, ids, b, datetime.now(BERLIN))
+        with betriebsmodus("Probe-Freigabe" if probe else "Freigabe"):
+            if probe:
+                m = freigeben_und_senden(journal, ids, None, datetime.now(BERLIN), probe=True)
+            else:
+                from tradingbot.broker.ibkr import IbkrBroker
+                b = broker or IbkrBroker(betrieb, PROJEKT_WURZEL)
+                m = freigeben_und_senden(journal, ids, b, datetime.now(BERLIN))
         protokoll.insert("end", "\n".join(m) + "\n")
         protokoll.see("end")
 
     leiste = tk.Frame(wurzel)
     leiste.pack(fill="x", padx=8, pady=6)
-    tk.Button(leiste, text="Freigeben und senden", command=senden, state="disabled" if erg.gestoppt else "normal").pack(side="left")
+    tk.Button(leiste, text="Freigeben (Probe)" if probe else "Freigeben und senden", command=senden,
+              state="disabled" if erg.gestoppt else "normal").pack(side="left")
     tk.Button(leiste, text="Schließen", command=wurzel.destroy).pack(side="right")
     wurzel.mainloop()
     if broker:
@@ -169,9 +175,9 @@ def main() -> int:
     a.add_argument("--ohne-fenster", action="store_true")
     arg = a.parse_args()
     logging.basicConfig(level=logging.WARNING)
-    if arg.ohne_fenster or arg.probe:
+    if arg.ohne_fenster:
         return ohne_fenster(arg.probe)
-    return fenster()
+    return fenster(probe=arg.probe)
 
 
 if __name__ == "__main__":

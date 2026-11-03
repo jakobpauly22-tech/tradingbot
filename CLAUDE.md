@@ -127,7 +127,7 @@ Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`. Details in `do
 
 ## Paper Trading (Phase 2, Entscheidungen 02.11.2026)
 
-Parameter in `config/betrieb.yaml`. Realbuch: Core 500 € in SPYI (ganze Stücke), Strategien nur als Schatten. Skalierungsbücher mit je 10.000 € (Fundamental A und B, Crossover, Momentum) handeln im Paper-Konto, um Signalqualität ohne Kostenverzerrung zu messen; sie begründen nie echte Trades mit kleinerem Kapital. Tageslauf abends, Freigabe 18–24 Uhr, Senden sofort (Limit = Vortagesschluss + 2 %, gültig für den nächsten Handelstag). Senden nur bei Konto „DU…“, Port 4002, `TRADING_MODE=paper` und ohne Datei `STOP`. Betriebsdaten ab 2025 liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge nicht lesen können.
+Parameter in `config/betrieb.yaml`. Realbuch: Core 500 € in SPYI (ganze Stücke), Strategien nur als Schatten. Skalierungsbücher mit je 10.000 € (Fundamental A und B, Crossover, Momentum) handeln im Paper-Konto, um Signalqualität ohne Kostenverzerrung zu messen; sie begründen nie echte Trades mit kleinerem Kapital. Tageslauf abends, Freigabe 18–24 Uhr, Senden sofort (Limit = Vortagesschluss + 2 %, gültig für den nächsten Handelstag). Senden nur bei Konto „DU…“, Port 4002, `TRADING_MODE=paper` und ohne Datei `STOP`. Betriebsdaten ab 2025 liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge nicht lesen können. Fremdwährung: Tausch EUR→USD je Buch vor den Käufen, keine Währung darf negativ werden. `Tageslauf_Probe.bat`: Probe-Journal, jederzeit bedienbar, sendet nie; Freigaben im Probe-Modus oder bei ausgeschaltetem Senden zählen nie als Messbeginn (03.11.2026).
 
 ## Briefing-Archiv (Eingang der News-Engine)
 

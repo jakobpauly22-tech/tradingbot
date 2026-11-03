@@ -88,6 +88,7 @@ daten:
   betriebsbereich: daten/betrieb
   kursquelle: yahoo                    # kein Xetra-Marktdaten-Abo bei IBKR (Jakob 02.11.2026)
   # Messbeginn je Buch = Tag der ersten Freigabe, im Journal festgehalten (02.11.2026)
+  # Freigaben im Probe-Modus (Tageslauf_Probe.bat) oder bei ausgeschaltetem Senden zählen nie als Messbeginn (03.11.2026)
 
 datenpruefung:                         # vor jedem Tageslauf (Jakob 02.11.2026); bei Befund an diesem Tag keine Vorschläge
   schluss_vom_letzten_handelstag: true # je Börse (Xetra, NYSE) die letzte abgeschlossene Sitzung

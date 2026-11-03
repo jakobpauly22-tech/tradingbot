@@ -237,20 +237,28 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
 
 # --- Freigabe und Senden ----------------------------------------------------------------------------------------------
 def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, risk: RiskManager | None = None,
-                         konfig_betrieb: dict | None = None, kurse_laden=None) -> list[str]:
-    """Gibt frei und sendet. Gibt Meldungen zurück; nie eine Ausnahme bis zur Oberfläche (sauberer Abbruch)."""
+                         konfig_betrieb: dict | None = None, kurse_laden=None, probe: bool = False) -> list[str]:
+    """Gibt frei und sendet. Gibt Meldungen zurück; nie eine Ausnahme bis zur Oberfläche (sauberer Abbruch).
+
+    Probe-Modus (03.11.2026): Freigabe jederzeit, nichts wird gesendet, kein Messbeginn. Messbeginn auch im echten
+    Journal nur, wenn das Senden freigeschaltet ist."""
     from tradingbot.konfiguration import lade_konfiguration
 
     b = konfig_betrieb or lade_konfiguration("betrieb")
     risk = risk or RiskManager.aus_konfig()
     meldungen = []
-    if not (FREIGABE_VON <= jetzt.time()):
+    if not probe and not (FREIGABE_VON <= jetzt.time()):
         return [f"Freigabe nur zwischen 18 und 24 Uhr (jetzt {jetzt:%H:%M})"]
+    messbeginn = (not probe) and bool(b["ibkr"].get("senden_freigeschaltet", False))
     for i in ids:
         try:
-            journal.freigeben(i, jetzt=jetzt)
+            journal.freigeben(i, jetzt=jetzt, messbeginn=messbeginn)
         except ValueError as f:
             meldungen.append(str(f))
+    if probe:
+        return meldungen + [f"Probe: {len(ids)} Vorschläge freigegeben, nichts gesendet, kein Messbeginn"]
+    if not messbeginn:
+        meldungen.append("Senden ist ausgeschaltet: Freigaben zählen nicht als Messbeginn")
     try:
         if not broker.verbunden():
             broker.verbinden()

@@ -121,7 +121,7 @@ def test_freigabe_und_senden(umgebung):
     assert "18 und 24 Uhr" in freigeben_und_senden(j, [real_id], BrokerAttrappe(), ABEND.replace(hour=17), risk=rm, kurse_laden=k)[0]
     m = freigeben_und_senden(j, [real_id], BrokerAttrappe(verbunden=False), ABEND, risk=rm, kurse_laden=k)
     assert "Gateway nicht verbunden" in m[-1] and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
-    assert j.messbeginn("real") == "2026-11-02"
+    assert j.messbeginn("real") is None                     # Senden ist in der Konfiguration aus: kein Messbeginn (03.11.2026)
     m = freigeben_und_senden(j, [], BrokerAttrappe(sperre=True), ABEND, risk=rm, kurse_laden=k)
     assert any("nicht freigeschaltet" in x for x in m) and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
     b = BrokerAttrappe()
@@ -142,3 +142,39 @@ def test_ausfuehrung_einlesen_und_abgleich_ok(umgebung):
     e = lauf(j, rm, jetzt=naechster, broker=BrokerAttrappe(fills=[fill], positionen=[Position("DU1", "SPYI.DE", z["stueck"], 150.0)]))
     assert e.gestoppt is None and any("Neue Ausführungen" in m for m in e.meldungen)
     assert j.bestand("real") == {"SPYI.DE": z["stueck"]}
+
+
+def test_probe_freigabe_jederzeit_ohne_senden_ohne_messbeginn(umgebung):
+    j, rm = umgebung
+    vormittag = ABEND.replace(hour=10)
+    lauf(j, rm)
+    rid = next(z["id"] for z in j.vorschlaege(buch="real"))
+    m = freigeben_und_senden(j, [rid], None, vormittag.replace(hour=21), risk=rm, probe=True)
+    assert "nichts gesendet" in m[-1] and j.vorschlaege(buch="real")[0]["status"] == "freigegeben"
+    assert j.messbeginn("real") is None
+
+
+def test_probe_ausserhalb_des_fensters(umgebung):
+    j, rm = umgebung
+    lauf(j, rm)
+    rid = next(z["id"] for z in j.vorschlaege(buch="real"))
+    früh = datetime(2026, 11, 2, 10, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+    m = freigeben_und_senden(j, [rid], None, früh, risk=rm, probe=True)
+    assert "nichts gesendet" in m[-1] and j.messbeginn("real") is None
+
+
+def test_messbeginn_nur_wenn_senden_freigeschaltet(umgebung):
+    j, rm = umgebung
+    lauf(j, rm)
+    rid = next(z["id"] for z in j.vorschlaege(buch="real"))
+    b = lade_konfiguration("betrieb")
+    b["ibkr"] = {**b["ibkr"], "senden_freigeschaltet": False}
+    m = freigeben_und_senden(j, [rid], BrokerAttrappe(sperre=True), ABEND, risk=rm, konfig_betrieb=b, kurse_laden=kurse_attrappe())
+    assert any("nicht als Messbeginn" in x for x in m) and j.messbeginn("real") is None
+    j2 = Journal(j.datei.parent / "zwei.sqlite")
+    lauf(j2, rm)
+    rid2 = next(z["id"] for z in j2.vorschlaege(buch="real"))
+    b["ibkr"]["senden_freigeschaltet"] = True
+    freigeben_und_senden(j2, [rid2], BrokerAttrappe(), ABEND, risk=rm, konfig_betrieb=b, kurse_laden=kurse_attrappe())
+    assert j2.messbeginn("real") == "2026-11-02"
+    j2.schliessen()
