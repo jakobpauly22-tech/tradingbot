@@ -23,7 +23,7 @@ import pandas as pd
 
 from tradingbot.betrieb.buecher import BuchVorschlag, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
 from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung, pruefe_tageskurse
-from tradingbot.broker.basis import Auftrag, SendenGesperrt
+from tradingbot.broker.basis import Auftrag, KontraktUnbekannt, SendeErgebnis, SendenGesperrt
 from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urteil
 
 FREIGABE_VON = time(18, 0)
@@ -63,7 +63,7 @@ def einlesen(journal, broker, fx: dict[str, float]) -> list[str]:
 def verfallene_markieren(journal, offene_refs: set[str], letzte_sitzung) -> int:
     """Gesendete Orders, deren Handelstag vorbei ist, ohne Ausführung und nicht mehr offen → verfallen."""
     n = 0
-    for z in journal.vorschlaege(status=("gesendet",)):
+    for z in journal.vorschlaege(status=("gesendet", "unbestaetigt")):
         if pd.Timestamp(z["signaltag"]) < pd.Timestamp(letzte_sitzung) and f"{z['buch']}:{z['id']}" not in offene_refs:
             journal.status_setzen(z["id"], "verfallen")
             journal.ereignis("verfallen", f"Order {z['id']} nicht ausgeführt, verfallen", z["buch"])
@@ -261,6 +261,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     n_ersetzt = journal.offene_ersetzen(jetzt=jetzt)
     if n_ersetzt:
         journal.ereignis("ersetzt", f"{n_ersetzt} noch nicht freigegebene Vorschläge früherer Läufe ersetzt")
+    if broker is not None and hasattr(broker, "kontrakt_aufloesen") and _verbunden(broker):
+        urteile = kontrakte_pruefen(urteile, nach_id, broker, b, erg.meldungen)
     for v, u in urteile:
         bv = nach_id[v.id]
         journal.vorschlag_speichern(v, u, waehrung=bv.waehrung, freigabe_bis=freigabe_bis, limit_order=bv.limit_order, jetzt=jetzt,
@@ -273,6 +275,32 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         ziel = journal.sichern(None, jetzt=jetzt)
         erg.meldungen.append(f"Journal gesichert: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
     return erg
+
+
+def _verbunden(broker) -> bool:
+    try:
+        return bool(broker.verbunden())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def kontrakte_pruefen(urteile, nach_id, broker, b, meldungen) -> list:
+    """Kontrakte der freigebbaren Vorschläge in freigeschalteten Büchern schon im Tageslauf qualifizieren (nur lesend):
+    conId in die Details und ins Protokoll; unbekannt → Veto „Kontrakt unbekannt“ (Jakob 03.11.2026)."""
+    neu = []
+    for v, u in urteile:
+        if u.frei and buch_freigeschaltet(b, v.buch):
+            bv = nach_id[v.id]
+            try:
+                k = broker.kontrakt_aufloesen(v.ticker, v.art, bv.waehrung if v.art != "fx" else "USD")
+                text = f"IBKR-Kontrakt: conId {k.conId}, Symbol {k.symbol}, Xetra-Kürzel/lokal {k.localSymbol}, Börse {k.exchange}, {k.currency}"
+                bv.details = (bv.details + "\n" if bv.details else "") + text
+                meldungen.append(f"{v.buch} {v.ticker}: {text}")
+            except KontraktUnbekannt as f:
+                u = Urteil(False, u.gruende + [str(f)], u.hinweise)
+                meldungen.append(f"{v.buch} {v.ticker}: Veto – {f}")
+        neu.append((v, u))
+    return neu
 
 
 # --- Freigabe und Senden ----------------------------------------------------------------------------------------------
@@ -297,7 +325,7 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
             meldungen.append(f"{i}: Buch {z['buch']} ist zum Senden noch nicht freigeschaltet – nicht freigebbar")
             continue
         try:
-            journal.freigeben(i, jetzt=jetzt, messbeginn=(not probe) and global_an and buch_an)
+            journal.freigeben(i, jetzt=jetzt, messbeginn=False)           # Messbeginn erst mit der ersten angenommenen Order
         except ValueError as f:
             meldungen.append(str(f))
     messbeginn = (not probe) and global_an
@@ -361,15 +389,35 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
         auftrag = Auftrag(z["buch"], z["id"], z["ticker"], z["richtung"], z["stueck"], z["limit_preis"] if z["richtung"] > 0 else None,
                           z["art"], z["waehrung"])
         try:
-            order_id = broker.sende(auftrag, gesendet)
+            antwort = broker.sende(auftrag, gesendet)
+        except KontraktUnbekannt as f:
+            journal.status_setzen(z["id"], "veto", meldung=str(f))
+            journal.ereignis("veto", f"{z['id']}: {f}", z["buch"])
+            meldungen.append(f"{z['id']}: Veto „Kontrakt unbekannt“ – {f}")
+            continue
         except SendenGesperrt as f:
             meldungen.append(f"{z['id']}: nicht gesendet – {f}")
             continue
-        journal.status_setzen(z["id"], "gesendet", order_id=order_id)
+        if isinstance(antwort, str):                                   # ältere Adapter/Attrappen: Order-ID = angenommen
+            antwort = SendeErgebnis(antwort, "angenommen")
+        if antwort.status == "abgelehnt":
+            journal.status_setzen(z["id"], "abgelehnt", order_id=antwort.order_id, meldung=antwort.text)
+            journal.ereignis("abgelehnt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])
+            meldungen.append(f"{z['id']}: von IBKR ABGELEHNT (Order {antwort.order_id}) – {antwort.text}")
+            continue
+        if antwort.status == "unbestaetigt":
+            journal.status_setzen(z["id"], "unbestaetigt", order_id=antwort.order_id, meldung=antwort.text)
+            journal.ereignis("unbestaetigt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])
+            meldungen.append(f"{z['id']}: UNBESTÄTIGT (Order {antwort.order_id}) – {antwort.text}; bitte im Gateway/Client Portal prüfen")
+        else:
+            journal.status_setzen(z["id"], "gesendet", order_id=antwort.order_id, meldung=antwort.text or None)
+            if buch_freigeschaltet(b, z["buch"]):
+                journal.messbeginn_setzen(z["buch"], jetzt, "erste von IBKR angenommene Order")
         risk.verbuchen(v, k)
         stand[z["buch"]] = (k.kasse, k.kasse_je_waehrung)
         offene.append((z["buch"], z["ticker"], z["richtung"]))
-        meldungen.append(f"{z['id']}: gesendet (Order {order_id})")
+        if antwort.status != "unbestaetigt":
+            meldungen.append(f"{z['id']}: von IBKR angenommen (Order {antwort.order_id}, {antwort.text}" + (f", conId {antwort.con_id})" if antwort.con_id else ")"))
     return meldungen
 
 

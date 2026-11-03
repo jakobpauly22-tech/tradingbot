@@ -49,7 +49,7 @@ class Journal:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         v_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(vorschlaege)")}
-        for name in ("kern", "details"):
+        for name in ("kern", "details", "meldung"):
             if name not in v_spalten:
                 self.db.execute(f"ALTER TABLE vorschlaege ADD COLUMN {name} TEXT")
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
@@ -117,7 +117,8 @@ class Journal:
         """Speichert Vorschlag und Urteil; `limit_order` = Limit in der Handelswährung (sonst das EUR-Limit)."""
         jetzt = (jetzt or datetime.now()).isoformat(timespec="seconds")
         alt = self.db.execute("SELECT status FROM vorschlaege WHERE id=?", (v.id,)).fetchone()
-        if alt is not None and alt["status"] not in ("vorgeschlagen", "veto", "ersetzt", "abgelaufen"):
+        # „abgelehnt“ = nie bei IBKR angekommen: darf neu vorgeschlagen werden (Jakob 03.11.2026)
+        if alt is not None and alt["status"] not in ("vorgeschlagen", "veto", "ersetzt", "abgelaufen", "abgelehnt"):
             return                                       # schon freigegeben oder gesendet: nicht überschreiben
         status = "vorgeschlagen" if urteil.frei else "veto"
         self.db.execute(
@@ -144,9 +145,41 @@ class Journal:
             par.append(buch)
         return self.db.execute(sql + " ORDER BY buch, richtung, ticker", par).fetchall()
 
-    def status_setzen(self, vorschlag_id: str, status: str, *, order_id: str | None = None, jetzt: datetime | None = None):
-        self.db.execute("UPDATE vorschlaege SET status=?, order_id=COALESCE(?, order_id), aktualisiert=? WHERE id=?",
-                        (status, order_id, (jetzt or datetime.now()).isoformat(timespec="seconds"), vorschlag_id))
+    def status_setzen(self, vorschlag_id: str, status: str, *, order_id: str | None = None, jetzt: datetime | None = None,
+                      meldung: str | None = None):
+        self.db.execute("UPDATE vorschlaege SET status=?, order_id=COALESCE(?, order_id), meldung=COALESCE(?, meldung), aktualisiert=? WHERE id=?",
+                        (status, order_id, meldung, (jetzt or datetime.now()).isoformat(timespec="seconds"), vorschlag_id))
+        self.db.commit()
+
+    def messbeginn_setzen(self, buch: str, tag, grund: str = "erste angenommene Order"):
+        """Messbeginn eines Buchs, einmalig; seit 03.11.2026 erst mit der ersten von IBKR angenommenen Order."""
+        if self.messbeginn(buch) is None:
+            tag = pd.Timestamp(tag).date()
+            self.db.execute("UPDATE buecher SET messbeginn=? WHERE buch=?", (tag.isoformat(), buch))
+            self.ereignis("messbeginn", f"Messbeginn {tag:%d.%m.%Y} ({grund})", buch)
+            self.db.commit()
+
+    def nachtraeglich_abgelehnt(self, ids: list[str], text: str) -> list[str]:
+        """Korrektur: Orders, die als „gesendet“ im Journal stehen, IBKR aber nie angenommen hat, auf „abgelehnt“ setzen
+        (Fehlertext gespeichert, Reservierung entfällt). Bücher ohne verbleibende angenommene Order verlieren ihren
+        Messbeginn (Messbeginn erst mit der ersten angenommenen Order, Jakob 03.11.2026). Gibt die betroffenen Bücher zurück."""
+        buecher = set()
+        for i in ids:
+            z = self.db.execute("SELECT buch, status, order_id FROM vorschlaege WHERE id=?", (i,)).fetchone()
+            if z is None or z["status"] not in ("gesendet", "unbestaetigt"):
+                raise ValueError(f"{i}: nicht als gesendet im Journal (Status {z['status'] if z else 'unbekannt'})")
+            self.status_setzen(i, "abgelehnt", meldung=text)
+            self.ereignis("abgelehnt", f"{i} (Order {z['order_id']}) nachträglich: {text}", z["buch"])
+            buecher.add(z["buch"])
+        for b in sorted(buecher):
+            angenommen = self.db.execute("SELECT COUNT(*) FROM vorschlaege WHERE buch=? AND status IN ('gesendet','ausgefuehrt')", (b,)).fetchone()[0]
+            if angenommen == 0 and self.messbeginn(b) is not None:
+                self.messbeginn_zuruecksetzen(b, "keine Order von IBKR angenommen (Korrektur)")
+        return sorted(buecher)
+
+    def messbeginn_zuruecksetzen(self, buch: str, grund: str):
+        self.db.execute("UPDATE buecher SET messbeginn=NULL WHERE buch=?", (buch,))
+        self.ereignis("messbeginn", f"Messbeginn zurückgesetzt: {grund}", buch)
         self.db.commit()
 
     def freigeben(self, vorschlag_id: str, *, jetzt: datetime | None = None, messbeginn: bool = True):
@@ -166,8 +199,9 @@ class Journal:
             self.db.commit()
 
     def unterwegs(self, buch: str | None = None) -> list[sqlite3.Row]:
-        """Gesendete, noch nicht ausgeführte Orders (Status „gesendet“): reservieren Kasse und sperren den Titel im Buch."""
-        return self.vorschlaege(status=("gesendet",), buch=buch)
+        """Von IBKR angenommene („gesendet“) oder unbestätigte, noch nicht ausgeführte Orders: reservieren Kasse und sperren
+        den Titel im Buch. Abgelehnte Orders reservieren nichts."""
+        return self.vorschlaege(status=("gesendet", "unbestaetigt"), buch=buch)
 
     def reserviert(self, buch: str) -> dict[str, float]:
         """Durch Orders unterwegs reservierte Kasse (Jakob 03.11.2026). Käufe: je Währung Stück · Limit · 1,01 (Gebühr
@@ -183,7 +217,8 @@ class Journal:
         return res
 
     def gesendete_refs(self) -> set[str]:
-        return {f"{z['buch']}:{z['id']}" for z in self.db.execute("SELECT buch, id FROM vorschlaege WHERE order_id IS NOT NULL OR status IN ('gesendet','ausgefuehrt','verfallen')")}
+        return {f"{z['buch']}:{z['id']}" for z in self.db.execute("SELECT buch, id FROM vorschlaege WHERE (order_id IS NOT NULL AND status NOT IN ('abgelehnt','vorgeschlagen','veto','ersetzt','abgelaufen')) "
+                                                                      "OR status IN ('gesendet','unbestaetigt','ausgefuehrt','verfallen')")}
 
     def abgelaufene_markieren(self, jetzt: datetime):
         self.db.execute("UPDATE vorschlaege SET status='abgelaufen', aktualisiert=? WHERE status IN ('vorgeschlagen','freigegeben') AND freigabe_bis < ?",
@@ -267,6 +302,10 @@ class Journal:
         ordner = Path(ziel_ordner)
         ordner.mkdir(parents=True, exist_ok=True)
         ziel = ordner / f"{self.datei.stem}_{(jetzt or datetime.now()):%Y-%m-%d_%H%M%S}.sqlite"
+        n = 1
+        while ziel.exists():                                   # nie eine ältere Sicherung überschreiben
+            n += 1
+            ziel = ziel.with_name(f"{self.datei.stem}_{(jetzt or datetime.now()):%Y-%m-%d_%H%M%S}_{n}.sqlite")
         kopie = sqlite3.connect(ziel)
         with kopie:
             self.db.backup(kopie)

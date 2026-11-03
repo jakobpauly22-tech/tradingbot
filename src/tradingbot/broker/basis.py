@@ -21,6 +21,20 @@ class SendenGesperrt(RuntimeError):
     """Ein Sicherheitsriegel verhindert das Senden."""
 
 
+class KontraktUnbekannt(SendenGesperrt):
+    """IBKR kennt den Kontrakt nicht eindeutig (conId 0, kein oder mehrere Treffer): nicht senden, Veto (03.11.2026)."""
+
+
+@dataclass(frozen=True)
+class SendeErgebnis:
+    """Antwort von IBKR auf eine gesendete Order (Jakob 03.11.2026): „angenommen“ (PreSubmitted/Submitted/Filled),
+    „abgelehnt“ (Fehler, Cancelled, Inactive) oder „unbestaetigt“ (nach der Wartezeit noch keine Antwort)."""
+    order_id: str
+    status: str
+    text: str = ""
+    con_id: int = 0
+
+
 class VerbindungGesperrt(RuntimeError):
     """Verbindung zu einem nicht erlaubten Host oder Port (z.B. Live-Port 4001)."""
 

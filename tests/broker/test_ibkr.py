@@ -9,8 +9,30 @@ from tradingbot.konfiguration import lade_konfiguration
 
 
 class IBAttrappe:
-    def __init__(self, konto="DU1234567", offen=()):
+    """Verhält sich bei reqContractDetails wie IBKR am 03.11.2026: Xetra-ETFs über conId (Tabelle) oder ISIN auffindbar,
+    über das Xetra-Kürzel als Symbol aber nicht, wenn IBKR ein anderes Symbol führt (EUNM = „IEMA“)."""
+
+    def __init__(self, konto="DU1234567", offen=(), status="PreSubmitted", log=()):
         self.konto, self.offen, self.gesendet, self.verbunden = konto, list(offen), [], None
+        self.status, self.log = status, list(log)
+
+    def reqContractDetails(self, anfrage):
+        from tradingbot.broker.ibkr import kontrakttabelle
+        if getattr(anfrage, "secType", "") == "CASH":
+            return [SimpleNamespace(contract=SimpleNamespace(conId=12087792, symbol="EUR", localSymbol="EUR.USD", exchange="IDEALPRO",
+                                                             currency="USD"))]
+        for t, e in kontrakttabelle().items():
+            if anfrage.conId and int(e["con_id"]) == anfrage.conId or (not anfrage.conId and anfrage.symbol == e["symbol"]
+                                                                        and anfrage.exchange in ("IBIS2", "SMART")):
+                return [SimpleNamespace(contract=SimpleNamespace(conId=int(e["con_id"]), symbol=e["symbol"], localSymbol=e["xetra_kuerzel"],
+                                                                 exchange=anfrage.exchange, currency=e["waehrung"]))]
+        if anfrage.currency == "USD" and anfrage.exchange == "SMART":
+            return [SimpleNamespace(contract=SimpleNamespace(conId=265598, symbol=anfrage.symbol, localSymbol=anfrage.symbol, exchange="SMART",
+                                                             currency="USD"))]
+        return []
+
+    def sleep(self, s):
+        pass
 
     def connect(self, host, port, clientId, timeout, readonly, fetchFields=None):
         self.verbunden = dict(host=host, port=port, readonly=readonly, fetchFields=fetchFields)
@@ -23,7 +45,8 @@ class IBAttrappe:
 
     def placeOrder(self, kontrakt, order):
         self.gesendet.append((kontrakt, order))
-        return SimpleNamespace(order=SimpleNamespace(orderId=len(self.gesendet)))
+        return SimpleNamespace(order=SimpleNamespace(orderId=len(self.gesendet) + 2), contract=kontrakt,
+                               orderStatus=SimpleNamespace(status=self.status), log=list(self.log))
 
 
 def betrieb(senden=True):
@@ -36,8 +59,8 @@ KAUF = Auftrag("real", "v1", "SPYI.DE", 1, 2, 204.0)
 VERKAUF = Auftrag("real", "v2", "SPYI.DE", -1, 2, None)
 
 
-def broker(tmp_path, *, senden=True, konto="DU1234567", modus="paper", port=4002, offen=()):
-    return IbkrBroker(betrieb(senden), tmp_path, host="127.0.0.1", port=port, client_id=7, modus=modus, ib=IBAttrappe(konto, offen))
+def broker(tmp_path, *, senden=True, konto="DU1234567", modus="paper", port=4002, offen=(), **kw):
+    return IbkrBroker(betrieb(senden), tmp_path, host="127.0.0.1", port=port, client_id=7, modus=modus, ib=IBAttrappe(konto, offen, **kw))
 
 
 def test_live_port_und_fremder_host_gesperrt(tmp_path):
@@ -135,3 +158,39 @@ def test_gateway_fehler_landen_im_protokoll(tmp_path):
     b._gateway_fehler(-1, 321, "Die API befindet sich im schreibgeschützten Modus")
     b._gateway_fehler(-1, 2104, "Market data farm connection is OK")
     assert b.gateway_meldungen == ["Gateway-Meldung 321: Die API befindet sich im schreibgeschützten Modus"]
+
+
+def test_kontrakt_qualifiziert_ueber_tabelle(tmp_path):
+    """EUNM heißt bei IBKR „IEMA“ (03.11.2026): Auflösung über die conId der Tabelle, Order direkt an IBIS2 mit conId ≠ 0."""
+    from tradingbot.broker.ibkr import kontrakttabelle
+    assert int(kontrakttabelle()["EUNM.DE"]["con_id"]) == 100292766
+    b = broker(tmp_path)
+    k = b.kontrakt_aufloesen("EUNM.DE", "etf")
+    assert (k.conId, k.symbol, k.localSymbol, k.exchange, k.currency) == (100292766, "IEMA", "EUNM", "IBIS2", "EUR")
+    e = b.sende(Auftrag("crossover", "x1", "EUNM.DE", 1, 35, 53.61), set())
+    kontrakt_gesendet, order = b.ib.gesendet[-1]
+    assert kontrakt_gesendet.conId == 100292766 and kontrakt_gesendet.exchange == "IBIS2" and order.orderRef == "crossover:x1"
+    assert e.status == "angenommen" and e.con_id == 100292766
+
+
+def test_kontrakt_unbekannt_wird_nicht_gesendet(tmp_path):
+    from tradingbot.broker.basis import KontraktUnbekannt
+    b = broker(tmp_path)
+    with pytest.raises(KontraktUnbekannt, match="Kontrakt unbekannt: XYZQ.DE"):
+        b.sende(Auftrag("crossover", "x2", "XYZQ.DE", 1, 1, 10.0), set())
+    assert b.ib.gesendet == []
+
+
+def test_ablehnung_und_unbestaetigt(tmp_path):
+    log = [SimpleNamespace(message="Es wurde keine Wertpapierdefinition zu der Anfrage gefunden", errorCode=200)]
+    e = broker(tmp_path, status="Cancelled", log=log).sende(KAUF, set())
+    assert e.status == "abgelehnt" and "200" in e.text and "Wertpapierdefinition" in e.text
+    e = broker(tmp_path, status="PendingSubmit").sende(KAUF, set(), wartezeit=0.0)
+    assert e.status == "unbestaetigt" and "PendingSubmit" in e.text
+    assert broker(tmp_path, status="Submitted").sende(KAUF, set()).status == "angenommen"
+
+
+def test_ticker_aus_conid():
+    from tradingbot.broker.ibkr import ticker_aus
+    assert ticker_aus(SimpleNamespace(conId=100292766, symbol="IEMA", primaryExchange="AEB", exchange="", currency="EUR")) == "EUNM.DE"
+    assert ticker_aus(SimpleNamespace(conId=80268543, symbol="IJPA", primaryExchange="AEB", exchange="", currency="EUR")) == "EUNN.DE"

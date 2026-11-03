@@ -9,9 +9,33 @@ orderRef = „<Buch>:<Vorschlag-ID>“ (Zuordnung zu Buch und Journal, Doppel-Or
 from __future__ import annotations
 
 import os
+import time
+from functools import lru_cache
 from pathlib import Path
 
-from tradingbot.broker.basis import Auftrag, OffeneOrder, Position, pruefe_senden, pruefe_verbindung
+from tradingbot.broker.basis import (Auftrag, KontraktUnbekannt, OffeneOrder, Position, SendeErgebnis, pruefe_senden,
+                                     pruefe_verbindung)
+
+ANGENOMMEN = {"PreSubmitted", "Submitted", "Filled"}
+ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive"}
+
+
+@lru_cache(maxsize=1)
+def kontrakttabelle() -> dict[str, dict]:
+    """Zuordnung Ticker → IBKR-Kontrakt aus config/kontrakte.yaml (tools/kontrakte_pruefen.py); leer, wenn die Datei fehlt."""
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    pfad = PROJEKT_WURZEL / "config" / "kontrakte.yaml"
+    if not pfad.exists():
+        return {}
+    from ruamel.yaml import YAML
+
+    daten = YAML(typ="safe").load(pfad.read_text(encoding="utf-8")) or {}
+    return dict(daten.get("kontrakte") or {})
+
+
+def _ticker_je_conid() -> dict[int, str]:
+    return {int(e["con_id"]): t for t, e in kontrakttabelle().items()}
 
 
 XETRA_ETF, XETRA_AKTIE = "IBIS2", "IBIS"    # IBKR-Börsenkennungen: Xetra-ETFs/ETCs und Xetra-Aktien (geprüft 02.11.2026)
@@ -28,6 +52,10 @@ def kontrakt(ticker: str, art: str = "etf", waehrung: str | None = None):
 
 
 def ticker_aus(kontrakt_) -> str:
+    """IBKR-Kontrakt → Yahoo-Ticker; zuerst über die conId aus der Zuordnungstabelle (IBKR-Symbol „IEMA“ = EUNM.DE)."""
+    cid = int(getattr(kontrakt_, "conId", 0) or 0)
+    if cid and cid in _ticker_je_conid():
+        return _ticker_je_conid()[cid]
     boerse = getattr(kontrakt_, "primaryExchange", "") or getattr(kontrakt_, "exchange", "")
     return f"{kontrakt_.symbol}.DE" if boerse in (XETRA_ETF, XETRA_AKTIE) or kontrakt_.currency == "EUR" else kontrakt_.symbol
 
@@ -123,23 +151,69 @@ class IbkrBroker:
                              "zeit": str(e.time)})
         return ergebnis
 
-    def sende(self, auftrag: Auftrag, gesendete_refs: set[str]) -> str:
-        """Sendet einen freigegebenen Auftrag; vorher alle Riegel (inkl. offener Orders beim Broker) prüfen."""
+    def kontrakt_aufloesen(self, ticker: str, art: str = "etf", waehrung: str | None = None):
+        """Qualifiziert den Kontrakt vor dem Senden (Jakob 03.11.2026): Werte aus config/kontrakte.yaml über ihre conId,
+        sonst über Symbol/Börse/Währung (US-Aktien) bzw. EUR.USD als Forex. Verlangt genau einen Treffer mit conId ≠ 0,
+        passender Währung und – bei Tabellenwerten – derselben conId; sonst `KontraktUnbekannt`."""
+        from ib_async import Contract, Forex
+
+        eintrag = kontrakttabelle().get(ticker)
+        if art == "fx":
+            anfrage, erwartet = Forex(f"EUR{waehrung or 'USD'}"), waehrung or "USD"
+        elif eintrag:
+            anfrage, erwartet = Contract(conId=int(eintrag["con_id"]), exchange=eintrag["boerse"]), eintrag["waehrung"]
+        else:
+            anfrage = kontrakt(ticker, art, waehrung)
+            erwartet = anfrage.currency
+        try:
+            treffer = self.ib.reqContractDetails(anfrage)
+        except Exception as f:  # noqa: BLE001
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} ({type(f).__name__}: {f})") from f
+        if len(treffer) != 1:
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – {len(treffer)} Treffer bei IBKR")
+        k = treffer[0].contract
+        if not k.conId:
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – conId 0")
+        if k.currency != erwartet:
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – Währung {k.currency} statt {erwartet}")
+        if eintrag and int(k.conId) != int(eintrag["con_id"]):
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – conId {k.conId} statt {eintrag['con_id']}")
+        if eintrag:
+            k.exchange = eintrag["boerse"]                       # direkt an Xetra (IBIS2), nicht SMART
+        return k
+
+    def _warte_auf_antwort(self, trade, sekunden: float) -> SendeErgebnis:
+        """Wartet kurz auf die Antwort von IBKR: angenommen, abgelehnt (mit Fehlertext) oder unbestätigt."""
+        ende = time.monotonic() + sekunden
+        while True:
+            status = trade.orderStatus.status
+            if status in ANGENOMMEN or status in ABGELEHNT or time.monotonic() >= ende:
+                break
+            self.ib.sleep(0.2)
+        texte = [f"{e.errorCode}: {e.message}" if getattr(e, "errorCode", 0) else e.message for e in getattr(trade, "log", []) if e.message]
+        oid = str(trade.order.orderId)
+        cid = int(getattr(trade.contract, "conId", 0) or 0)
+        if status in ANGENOMMEN:
+            return SendeErgebnis(oid, "angenommen", status, cid)
+        if status in ABGELEHNT:
+            return SendeErgebnis(oid, "abgelehnt", "; ".join(texte) or status, cid)
+        return SendeErgebnis(oid, "unbestaetigt", f"Status {status} nach {sekunden:.0f} s" + (": " + "; ".join(texte) if texte else ""), cid)
+
+    def sende(self, auftrag: Auftrag, gesendete_refs: set[str], *, wartezeit: float = 8.0) -> SendeErgebnis:
+        """Sendet einen freigegebenen Auftrag; vorher alle Riegel (inkl. offener Orders beim Broker) prüfen und den
+        Kontrakt qualifizieren. Ergebnis erst nach der Antwort von IBKR (angenommen/abgelehnt/unbestätigt)."""
         from ib_async import LimitOrder, MarketOrder
 
         pruefe_senden(konto_id=self.konto_id(), port=self.port, modus=self.modus, betrieb=self.betrieb, projekt_wurzel=self.wurzel,
                       auftrag=auftrag, offene=self.offene_orders(), gesendete_refs=gesendete_refs)
+        k = self.kontrakt_aufloesen(auftrag.ticker, auftrag.art, auftrag.waehrung)
         aktion = "BUY" if auftrag.richtung > 0 else "SELL"
         if auftrag.art == "fx":
-            from ib_async import Forex
-
-            trade = self.ib.placeOrder(Forex(f"EUR{auftrag.waehrung or 'USD'}"), MarketOrder("SELL", auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref))
-            gesendete_refs.add(auftrag.order_ref)
-            return str(trade.order.orderId)
-        if auftrag.richtung > 0:
+            order = MarketOrder("SELL", auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
+        elif auftrag.richtung > 0:
             order = LimitOrder(aktion, auftrag.stueck, round(auftrag.limit, 2), tif="DAY", orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
-        trade = self.ib.placeOrder(kontrakt(auftrag.ticker, auftrag.art, auftrag.waehrung), order)
+        trade = self.ib.placeOrder(k, order)
         gesendete_refs.add(auftrag.order_ref)
-        return str(trade.order.orderId)
+        return self._warte_auf_antwort(trade, wartezeit)

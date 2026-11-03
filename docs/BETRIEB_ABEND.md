@@ -36,6 +36,22 @@ Die übrigen Bücher schaltet Jakob erst frei, wenn er am nächsten Abend die Au
 - **1-%-Regel vom Limit:** Satellite-Käufe riskieren höchstens 1 % des Buchwerts, gemessen vom Limit als schlechtestem
   Einstiegskurs bis zum Stop. Die Stückzahl wird schon im Vorschlag entsprechend begrenzt.
 
+## Korrektur nach dem ersten Sendeversuch (03.11.2026)
+
+- Der erste Versuch um 20:47 scheiterte: Die Orders 3–7 wurden mit dem Xetra-Kürzel als IBKR-Symbol gesendet (conId 0).
+  IBKR führt EUNM als „IEMA“ und EUNN als „IJPA“ und lehnte mit Fehler 200 ab; das Protokoll meldete trotzdem
+  „gesendet“. Das Journal ist korrigiert: Die Orders sind „abgelehnt“ und der Messbeginn ist zurückgesetzt
+  (`tools/journal_korrektur_20261103.py`).
+- Seitdem gilt:
+  - Vor jedem Senden wird der Kontrakt qualifiziert (`config/kontrakte.yaml`, erzeugt mit `tools/kontrakte_pruefen.py`).
+    Bei unbekanntem Kontrakt wird nicht gesendet, und der Vorschlag bekommt ein Veto „Kontrakt unbekannt“.
+  - „Gesendet“ erst bei Annahme durch IBKR (PreSubmitted, Submitted). Eine Ablehnung wird „abgelehnt“ mit Fehlertext,
+    ohne Reservierung. Bleibt nach 8 s jede Antwort aus, wird die Order „unbestätigt“: Sie reserviert die Kasse und ist
+    im Gateway bzw. Client Portal zu prüfen.
+  - Der Messbeginn eines Buchs beginnt erst mit seiner ersten angenommenen Order.
+- Hinweis: Unter Read-Only lehnt das Gateway auch ReqOpenOrders ab (Meldung 321). Bis Read-Only aus ist, sieht der Bot
+  keine offenen Orders bei IBKR. Den Schutz vor Doppelorders übernimmt dann das Journal (Orders unterwegs).
+
 ## Am nächsten Abend
 
 Ausführungen und Abgleich prüfen. Stimmt der Abgleich („Bestände aller Bücher stimmen mit IBKR überein“) und sind die

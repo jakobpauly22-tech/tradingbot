@@ -1,0 +1,33 @@
+# Zuordnung Ticker → IBKR-Kontrakt, erzeugt von tools/kontrakte_pruefen.py (nur lesend, reqContractDetails über
+# ISIN, IBIS2, Handelswährung). Nicht von Hand ändern; neu erzeugen. Senden nur mit Kontrakt aus dieser Tabelle
+# oder eindeutiger Auflösung über das Symbol (US-Aktien), conId ≠ 0 (Jakob 03.11.2026).
+stand: '2026-11-03'
+kontrakte:
+  SPYI.DE: {isin: IE00B3YLTY66, con_id: 89384965, symbol: SPYI, xetra_kuerzel: 
+      SPYI, boerse: IBIS2, waehrung: EUR, art: etf, name: SP MS ALL CO WI MKT UC
+      ET-AC}
+  IUSA.DE: {isin: IE0031442068, con_id: 29651319, symbol: IUSA, xetra_kuerzel: 
+      IUSA, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE S&P 500}
+  EUNK.DE: {isin: IE00B4K48X80, con_id: 79000336, symbol: IMAE, xetra_kuerzel: 
+      EUNK, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
+      EUROPE ACC}
+  EUNN.DE: {isin: IE00B4L5YX21, con_id: 80268543, symbol: IJPA, xetra_kuerzel: 
+      EUNN, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
+      JAPAN}
+  SXR1.DE: {isin: IE00B52MJY50, con_id: 82585416, symbol: SXR1, xetra_kuerzel: 
+      SXR1, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
+      PACIF X-JP}
+  EUNM.DE: {isin: IE00B4L5YC18, con_id: 100292766, symbol: IEMA, xetra_kuerzel: 
+      EUNM, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES MSCI EM ACC}
+  EUNH.DE: {isin: IE00B4WXJJ64, con_id: 68490077, symbol: EUNH, xetra_kuerzel: 
+      EUNH, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE EURO GOVT
+      BOND}
+  EUN5.DE: {isin: IE00B3F81R35, con_id: 60470164, symbol: IEAC, xetra_kuerzel: 
+      EUN5, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE EURO CORP
+      BOND}
+  IBCI.DE: {isin: IE00B0M62X26, con_id: 37036668, symbol: IBCI, xetra_kuerzel: 
+      IBCI, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES EURO INFL-LKD 
+      GOVT}
+  IUSP.DE: {isin: IE00B5M4WH52, con_id: 95930802, symbol: SEML, xetra_kuerzel: 
+      IUSP, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES JPM EM LCL GOV
+      BND}

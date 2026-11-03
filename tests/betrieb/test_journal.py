@@ -71,3 +71,14 @@ def test_kasse_je_waehrung_mit_tausch_und_usd_kauf(j):
     kassen = j.kasse_je_waehrung("fundamental_a")
     assert kassen["EUR"] == pytest.approx(10_000 - 1000 - 1.82) and kassen["USD"] == pytest.approx(1100 - 1000 - 1.0)
     assert j.kasse("fundamental_a") == pytest.approx(10_000 - 1.82 - 1000 / 1.1 - 1.0 / 1.1)
+
+
+def test_sicherung_ueberschreibt_nie(tmp_path):
+    from datetime import datetime
+
+    from tradingbot.betrieb.journal import Journal
+    j = Journal(tmp_path / "journal.sqlite")
+    t = datetime(2026, 11, 3, 21, 23, 42)
+    a, b = j.sichern(str(tmp_path / "s"), jetzt=t), j.sichern(str(tmp_path / "s"), jetzt=t)
+    assert a != b and a.exists() and b.exists()
+    j.schliessen()
