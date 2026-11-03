@@ -71,9 +71,9 @@ daten/        lokale Daten und Caches, nicht in Git
 
 ## Phasen
 
-1. **Setup** (jetzt): Python-Umgebung (`.venv`), Abhängigkeiten, pytest, Grundstruktur.
+1. **Setup:** Python-Umgebung (`.venv`), Abhängigkeiten, pytest, Grundstruktur.
 2. **Phase 1, Fundament:** Datenbasis, Backtest-Framework, Fundamental-Engine.
-3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung (IB Gateway), Investment-These pro Trade, Technik-Engine.
+3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung (IB Gateway), Investment-These pro Trade, Technik-Engine. **Abgeschlossen am 03.11.2026** mit dokumentierter Ausnahme (Kriterium 2 verfehlt, `docs/PHASE2.md`).
 4. **Phase 3, News:** Briefing-Auswertung, Makro-Kalender, PEAD.
 5. **Phase 4, Smart Money:** 13F-Tracking, Konsens-Score, Insider-Trades.
 6. **Phase 5, Ausbau:** Regime-Erkennung, ESG, Stresstests (2008, 2020, 2022), Dashboard.
@@ -89,7 +89,7 @@ Eine Phase ist fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
 - **Befehle:** Installation `.venv\Scripts\python -m pip install -e ".[dev,broker]"`, danach `... -m pip install --no-deps ib_async==2.1.0` (ib_async pinnt tzdata<2026; Abhängigkeiten stehen im Extra `broker`); Tests offline `.venv\Scripts\python -m pytest`; Tests gegen echte Quellen `... -m pytest -m netz`. Backtest-Lauf mit Bericht: `tradingbot.backtest.bericht.fuehre_lauf_aus(...)` (optional mit `walk_forward_fenster(...)`), Ablage mit Konfiguration, Git- und Datenstand in `daten/backtests/<zeitstempel>_<name>/`. Für Python 3.15 gibt es kein PyYAML, deshalb `ruamel.yaml`.
 - **Tresor (01.11.2026):** Daten ab 01.01.2025 sind gesperrt; der Code verweigert den Zugriff ohne Freigabe (`backtest/tresor.py`, Protokoll `docs/TRESOR_PROTOKOLL.md`). Einmal pro Phase öffnen, erst wenn Regeln und Parameter feststehen. Bei schlechtem Ergebnis nicht nachjustieren und erneut testen: Erkenntnis notieren, zurück auf die Entwicklungsdaten, neue Prüfung ist das Paper Trading. Das Paper Trading ist der zweite, noch strengere Tresor. Den Tresor nie ohne Jakobs ausdrückliche Anweisung öffnen.
 - **Steuern im Backtest** (`backtest/steuern.py`): heutiges Recht für alle Jahre (Abgeltungsteuer plus Soli, keine Kirchensteuer, Pauschbetrag 1.000 € vollständig für den Bot, Verlusttöpfe, FIFO, Teilfreistellung, Vorabpauschale mit Basiszins aus `config/backtest.yaml`). Steuer fließt am Jahresende als eigener Abfluss ab, ohne Zwangsverkauf; ausgewiesen werden vor Steuern, nach Steuern und nach fiktivem Verkauf am Ende. Der Schatten-Satellite bildet eine eigene Steuergruppe ohne Pauschbetrag (vorsichtig).
-- **Backtests:** Walk-forward, kein Look-ahead- und kein Survivorship-Bias. Kosten realistisch: IBKR-Gebühren, Spread, Slippage, Währungskosten bei US-Werten, Abgeltungsteuer mit Sparer-Pauschbetrag. Ergebnisse immer gegen die Benchmark und nach Kosten. Neue Features: Backtest, dann Paper, dann live.
+- **Backtests:** Walk-forward, kein Look-ahead- und kein Survivorship-Bias. Kosten realistisch: IBKR-Gebühren, Spread, Slippage, Währungskosten bei US-Werten, Abgeltungsteuer mit Sparer-Pauschbetrag. Ergebnisse immer gegen die Benchmark und nach Kosten. Neue Features: Backtest, dann Paper, dann live. **Kriterien (Lehre aus Phase 2, 03.11.2026): Technik wird am Zwilling gemessen (gleiche Einzahlungen, Kosten, Steuern und Stückelung, ohne die zu prüfende Technik), Strategie am Index.** Grenzen werden nach dem Lauf nie geändert; eine Verfehlung bleibt im Bericht stehen und wird begründet.
 - **Git:** kleine Commits mit deutscher Nachricht. Vor Push und vor Änderungen an Regeln oder Limits Jakob fragen.
 - **Verständlichkeit:** Code lesbar halten, Namen sprechend wählen, Fachbegriffe wie in den Vorlesungen verwenden.
 

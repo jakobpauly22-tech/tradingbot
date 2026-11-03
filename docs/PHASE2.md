@@ -59,3 +59,18 @@ Bericht `docs/berichte/2026-11-03_phase2_gesamtdepot.md`. Kriterien 1, 3, 4 und 
   rund 11 % Marktrendite etwa 0,3 Pp. p.a.; Kosten 80 € auf ein mittleres Depot von rund 7.500 € über 8,25 Jahre etwa
   0,13 Pp. p.a.; dazu Spread, Slippage und der erste Tag in Kasse.
 - Nach der Regel: Ergebnis dokumentieren und mit Jakob besprechen; keine Anpassung von Kriterien oder Parametern.
+
+## Entscheidung (Jakob, 03.11.2026): Phase 2 abgeschlossen, mit dokumentierter Ausnahme
+
+Kriterium 2 bleibt im Bericht als **„verfehlt (−0,51 Pp., Grenze 0,5)“** stehen; die Grenze wird nicht nachträglich
+geändert. Begründung:
+
+- Der Zwilling ohne Risk-Manager und Limit-Logik weicht genauso ab (−0,52 Pp.); Kriterium 3 zeigt keinen Einfluss der
+  Technik (+0,01 Pp.).
+- Ursache ist die Restkasse bei Anteilspreisen von 93–235 € vor dem 25:1-Split vom 23.02.2026; das war bei der
+  Festlegung der Grenze nicht bekannt.
+
+**Lehre für künftige Kriterien:** Technik wird am Zwilling gemessen, Strategie am Index (CLAUDE.md, Backtest-Regeln).
+
+`senden_freigeschaltet` bleibt aus, bis Jakob nach dem Test der Probe-Oberfläche ausdrücklich freigibt.
+

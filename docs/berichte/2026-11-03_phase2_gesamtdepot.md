@@ -38,3 +38,9 @@ Gesamt: mindestens ein Kriterium verfehlt – mit Jakob besprechen.
 - Kosten: 80,03 € (Zwilling 77,53 €); Steuern gezahlt 0,00 € (Zwilling 0,00 €), Steuer bei fiktivem Verkauf 985,27 €.
 
 Ablage: `daten\backtests\20261103T110557_phase2_gesamtdepot`.
+
+## Entscheidung (Jakob, 03.11.2026)
+
+Phase 2 gilt als abgeschlossen, mit dokumentierter Ausnahme: Kriterium 2 bleibt **verfehlt (−0,51 Pp., Grenze 0,5)**, die
+Grenze wird nicht geändert. Begründung und Lehre („Technik am Zwilling, Strategie am Index“) in `docs/PHASE2.md`.
+

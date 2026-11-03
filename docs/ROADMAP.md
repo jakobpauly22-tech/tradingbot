@@ -444,12 +444,12 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Bewertung: DCF und Multiples | Fundamental | 1 | Hoch | Idee |
 | Bilanz-Scores (Piotroski, Altman, Beneish) | Fundamental | 1 | Hoch | Idee |
 | Strategie-Bibliothek | Basis | 1 | Mittel | Idee |
-| Risk-Manager mit Vetorecht | Qualität | 2 | Hoch | In Arbeit (6a: Regeln und Tests fertig) |
-| Paper Trading | Ausführung | 2 | Hoch | 6c gebaut (Tageslauf, Freigabe, Journal, Abgleich); Probelauf ohne Senden am 02.11.2026; Senden noch aus |
+| Risk-Manager mit Vetorecht | Qualität | 2 | Hoch | Fertig (Phase 2 abgeschlossen 03.11.2026) |
+| Paper Trading | Ausführung | 2 | Hoch | Gebaut (Tageslauf, Freigabe, Journal, Abgleich, Probe-Modus); Senden aus bis zu Jakobs Freigabe nach dem Test der Probe-Oberfläche |
 | Faktormodelle (Fama-French, Momentum) | Fundamental | 2 | Mittel | Idee |
 | Investment-These pro Trade | Qualität | 2 | Mittel | Idee |
 | Technik-Engine (Trend, Momentum, Volatilität) | Technik | 2 | Hoch | Gebaut; Zweig a): kein Renditebaustein, Crossover und Momentum als Schatten im Paper Trading und als mögliche Risikosignale (docs/TECHNIK.md) |
-| Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | In Arbeit (6b: Adapter lesend, Riegel getestet; Verbindungstest mit Gateway offen) |
+| Broker-Adapter Interactive Brokers | Ausführung | 2 | Hoch | Fertig (Verbindungstest bestanden; Senden aus bis zur Freigabe) |
 | Schattenportfolio Einzelaktien | Fundamental | 2 | Mittel | Idee |
 | Briefing-Auswertung | News | 3 | Mittel | Idee |
 | Makro-Kalender | News | 3 | Mittel | Idee |
@@ -469,7 +469,7 @@ Der Bot entsteht Modul für Modul. Eine Phase gilt erst als fertig, wenn ihr Bac
 
 1. **Setup:** Python, Git und GitHub-Account, Claude Code. Repository mit Grundstruktur und einer CLAUDE.md anlegen, die Ziele, Regeln und Architektur festhält.
 2. **Phase 1, Fundament:** Datenbasis, Backtest-Framework, Fundamental-Engine.
-3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung, Investment-These pro Trade, Technik-Engine.
+3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung, Investment-These pro Trade, Technik-Engine. **Abgeschlossen am 03.11.2026** mit dokumentierter Ausnahme (`docs/PHASE2.md`); Senden bleibt aus bis zu Jakobs Freigabe.
 4. **Phase 3, News:** Briefing-Auswertung, Makro-Kalender, PEAD.
 5. **Phase 4, Smart Money:** 13F-Tracking, Konsens-Score, Insider-Trades.
 6. **Phase 5, Ausbau:** Regime-Erkennung, ESG, Stresstests, Dashboard.
