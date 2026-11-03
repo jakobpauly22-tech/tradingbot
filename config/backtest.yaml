@@ -73,3 +73,18 @@ tresor:
   # 3. Das Paper Trading ist der zweite, noch strengere Tresor, weil diese Daten heute noch nicht existieren.
   gesperrt_ab: 2025-01-01
   protokoll: docs/TRESOR_PROTOKOLL.md
+
+phase2_gesamtdepot:                    # Abschluss-Backtest Phase 2 (docs/PHASE2.md), festgeschrieben 03.11.2026
+  von: 2016-10-01
+  bis: 2024-12-31
+  start_eur: 500.0
+  einzahlung_eur: 100.0
+  einzahlung_tag: erster_handelstag_monat
+  etf: SPYI.DE
+  kauf_limit_aufschlag: 0.02           # Vortagesschluss + 2 %, auf Cent abgerundet
+  risk_buch: real                      # Regeln des Realbuchs; Bot-Budget = Start plus Einzahlungen bis zum Tag
+  kriterien:
+    max_abweichung_index_pp: 0.5       # TWR p.a. vor Steuern gegen kostenfreien ACWI IMI
+    max_abweichung_zwilling_pp: 0.2    # TWR p.a. nach Steuern und nach fiktivem Verkauf gegen den Zwilling
+    notbremse_pp: 10.0                 # 12 Monate Rückstand (TWR) gegen ACWI IMI
+

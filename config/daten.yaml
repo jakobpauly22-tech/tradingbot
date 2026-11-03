@@ -50,3 +50,9 @@ fred:
     CPIAUCSL: {revidiert: true, beschreibung: "US-Verbraucherpreisindex, saisonbereinigt"}
     UNRATE:   {revidiert: true, beschreibung: "US-Arbeitslosenquote"}
     GDP:      {revidiert: true, beschreibung: "US-Bruttoinlandsprodukt, nominal"}
+
+# Kapitalmaßnahmen, die Yahoo nicht als Ereignis führt (Kurse rückwirkend bereinigt). Für ganze Stücke und Mindestorder
+# im Backtest zählen die echten Anteilspreise: Kurse vor `datum` × `verhaeltnis` (Volumen ÷). Renditen bleiben gleich.
+kapitalmassnahmen:
+  - {ticker: SPYI.DE, art: split, datum: 2026-02-23, verhaeltnis: 25, quelle: "SSGA: 25-zu-1-Split der thesaurierenden Klasse am 23.02.2026"}
+
