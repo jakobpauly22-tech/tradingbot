@@ -44,7 +44,8 @@ class Kostenmodell:
     def gebuehren_eur(self, waehrung: str, stueck: float, orderwert_eur: float, eur_kurs: float) -> float:
         """Ordergebühr in EUR.
 
-        EUR-Börsen: max(Minimum, Satz · Orderwert), höchstens Maximum.
+        EUR-Börsen: max(Minimum, Satz · Orderwert), höchstens Maximum. Das Minimum von 1,25 € gilt nur im IBKR-Modell
+        „Gestaffelt“ (Tiered); das echte Konto ist seit 04.11.2026 darauf umgestellt (Festpreis: 3 € Minimum bei SMART).
         USD-Börsen: max(Minimum, je Stück · Stückzahl), höchstens max_anteil · Orderwert, umgerechnet mit `eur_kurs`
         (USD je 1 EUR). Der Währungstausch ist seit 02.11.2026 keine Orderkost mehr (siehe `tauschkosten_eur`).
         """

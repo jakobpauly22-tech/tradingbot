@@ -58,6 +58,19 @@ def kontrakttabelle() -> dict[str, dict]:
     return dict(daten.get("kontrakte") or {})
 
 
+@lru_cache(maxsize=1)
+def nicht_aufloesbar() -> dict[str, str]:
+    """Titel, die tools/kontrakte_pruefen.py nicht eindeutig zuordnen konnte (mit Grund)."""
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    pfad = PROJEKT_WURZEL / "config" / "kontrakte.yaml"
+    if not pfad.exists():
+        return {}
+    from ruamel.yaml import YAML
+
+    return dict((YAML(typ="safe").load(pfad.read_text(encoding="utf-8")) or {}).get("nicht_aufloesbar") or {})
+
+
 def _ticker_je_conid() -> dict[int, str]:
     return {int(e["con_id"]): t for t, e in kontrakttabelle().items()}
 
@@ -73,6 +86,15 @@ def kontrakt(ticker: str, art: str = "etf", waehrung: str | None = None):
     if ticker.endswith(".DE"):
         return Stock(ticker[:-3], XETRA_ETF if art in ("etf", "etc") else XETRA_AKTIE, waehrung or "EUR")
     return Stock(ticker.replace("-", " "), "SMART", "USD")      # Yahoo „BF-B“ = IBKR „BF B“
+
+
+def ibkr_gebuehr(fill) -> float | None:
+    """Gebühr aus dem CommissionReport; None, wenn keiner vorliegt oder IBKR den Leerwert (UNSET_DOUBLE) meldet."""
+    bericht = getattr(fill, "commissionReport", None)
+    wert = getattr(bericht, "commission", None) if bericht else None
+    if wert is None or not math.isfinite(float(wert)) or abs(float(wert)) > 1e100:
+        return None
+    return float(wert)
 
 
 def ticker_aus(kontrakt_) -> str:
@@ -161,7 +183,7 @@ class IbkrBroker:
             e = f.execution
             if not e.orderRef or ":" not in e.orderRef:
                 continue
-            gebuehr = float(f.commissionReport.commission or 0.0) if f.commissionReport else 0.0
+            gebuehr = ibkr_gebuehr(f)                     # None = (noch) kein CommissionReport
             if getattr(f.contract, "secType", "") == "CASH":
                 ergebnis.append({"art": "fx", "exec_id": e.execId, "order_ref": e.orderRef, "von": f.contract.symbol, "nach": f.contract.currency,
                                  "betrag_von": float(e.shares), "betrag_nach": float(e.shares) * float(e.price), "kurs": float(e.price),
@@ -181,7 +203,9 @@ class IbkrBroker:
         passender Währung und – bei Tabellenwerten – derselben conId; sonst `KontraktUnbekannt`."""
         from ib_async import Contract, Forex
 
-        eintrag = kontrakttabelle().get(ticker)
+        eintrag = kontrakttabelle().get("EUR.USD" if art == "fx" else ticker)
+        if art != "fx" and ticker in nicht_aufloesbar():
+            raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – {nicht_aufloesbar()[ticker]} (config/kontrakte.yaml)")
         if art == "fx":
             anfrage, erwartet = Forex(f"EUR{waehrung or 'USD'}"), waehrung or "USD"
         elif eintrag:
@@ -208,8 +232,9 @@ class IbkrBroker:
         cd = treffer[0]
         plaetze = dict(zip(str(getattr(cd, "validExchanges", "") or "").split(","), str(getattr(cd, "marketRuleIds", "") or "").split(",")))
         self._regel_ids = getattr(self, "_regel_ids", {})
-        self._regel_ids[ticker] = sorted({int(plaetze[p]) for p in ("SMART", XETRA_ETF if art != "aktie" else XETRA_AKTIE) if plaetze.get(p)})
-        if eintrag and k.exchange != ROUTING:
+        platz = (eintrag or {}).get("boerse") or (XETRA_ETF if art != "aktie" else XETRA_AKTIE)
+        self._regel_ids[ticker] = sorted({int(plaetze[p]) for p in ("SMART", platz) if plaetze.get(p)})
+        if eintrag and art != "fx" and k.exchange != ROUTING:
             raise KontraktUnbekannt(f"Kontrakt unbekannt: {ticker} – Routing {k.exchange} statt {ROUTING}")
         return k                                                   # unverändert, wie von IBKR qualifiziert
 

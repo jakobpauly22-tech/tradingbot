@@ -19,7 +19,7 @@ ausfuehrung:
 kosten:
   # Von Jakob gegen die IBKR-Preisliste geprüft (01.11.2026)
   gebuehren:
-    EUR: {satz: 0.0005, minimum: 1.25, maximum: 29.0}           # EU-Aktien und ETFs
+    EUR: {satz: 0.0005, minimum: 1.25, maximum: 29.0}           # EU-Aktien und ETFs; 1,25 € Minimum setzt IBKR „Gestaffelt“ (Tiered) voraus – echtes Konto seit 04.11.2026 umgestellt (vorher Festpreis, 3 € Minimum bei SMART)
     USD: {je_stueck: 0.005, minimum: 1.0, max_anteil: 0.01}      # US-Aktien, Beträge in USD
   spread:                     # halbe Geld-Brief-Spanne je Instrumentklasse
     etf: 0.0005

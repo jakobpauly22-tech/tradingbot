@@ -1,33 +1,4645 @@
-# Zuordnung Ticker → IBKR-Kontrakt, erzeugt von tools/kontrakte_pruefen.py (nur lesend, reqContractDetails über
-# ISIN, IBIS2, Handelswährung). Nicht von Hand ändern; neu erzeugen. Senden nur mit Kontrakt aus dieser Tabelle
-# oder eindeutiger Auflösung über das Symbol (US-Aktien), conId ≠ 0 (Jakob 03.11.2026).
-stand: '2026-11-03'
+# Zuordnung Ticker → IBKR-Kontrakt, erzeugt von tools/kontrakte_pruefen.py (nur lesend). Nicht von Hand ändern;
+# neu erzeugen. Gesendet wird der von IBKR unter SMART qualifizierte Kontrakt (conId); `boerse` = Xetra-Platz bzw.
+# IDEALPRO/SMART. Titel unter `nicht_aufloesbar` bekommen beim Senden ein Veto „Kontrakt unbekannt“.
+stand: '2026-11-04'
 kontrakte:
-  SPYI.DE: {isin: IE00B3YLTY66, con_id: 89384965, symbol: SPYI, xetra_kuerzel: 
-      SPYI, boerse: IBIS2, waehrung: EUR, art: etf, name: SP MS ALL CO WI MKT UC
-      ET-AC}
-  IUSA.DE: {isin: IE0031442068, con_id: 29651319, symbol: IUSA, xetra_kuerzel: 
-      IUSA, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE S&P 500}
-  EUNK.DE: {isin: IE00B4K48X80, con_id: 79000336, symbol: IMAE, xetra_kuerzel: 
-      EUNK, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
-      EUROPE ACC}
-  EUNN.DE: {isin: IE00B4L5YX21, con_id: 80268543, symbol: IJPA, xetra_kuerzel: 
-      EUNN, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
-      JAPAN}
-  SXR1.DE: {isin: IE00B52MJY50, con_id: 82585416, symbol: SXR1, xetra_kuerzel: 
-      SXR1, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE MSCI 
-      PACIF X-JP}
-  EUNM.DE: {isin: IE00B4L5YC18, con_id: 100292766, symbol: IEMA, xetra_kuerzel: 
-      EUNM, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES MSCI EM ACC}
-  EUNH.DE: {isin: IE00B4WXJJ64, con_id: 68490077, symbol: EUNH, xetra_kuerzel: 
-      EUNH, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE EURO GOVT
-      BOND}
-  EUN5.DE: {isin: IE00B3F81R35, con_id: 60470164, symbol: IEAC, xetra_kuerzel: 
-      EUN5, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES CORE EURO CORP
-      BOND}
-  IBCI.DE: {isin: IE00B0M62X26, con_id: 37036668, symbol: IBCI, xetra_kuerzel: 
-      IBCI, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES EURO INFL-LKD 
-      GOVT}
-  IUSP.DE: {isin: IE00B5M4WH52, con_id: 95930802, symbol: SEML, xetra_kuerzel: 
-      IUSP, boerse: IBIS2, waehrung: EUR, art: etf, name: ISHARES JPM EM LCL GOV
-      BND}
+  SPYI.DE:
+    con_id: 89384965
+    symbol: SPYI
+    lokal: SPYI
+    primaer: IBIS2
+    waehrung: EUR
+    name: SP MS ALL CO WI MKT UC ET-AC
+    isin: IE00B3YLTY66
+    boerse: IBIS2
+    art: etf
+  IUSA.DE:
+    con_id: 29651319
+    symbol: IUSA
+    lokal: IUSA
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES CORE S&P 500
+    isin: IE0031442068
+    boerse: IBIS2
+    art: etf
+  EUNK.DE:
+    con_id: 79000336
+    symbol: IMAE
+    lokal: IMAE
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES CORE MSCI EUROPE ACC
+    isin: IE00B4K48X80
+    boerse: IBIS2
+    art: etf
+  EUNN.DE:
+    con_id: 80268543
+    symbol: IJPA
+    lokal: IJPA
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES CORE MSCI JAPAN
+    isin: IE00B4L5YX21
+    boerse: IBIS2
+    art: etf
+  SXR1.DE:
+    con_id: 82585416
+    symbol: SXR1
+    lokal: SXR1
+    primaer: IBIS2
+    waehrung: EUR
+    name: ISHARES CORE MSCI PACIF X-JP
+    isin: IE00B52MJY50
+    boerse: IBIS2
+    art: etf
+  EUNM.DE:
+    con_id: 100292766
+    symbol: IEMA
+    lokal: IEMA
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES MSCI EM ACC
+    isin: IE00B4L5YC18
+    boerse: IBIS2
+    art: etf
+  EUNH.DE:
+    con_id: 68490077
+    symbol: EUNH
+    lokal: EUNH
+    primaer: IBIS2
+    waehrung: EUR
+    name: ISHARES CORE EURO GOVT BOND
+    isin: IE00B4WXJJ64
+    boerse: IBIS2
+    art: etf
+  EUN5.DE:
+    con_id: 60470164
+    symbol: IEAC
+    lokal: IEAC
+    primaer: LSEETF
+    waehrung: EUR
+    name: ISHARES CORE EURO CORP BOND
+    isin: IE00B3F81R35
+    boerse: IBIS2
+    art: etf
+  IBCI.DE:
+    con_id: 37036668
+    symbol: IBCI
+    lokal: IBCI
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES EURO INFL-LKD GOVT
+    isin: IE00B0M62X26
+    boerse: IBIS2
+    art: etf
+  IUSP.DE:
+    con_id: 95930802
+    symbol: SEML
+    lokal: SEML
+    primaer: BVME.ETF
+    waehrung: EUR
+    name: ISHARES JPM EM LCL GOV BND
+    isin: IE00B5M4WH52
+    boerse: IBIS2
+    art: etf
+  4GLD.DE:
+    con_id: 50784405
+    symbol: 4GLD
+    lokal: 4GLD
+    primaer: IBIS
+    waehrung: EUR
+    name: XETRA-GOLD
+    isin: DE000A0S9GB0
+    boerse: IBIS
+    art: etc
+  EUR.USD:
+    con_id: 12087792
+    symbol: EUR
+    lokal: EUR.USD
+    primaer: IDEALPRO
+    waehrung: USD
+    name: European Monetary Union Euro
+    boerse: IDEALPRO
+    art: fx
+  A:
+    con_id: 1715006
+    symbol: A
+    lokal: A
+    primaer: NYSE
+    waehrung: USD
+    name: AGILENT TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  AAPL:
+    con_id: 265598
+    symbol: AAPL
+    lokal: AAPL
+    primaer: NASDAQ
+    waehrung: USD
+    name: APPLE INC
+    boerse: SMART
+    art: aktie
+  ABBV:
+    con_id: 118089500
+    symbol: ABBV
+    lokal: ABBV
+    primaer: NYSE
+    waehrung: USD
+    name: ABBVIE INC
+    boerse: SMART
+    art: aktie
+  ABNB:
+    con_id: 459530964
+    symbol: ABNB
+    lokal: ABNB
+    primaer: NASDAQ
+    waehrung: USD
+    name: AIRBNB INC-CLASS A
+    boerse: SMART
+    art: aktie
+  ABT:
+    con_id: 4065
+    symbol: ABT
+    lokal: ABT
+    primaer: NYSE
+    waehrung: USD
+    name: ABBOTT LABORATORIES .
+    boerse: SMART
+    art: aktie
+  ACGL:
+    con_id: 10763362
+    symbol: ACGL
+    lokal: ACGL
+    primaer: NASDAQ
+    waehrung: USD
+    name: ARCH CAPITAL GROUP LTD
+    boerse: SMART
+    art: aktie
+  ACN:
+    con_id: 67889930
+    symbol: ACN
+    lokal: ACN
+    primaer: NYSE
+    waehrung: USD
+    name: ACCENTURE PLC-CL A
+    boerse: SMART
+    art: aktie
+  ADBE:
+    con_id: 265768
+    symbol: ADBE
+    lokal: ADBE
+    primaer: NASDAQ
+    waehrung: USD
+    name: ADOBE INC
+    boerse: SMART
+    art: aktie
+  ADI:
+    con_id: 4157
+    symbol: ADI
+    lokal: ADI
+    primaer: NASDAQ
+    waehrung: USD
+    name: ANALOG DEVICES INC
+    boerse: SMART
+    art: aktie
+  ADM:
+    con_id: 4165
+    symbol: ADM
+    lokal: ADM
+    primaer: NYSE
+    waehrung: USD
+    name: ARCHER-DANIELS-MIDLAND CO
+    boerse: SMART
+    art: aktie
+  ADP:
+    con_id: 4661
+    symbol: ADP
+    lokal: ADP
+    primaer: NASDAQ
+    waehrung: USD
+    name: AUTOMATIC DATA PROCESSING
+    boerse: SMART
+    art: aktie
+  ADSK:
+    con_id: 265681
+    symbol: ADSK
+    lokal: ADSK
+    primaer: NASDAQ
+    waehrung: USD
+    name: AUTODESK INC
+    boerse: SMART
+    art: aktie
+  AEE:
+    con_id: 13181
+    symbol: AEE
+    lokal: AEE
+    primaer: NYSE
+    waehrung: USD
+    name: AMEREN CORP
+    boerse: SMART
+    art: aktie
+  AEP:
+    con_id: 4211
+    symbol: AEP
+    lokal: AEP
+    primaer: NASDAQ
+    waehrung: USD
+    name: AMERICAN ELECTRIC POWER
+    boerse: SMART
+    art: aktie
+  AES:
+    con_id: 2560358
+    symbol: AES
+    lokal: AES
+    primaer: NYSE
+    waehrung: USD
+    name: AES CORP
+    boerse: SMART
+    art: aktie
+  AFL:
+    con_id: 4227
+    symbol: AFL
+    lokal: AFL
+    primaer: NYSE
+    waehrung: USD
+    name: AFLAC INC
+    boerse: SMART
+    art: aktie
+  AIG:
+    con_id: 61319701
+    symbol: AIG
+    lokal: AIG
+    primaer: NYSE
+    waehrung: USD
+    name: AMERICAN INTERNATIONAL GROUP
+    boerse: SMART
+    art: aktie
+  AIZ:
+    con_id: 27727424
+    symbol: AIZ
+    lokal: AIZ
+    primaer: NYSE
+    waehrung: USD
+    name: ASSURANT INC
+    boerse: SMART
+    art: aktie
+  AJG:
+    con_id: 4325
+    symbol: AJG
+    lokal: AJG
+    primaer: NYSE
+    waehrung: USD
+    name: ARTHUR J GALLAGHER & CO
+    boerse: SMART
+    art: aktie
+  AKAM:
+    con_id: 6220356
+    symbol: AKAM
+    lokal: AKAM
+    primaer: NASDAQ
+    waehrung: USD
+    name: AKAMAI TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  ALB:
+    con_id: 4347
+    symbol: ALB
+    lokal: ALB
+    primaer: NYSE
+    waehrung: USD
+    name: ALBEMARLE CORP
+    boerse: SMART
+    art: aktie
+  ALGN:
+    con_id: 11459264
+    symbol: ALGN
+    lokal: ALGN
+    primaer: NASDAQ
+    waehrung: USD
+    name: ALIGN TECHNOLOGY INC
+    boerse: SMART
+    art: aktie
+  ALL:
+    con_id: 4357
+    symbol: ALL
+    lokal: ALL
+    primaer: NYSE
+    waehrung: USD
+    name: ALLSTATE CORP
+    boerse: SMART
+    art: aktie
+  ALLE:
+    con_id: 138438437
+    symbol: ALLE
+    lokal: ALLE
+    primaer: NYSE
+    waehrung: USD
+    name: ALLEGION PLC
+    boerse: SMART
+    art: aktie
+  AMAT:
+    con_id: 266093
+    symbol: AMAT
+    lokal: AMAT
+    primaer: NASDAQ
+    waehrung: USD
+    name: APPLIED MATERIALS INC
+    boerse: SMART
+    art: aktie
+  AMCR:
+    con_id: 845305949
+    symbol: AMCR
+    lokal: AMCR
+    primaer: NYSE
+    waehrung: USD
+    name: AMCOR PLC
+    boerse: SMART
+    art: aktie
+  AMD:
+    con_id: 4391
+    symbol: AMD
+    lokal: AMD
+    primaer: NASDAQ
+    waehrung: USD
+    name: ADVANCED MICRO DEVICES
+    boerse: SMART
+    art: aktie
+  AME:
+    con_id: 4392
+    symbol: AME
+    lokal: AME
+    primaer: NYSE
+    waehrung: USD
+    name: AMETEK INC
+    boerse: SMART
+    art: aktie
+  AMGN:
+    con_id: 266145
+    symbol: AMGN
+    lokal: AMGN
+    primaer: NASDAQ
+    waehrung: USD
+    name: AMGEN INC
+    boerse: SMART
+    art: aktie
+  AMP:
+    con_id: 35970258
+    symbol: AMP
+    lokal: AMP
+    primaer: NYSE
+    waehrung: USD
+    name: AMERIPRISE FINANCIAL INC
+    boerse: SMART
+    art: aktie
+  AMT:
+    con_id: 99831145
+    symbol: AMT
+    lokal: AMT
+    primaer: NYSE
+    waehrung: USD
+    name: AMERICAN TOWER CORP
+    boerse: SMART
+    art: aktie
+  AMZN:
+    con_id: 3691937
+    symbol: AMZN
+    lokal: AMZN
+    primaer: NASDAQ
+    waehrung: USD
+    name: AMAZON.COM INC
+    boerse: SMART
+    art: aktie
+  ANET:
+    con_id: 740948854
+    symbol: ANET
+    lokal: ANET
+    primaer: NYSE
+    waehrung: USD
+    name: ARISTA NETWORKS INC
+    boerse: SMART
+    art: aktie
+  AON:
+    con_id: 414366114
+    symbol: AON
+    lokal: AON
+    primaer: NYSE
+    waehrung: USD
+    name: AON PLC-CLASS A
+    boerse: SMART
+    art: aktie
+  AOS:
+    con_id: 12225
+    symbol: AOS
+    lokal: AOS
+    primaer: NYSE
+    waehrung: USD
+    name: SMITH (A.O.) CORP
+    boerse: SMART
+    art: aktie
+  APA:
+    con_id: 474515500
+    symbol: APA
+    lokal: APA
+    primaer: NASDAQ
+    waehrung: USD
+    name: APA CORP
+    boerse: SMART
+    art: aktie
+  APD:
+    con_id: 4487
+    symbol: APD
+    lokal: APD
+    primaer: NYSE
+    waehrung: USD
+    name: AIR PRODUCTS & CHEMICALS INC
+    boerse: SMART
+    art: aktie
+  APH:
+    con_id: 4493
+    symbol: APH
+    lokal: APH
+    primaer: NYSE
+    waehrung: USD
+    name: AMPHENOL CORP-CL A
+    boerse: SMART
+    art: aktie
+  APO:
+    con_id: 535288388
+    symbol: APO
+    lokal: APO
+    primaer: NYSE
+    waehrung: USD
+    name: APOLLO GLOBAL MANAGEMENT INC
+    boerse: SMART
+    art: aktie
+  APP:
+    con_id: 481863646
+    symbol: APP
+    lokal: APP
+    primaer: NASDAQ
+    waehrung: USD
+    name: APPLOVIN CORP-CLASS A
+    boerse: SMART
+    art: aktie
+  APTV:
+    con_id: 748351585
+    symbol: APTV
+    lokal: APTV
+    primaer: NYSE
+    waehrung: USD
+    name: APTIV PLC
+    boerse: SMART
+    art: aktie
+  ARE:
+    con_id: 6607487
+    symbol: ARE
+    lokal: ARE
+    primaer: NYSE
+    waehrung: USD
+    name: ALEXANDRIA REAL ESTATE EQUIT
+    boerse: SMART
+    art: aktie
+  ARES:
+    con_id: 341904548
+    symbol: ARES
+    lokal: ARES
+    primaer: NYSE
+    waehrung: USD
+    name: ARES MANAGEMENT CORP - A
+    boerse: SMART
+    art: aktie
+  ATO:
+    con_id: 4644
+    symbol: ATO
+    lokal: ATO
+    primaer: NYSE
+    waehrung: USD
+    name: ATMOS ENERGY CORP
+    boerse: SMART
+    art: aktie
+  AVGO:
+    con_id: 313130367
+    symbol: AVGO
+    lokal: AVGO
+    primaer: NASDAQ
+    waehrung: USD
+    name: BROADCOM INC
+    boerse: SMART
+    art: aktie
+  AVY:
+    con_id: 4694
+    symbol: AVY
+    lokal: AVY
+    primaer: NYSE
+    waehrung: USD
+    name: AVERY DENNISON CORP
+    boerse: SMART
+    art: aktie
+  AWK:
+    con_id: 50530752
+    symbol: AWK
+    lokal: AWK
+    primaer: NYSE
+    waehrung: USD
+    name: AMERICAN WATER WORKS CO INC
+    boerse: SMART
+    art: aktie
+  AXON:
+    con_id: 272104927
+    symbol: AXON
+    lokal: AXON
+    primaer: NASDAQ
+    waehrung: USD
+    name: AXON ENTERPRISE INC
+    boerse: SMART
+    art: aktie
+  AXP:
+    con_id: 4721
+    symbol: AXP
+    lokal: AXP
+    primaer: NYSE
+    waehrung: USD
+    name: AMERICAN EXPRESS CO
+    boerse: SMART
+    art: aktie
+  AZO:
+    con_id: 4750
+    symbol: AZO
+    lokal: AZO
+    primaer: NYSE
+    waehrung: USD
+    name: AUTOZONE INC
+    boerse: SMART
+    art: aktie
+  BA:
+    con_id: 4762
+    symbol: BA
+    lokal: BA
+    primaer: NYSE
+    waehrung: USD
+    name: BOEING CO/THE
+    boerse: SMART
+    art: aktie
+  BAC:
+    con_id: 10098
+    symbol: BAC
+    lokal: BAC
+    primaer: NYSE
+    waehrung: USD
+    name: BANK OF AMERICA CORP
+    boerse: SMART
+    art: aktie
+  BALL:
+    con_id: 5052
+    symbol: BALL
+    lokal: BALL
+    primaer: NYSE
+    waehrung: USD
+    name: BALL CORP
+    boerse: SMART
+    art: aktie
+  BAX:
+    con_id: 8111188
+    symbol: BAX
+    lokal: BAX
+    primaer: NYSE
+    waehrung: USD
+    name: BAXTER INTERNATIONAL INC.
+    boerse: SMART
+    art: aktie
+  BBY:
+    con_id: 4817
+    symbol: BBY
+    lokal: BBY
+    primaer: NYSE
+    waehrung: USD
+    name: BEST BUY CO INC
+    boerse: SMART
+    art: aktie
+  BDX:
+    con_id: 4886
+    symbol: BDX
+    lokal: BDX
+    primaer: NYSE
+    waehrung: USD
+    name: BECTON DICKINSON AND CO
+    boerse: SMART
+    art: aktie
+  BE:
+    con_id: 326398514
+    symbol: BE
+    lokal: BE
+    primaer: NYSE
+    waehrung: USD
+    name: BLOOM ENERGY CORP- A
+    boerse: SMART
+    art: aktie
+  BEN:
+    con_id: 4906
+    symbol: BEN
+    lokal: BEN
+    primaer: NYSE
+    waehrung: USD
+    name: FRANKLIN TEMPLETON INC
+    boerse: SMART
+    art: aktie
+  BF-B:
+    con_id: 4931
+    symbol: BF B
+    lokal: BF B
+    primaer: NYSE
+    waehrung: USD
+    name: BROWN-FORMAN CORP-CLASS B
+    boerse: SMART
+    art: aktie
+  BG:
+    con_id: 663174498
+    symbol: BG
+    lokal: BG
+    primaer: NYSE
+    waehrung: USD
+    name: BUNGE GLOBAL SA
+    boerse: SMART
+    art: aktie
+  BIIB:
+    con_id: 26734397
+    symbol: BIIB
+    lokal: BIIB
+    primaer: NASDAQ
+    waehrung: USD
+    name: BIOGEN INC
+    boerse: SMART
+    art: aktie
+  BKNG:
+    con_id: 308728373
+    symbol: BKNG
+    lokal: BKNG
+    primaer: NASDAQ
+    waehrung: USD
+    name: BOOKING HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  BKR:
+    con_id: 281316445
+    symbol: BKR
+    lokal: BKR
+    primaer: NASDAQ
+    waehrung: USD
+    name: BAKER HUGHES CO
+    boerse: SMART
+    art: aktie
+  BLK:
+    con_id: 729193719
+    symbol: BLK
+    lokal: BLK
+    primaer: NYSE
+    waehrung: USD
+    name: BLACKROCK INC
+    boerse: SMART
+    art: aktie
+  BMY:
+    con_id: 5111
+    symbol: BMY
+    lokal: BMY
+    primaer: NYSE
+    waehrung: USD
+    name: BRISTOL-MYERS SQUIBB CO
+    boerse: SMART
+    art: aktie
+  BNY:
+    con_id: 44986804
+    symbol: BNY
+    lokal: BNY
+    primaer: NYSE
+    waehrung: USD
+    name: BANK OF NEW YORK MELLON CORP
+    boerse: SMART
+    art: aktie
+  BR:
+    con_id: 43523793
+    symbol: BR
+    lokal: BR
+    primaer: NYSE
+    waehrung: USD
+    name: BROADRIDGE FINANCIAL SOLUTIO
+    boerse: SMART
+    art: aktie
+  BRK-B:
+    con_id: 72063691
+    symbol: BRK B
+    lokal: BRK B
+    primaer: NYSE
+    waehrung: USD
+    name: BERKSHIRE HATHAWAY INC-CL B
+    boerse: SMART
+    art: aktie
+  BRO:
+    con_id: 6607613
+    symbol: BRO
+    lokal: BRO
+    primaer: NYSE
+    waehrung: USD
+    name: BROWN & BROWN INC
+    boerse: SMART
+    art: aktie
+  BSX:
+    con_id: 5270
+    symbol: BSX
+    lokal: BSX
+    primaer: NYSE
+    waehrung: USD
+    name: BOSTON SCIENTIFIC CORP
+    boerse: SMART
+    art: aktie
+  BX:
+    con_id: 372834689
+    symbol: BX
+    lokal: BX
+    primaer: NYSE
+    waehrung: USD
+    name: BLACKSTONE INC
+    boerse: SMART
+    art: aktie
+  BXP:
+    con_id: 5021340
+    symbol: BXP
+    lokal: BXP
+    primaer: NYSE
+    waehrung: USD
+    name: BXP INC
+    boerse: SMART
+    art: aktie
+  C:
+    con_id: 87335484
+    symbol: C
+    lokal: C
+    primaer: NYSE
+    waehrung: USD
+    name: CITIGROUP INC
+    boerse: SMART
+    art: aktie
+  CAH:
+    con_id: 5407
+    symbol: CAH
+    lokal: CAH
+    primaer: NYSE
+    waehrung: USD
+    name: CARDINAL HEALTH INC
+    boerse: SMART
+    art: aktie
+  CARR:
+    con_id: 410755397
+    symbol: CARR
+    lokal: CARR
+    primaer: NYSE
+    waehrung: USD
+    name: CARRIER GLOBAL CORP
+    boerse: SMART
+    art: aktie
+  CASY:
+    con_id: 267265
+    symbol: CASY
+    lokal: CASY
+    primaer: NASDAQ
+    waehrung: USD
+    name: CASEY'S GENERAL STORES INC
+    boerse: SMART
+    art: aktie
+  CAT:
+    con_id: 5437
+    symbol: CAT
+    lokal: CAT
+    primaer: NYSE
+    waehrung: USD
+    name: CATERPILLAR INC
+    boerse: SMART
+    art: aktie
+  CB:
+    con_id: 218939694
+    symbol: CB
+    lokal: CB
+    primaer: NYSE
+    waehrung: USD
+    name: CHUBB LTD
+    boerse: SMART
+    art: aktie
+  CBOE:
+    con_id: 76227954
+    symbol: CBOE
+    lokal: CBOE
+    primaer: BATS
+    waehrung: USD
+    name: CBOE GLOBAL MARKETS INC
+    boerse: SMART
+    art: aktie
+  CBRE:
+    con_id: 95514904
+    symbol: CBRE
+    lokal: CBRE
+    primaer: NYSE
+    waehrung: USD
+    name: CBRE GROUP INC - A
+    boerse: SMART
+    art: aktie
+  CCI:
+    con_id: 176571182
+    symbol: CCI
+    lokal: CCI
+    primaer: NYSE
+    waehrung: USD
+    name: CROWN CASTLE INC
+    boerse: SMART
+    art: aktie
+  CCL:
+    con_id: 878372298
+    symbol: CCL
+    lokal: CCL
+    primaer: NYSE
+    waehrung: USD
+    name: CARNIVAL CORP LTD
+    boerse: SMART
+    art: aktie
+  CDNS:
+    con_id: 5552
+    symbol: CDNS
+    lokal: CDNS
+    primaer: NASDAQ
+    waehrung: USD
+    name: CADENCE DESIGN SYS INC
+    boerse: SMART
+    art: aktie
+  CDW:
+    con_id: 130432552
+    symbol: CDW
+    lokal: CDW
+    primaer: NASDAQ
+    waehrung: USD
+    name: CDW CORP/DE
+    boerse: SMART
+    art: aktie
+  CEG:
+    con_id: 538132976
+    symbol: CEG
+    lokal: CEG
+    primaer: NASDAQ
+    waehrung: USD
+    name: CONSTELLATION ENERGY
+    boerse: SMART
+    art: aktie
+  CF:
+    con_id: 35447205
+    symbol: CF
+    lokal: CF
+    primaer: NYSE
+    waehrung: USD
+    name: CF INDUSTRIES HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  CFG:
+    con_id: 167955370
+    symbol: CFG
+    lokal: CFG
+    primaer: NYSE
+    waehrung: USD
+    name: CITIZENS FINANCIAL GROUP
+    boerse: SMART
+    art: aktie
+  CHD:
+    con_id: 5651
+    symbol: CHD
+    lokal: CHD
+    primaer: NYSE
+    waehrung: USD
+    name: CHURCH & DWIGHT CO INC
+    boerse: SMART
+    art: aktie
+  CHRW:
+    con_id: 36320731
+    symbol: CHRW
+    lokal: CHRW
+    primaer: NASDAQ
+    waehrung: USD
+    name: C.H. ROBINSON WORLDWIDE INC
+    boerse: SMART
+    art: aktie
+  CHTR:
+    con_id: 233674866
+    symbol: CHTR
+    lokal: CHTR
+    primaer: NASDAQ
+    waehrung: USD
+    name: CHARTER COMMUNICATIONS INC-A
+    boerse: SMART
+    art: aktie
+  CI:
+    con_id: 346403540
+    symbol: CI
+    lokal: CI
+    primaer: NYSE
+    waehrung: USD
+    name: THE CIGNA GROUP
+    boerse: SMART
+    art: aktie
+  CIEN:
+    con_id: 41045553
+    symbol: CIEN
+    lokal: CIEN
+    primaer: NYSE
+    waehrung: USD
+    name: CIENA CORP
+    boerse: SMART
+    art: aktie
+  CINF:
+    con_id: 267661
+    symbol: CINF
+    lokal: CINF
+    primaer: NASDAQ
+    waehrung: USD
+    name: CINCINNATI FINANCIAL CORP
+    boerse: SMART
+    art: aktie
+  CL:
+    con_id: 5749
+    symbol: CL
+    lokal: CL
+    primaer: NYSE
+    waehrung: USD
+    name: COLGATE-PALMOLIVE CO
+    boerse: SMART
+    art: aktie
+  CLX:
+    con_id: 5794
+    symbol: CLX
+    lokal: CLX
+    primaer: NYSE
+    waehrung: USD
+    name: CLOROX COMPANY
+    boerse: SMART
+    art: aktie
+  CMCSA:
+    con_id: 267748
+    symbol: CMCSA
+    lokal: CMCSA
+    primaer: NASDAQ
+    waehrung: USD
+    name: COMCAST CORP-CLASS A
+    boerse: SMART
+    art: aktie
+  CME:
+    con_id: 45127739
+    symbol: CME
+    lokal: CME
+    primaer: NASDAQ
+    waehrung: USD
+    name: CME GROUP INC
+    boerse: SMART
+    art: aktie
+  CMG:
+    con_id: 37655664
+    symbol: CMG
+    lokal: CMG
+    primaer: NYSE
+    waehrung: USD
+    name: CHIPOTLE MEXICAN GRILL INC
+    boerse: SMART
+    art: aktie
+  CMI:
+    con_id: 6207
+    symbol: CMI
+    lokal: CMI
+    primaer: NYSE
+    waehrung: USD
+    name: CUMMINS INC
+    boerse: SMART
+    art: aktie
+  CMS:
+    con_id: 5840
+    symbol: CMS
+    lokal: CMS
+    primaer: NYSE
+    waehrung: USD
+    name: CMS ENERGY CORP
+    boerse: SMART
+    art: aktie
+  CNC:
+    con_id: 13878278
+    symbol: CNC
+    lokal: CNC
+    primaer: NYSE
+    waehrung: USD
+    name: CENTENE CORP
+    boerse: SMART
+    art: aktie
+  CNP:
+    con_id: 8093
+    symbol: CNP
+    lokal: CNP
+    primaer: NYSE
+    waehrung: USD
+    name: CENTERPOINT ENERGY INC
+    boerse: SMART
+    art: aktie
+  COF:
+    con_id: 5941
+    symbol: COF
+    lokal: COF
+    primaer: NYSE
+    waehrung: USD
+    name: CAPITAL ONE FINANCIAL CORP
+    boerse: SMART
+    art: aktie
+  COHR:
+    con_id: 584127832
+    symbol: COHR
+    lokal: COHR
+    primaer: NYSE
+    waehrung: USD
+    name: COHERENT CORP
+    boerse: SMART
+    art: aktie
+  COIN:
+    con_id: 481691285
+    symbol: COIN
+    lokal: COIN
+    primaer: NASDAQ
+    waehrung: USD
+    name: COINBASE GLOBAL INC -CLASS A
+    boerse: SMART
+    art: aktie
+  COO:
+    con_id: 685217803
+    symbol: COO
+    lokal: COO
+    primaer: NASDAQ
+    waehrung: USD
+    name: COOPER COS INC/THE
+    boerse: SMART
+    art: aktie
+  COP:
+    con_id: 10885
+    symbol: COP
+    lokal: COP
+    primaer: NYSE
+    waehrung: USD
+    name: CONOCOPHILLIPS
+    boerse: SMART
+    art: aktie
+  COR:
+    con_id: 1714996
+    symbol: COR
+    lokal: COR
+    primaer: NYSE
+    waehrung: USD
+    name: CENCORA INC
+    boerse: SMART
+    art: aktie
+  COST:
+    con_id: 272997
+    symbol: COST
+    lokal: COST
+    primaer: NASDAQ
+    waehrung: USD
+    name: COSTCO WHOLESALE CORP
+    boerse: SMART
+    art: aktie
+  CPAY:
+    con_id: 691994611
+    symbol: CPAY
+    lokal: CPAY
+    primaer: NYSE
+    waehrung: USD
+    name: CORPAY INC
+    boerse: SMART
+    art: aktie
+  CPRT:
+    con_id: 4728523
+    symbol: CPRT
+    lokal: CPRT
+    primaer: NASDAQ
+    waehrung: USD
+    name: COPART INC
+    boerse: SMART
+    art: aktie
+  CPT:
+    con_id: 6004
+    symbol: CPT
+    lokal: CPT
+    primaer: NYSE
+    waehrung: USD
+    name: CAMDEN PROPERTY TRUST
+    boerse: SMART
+    art: aktie
+  CRH:
+    con_id: 655276609
+    symbol: CRH
+    lokal: CRH
+    primaer: NYSE
+    waehrung: USD
+    name: CRH PLC
+    boerse: SMART
+    art: aktie
+  CRL:
+    con_id: 2730877
+    symbol: CRL
+    lokal: CRL
+    primaer: NYSE
+    waehrung: USD
+    name: CHARLES RIVER LABORATORIES
+    boerse: SMART
+    art: aktie
+  CRM:
+    con_id: 29624264
+    symbol: CRM
+    lokal: CRM
+    primaer: NYSE
+    waehrung: USD
+    name: SALESFORCE INC
+    boerse: SMART
+    art: aktie
+  CRWD:
+    con_id: 370757467
+    symbol: CRWD
+    lokal: CRWD
+    primaer: NASDAQ
+    waehrung: USD
+    name: CROWDSTRIKE HOLDINGS INC - A
+    boerse: SMART
+    art: aktie
+  CSCO:
+    con_id: 268084
+    symbol: CSCO
+    lokal: CSCO
+    primaer: NASDAQ
+    waehrung: USD
+    name: CISCO SYSTEMS INC
+    boerse: SMART
+    art: aktie
+  CSGP:
+    con_id: 6726677
+    symbol: CSGP
+    lokal: CSGP
+    primaer: NASDAQ
+    waehrung: USD
+    name: COSTAR GROUP INC
+    boerse: SMART
+    art: aktie
+  CSX:
+    con_id: 6150
+    symbol: CSX
+    lokal: CSX
+    primaer: NASDAQ
+    waehrung: USD
+    name: CSX CORP
+    boerse: SMART
+    art: aktie
+  CTAS:
+    con_id: 268149
+    symbol: CTAS
+    lokal: CTAS
+    primaer: NASDAQ
+    waehrung: USD
+    name: CINTAS CORP
+    boerse: SMART
+    art: aktie
+  CTSH:
+    con_id: 4728759
+    symbol: CTSH
+    lokal: CTSH
+    primaer: NASDAQ
+    waehrung: USD
+    name: COGNIZANT TECH SOLUTIONS-A
+    boerse: SMART
+    art: aktie
+  CVNA:
+    con_id: 274144952
+    symbol: CVNA
+    lokal: CVNA
+    primaer: NYSE
+    waehrung: USD
+    name: CARVANA CO
+    boerse: SMART
+    art: aktie
+  CVS:
+    con_id: 2585769
+    symbol: CVS
+    lokal: CVS
+    primaer: NYSE
+    waehrung: USD
+    name: CVS HEALTH CORP
+    boerse: SMART
+    art: aktie
+  CVX:
+    con_id: 5684
+    symbol: CVX
+    lokal: CVX
+    primaer: NYSE
+    waehrung: USD
+    name: CHEVRON CORP
+    boerse: SMART
+    art: aktie
+  D:
+    con_id: 6327
+    symbol: D
+    lokal: D
+    primaer: NYSE
+    waehrung: USD
+    name: DOMINION ENERGY INC
+    boerse: SMART
+    art: aktie
+  DAL:
+    con_id: 44001820
+    symbol: DAL
+    lokal: DAL
+    primaer: NYSE
+    waehrung: USD
+    name: DELTA AIR LINES INC.
+    boerse: SMART
+    art: aktie
+  DASH:
+    con_id: 459309417
+    symbol: DASH
+    lokal: DASH
+    primaer: NASDAQ
+    waehrung: USD
+    name: DOORDASH INC - A
+    boerse: SMART
+    art: aktie
+  DD:
+    con_id: 887235923
+    symbol: DD
+    lokal: DD
+    primaer: NYSE
+    waehrung: USD
+    name: DUPONT DE NEMOURS INC
+    boerse: SMART
+    art: aktie
+  DDOG:
+    con_id: 383858515
+    symbol: DDOG
+    lokal: DDOG
+    primaer: NASDAQ
+    waehrung: USD
+    name: DATADOG INC - CLASS A
+    boerse: SMART
+    art: aktie
+  DE:
+    con_id: 6393
+    symbol: DE
+    lokal: DE
+    primaer: NYSE
+    waehrung: USD
+    name: DEERE & CO
+    boerse: SMART
+    art: aktie
+  DECK:
+    con_id: 268376
+    symbol: DECK
+    lokal: DECK
+    primaer: NYSE
+    waehrung: USD
+    name: DECKERS OUTDOOR CORP
+    boerse: SMART
+    art: aktie
+  DELL:
+    con_id: 346218218
+    symbol: DELL
+    lokal: DELL
+    primaer: NYSE
+    waehrung: USD
+    name: DELL TECHNOLOGIES -C
+    boerse: SMART
+    art: aktie
+  DG:
+    con_id: 70212228
+    symbol: DG
+    lokal: DG
+    primaer: NYSE
+    waehrung: USD
+    name: DOLLAR GENERAL CORP
+    boerse: SMART
+    art: aktie
+  DGX:
+    con_id: 2459465
+    symbol: DGX
+    lokal: DGX
+    primaer: NYSE
+    waehrung: USD
+    name: QUEST DIAGNOSTICS INC
+    boerse: SMART
+    art: aktie
+  DHI:
+    con_id: 268627
+    symbol: DHI
+    lokal: DHI
+    primaer: NYSE
+    waehrung: USD
+    name: DR HORTON INC
+    boerse: SMART
+    art: aktie
+  DHR:
+    con_id: 6442
+    symbol: DHR
+    lokal: DHR
+    primaer: NYSE
+    waehrung: USD
+    name: DANAHER CORP
+    boerse: SMART
+    art: aktie
+  DIS:
+    con_id: 6459
+    symbol: DIS
+    lokal: DIS
+    primaer: NYSE
+    waehrung: USD
+    name: WALT DISNEY CO/THE
+    boerse: SMART
+    art: aktie
+  DLR:
+    con_id: 31832526
+    symbol: DLR
+    lokal: DLR
+    primaer: NYSE
+    waehrung: USD
+    name: DIGITAL REALTY TRUST INC.
+    boerse: SMART
+    art: aktie
+  DLTR:
+    con_id: 49388062
+    symbol: DLTR
+    lokal: DLTR
+    primaer: NASDAQ
+    waehrung: USD
+    name: DOLLAR TREE INC
+    boerse: SMART
+    art: aktie
+  DOC:
+    con_id: 389700396
+    symbol: DOC
+    lokal: DOC
+    primaer: NYSE
+    waehrung: USD
+    name: HEALTHPEAK PROPERTIES INC
+    boerse: SMART
+    art: aktie
+  DOV:
+    con_id: 6517
+    symbol: DOV
+    lokal: DOV
+    primaer: NYSE
+    waehrung: USD
+    name: DOVER CORP
+    boerse: SMART
+    art: aktie
+  DOW:
+    con_id: 356576040
+    symbol: DOW
+    lokal: DOW
+    primaer: NYSE
+    waehrung: USD
+    name: DOW INC
+    boerse: SMART
+    art: aktie
+  DPZ:
+    con_id: 29831612
+    symbol: DPZ
+    lokal: DPZ
+    primaer: NASDAQ
+    waehrung: USD
+    name: DOMINO'S PIZZA INC
+    boerse: SMART
+    art: aktie
+  DRI:
+    con_id: 661440
+    symbol: DRI
+    lokal: DRI
+    primaer: NYSE
+    waehrung: USD
+    name: DARDEN RESTAURANTS INC
+    boerse: SMART
+    art: aktie
+  DTE:
+    con_id: 6585
+    symbol: DTE
+    lokal: DTE
+    primaer: NYSE
+    waehrung: USD
+    name: DTE ENERGY COMPANY
+    boerse: SMART
+    art: aktie
+  DUK:
+    con_id: 110176011
+    symbol: DUK
+    lokal: DUK
+    primaer: NYSE
+    waehrung: USD
+    name: DUKE ENERGY CORP
+    boerse: SMART
+    art: aktie
+  DVA:
+    con_id: 1035459
+    symbol: DVA
+    lokal: DVA
+    primaer: NYSE
+    waehrung: USD
+    name: DAVITA INC
+    boerse: SMART
+    art: aktie
+  DVN:
+    con_id: 754442
+    symbol: DVN
+    lokal: DVN
+    primaer: NYSE
+    waehrung: USD
+    name: DEVON ENERGY CORP
+    boerse: SMART
+    art: aktie
+  DXCM:
+    con_id: 33837089
+    symbol: DXCM
+    lokal: DXCM
+    primaer: NASDAQ
+    waehrung: USD
+    name: DEXCOM INC
+    boerse: SMART
+    art: aktie
+  EBAY:
+    con_id: 4347086
+    symbol: EBAY
+    lokal: EBAY
+    primaer: NASDAQ
+    waehrung: USD
+    name: EBAY INC
+    boerse: SMART
+    art: aktie
+  ECHO:
+    con_id: 47965865
+    symbol: ECHO
+    lokal: ECHO
+    primaer: NASDAQ
+    waehrung: USD
+    name: ECHOSTAR CORP-A
+    boerse: SMART
+    art: aktie
+  ECL:
+    con_id: 6682
+    symbol: ECL
+    lokal: ECL
+    primaer: NYSE
+    waehrung: USD
+    name: ECOLAB INC
+    boerse: SMART
+    art: aktie
+  ED:
+    con_id: 6691
+    symbol: ED
+    lokal: ED
+    primaer: NYSE
+    waehrung: USD
+    name: CONSOLIDATED EDISON INC
+    boerse: SMART
+    art: aktie
+  EFX:
+    con_id: 6735
+    symbol: EFX
+    lokal: EFX
+    primaer: NYSE
+    waehrung: USD
+    name: EQUIFAX INC
+    boerse: SMART
+    art: aktie
+  EG:
+    con_id: 6477725
+    symbol: EG
+    lokal: EG
+    primaer: NYSE
+    waehrung: USD
+    name: EVEREST GROUP LTD
+    boerse: SMART
+    art: aktie
+  EIX:
+    con_id: 11899
+    symbol: EIX
+    lokal: EIX
+    primaer: NYSE
+    waehrung: USD
+    name: EDISON INTL
+    boerse: SMART
+    art: aktie
+  EL:
+    con_id: 1448477
+    symbol: EL
+    lokal: EL
+    primaer: NYSE
+    waehrung: USD
+    name: ESTEE LAUDER COMPANIES-CL A
+    boerse: SMART
+    art: aktie
+  ELV:
+    con_id: 173962302
+    symbol: ELV
+    lokal: ELV
+    primaer: NYSE
+    waehrung: USD
+    name: ELEVANCE HEALTH INC
+    boerse: SMART
+    art: aktie
+  EME:
+    con_id: 6820
+    symbol: EME
+    lokal: EME
+    primaer: NYSE
+    waehrung: USD
+    name: EMCOR GROUP INC
+    boerse: SMART
+    art: aktie
+  EMR:
+    con_id: 6842
+    symbol: EMR
+    lokal: EMR
+    primaer: NYSE
+    waehrung: USD
+    name: EMERSON ELECTRIC CO
+    boerse: SMART
+    art: aktie
+  EOG:
+    con_id: 6890
+    symbol: EOG
+    lokal: EOG
+    primaer: NYSE
+    waehrung: USD
+    name: EOG RESOURCES INC
+    boerse: SMART
+    art: aktie
+  EQIX:
+    con_id: 181764593
+    symbol: EQIX
+    lokal: EQIX
+    primaer: NASDAQ
+    waehrung: USD
+    name: EQUINIX INC
+    boerse: SMART
+    art: aktie
+  EQT:
+    con_id: 57698865
+    symbol: EQT
+    lokal: EQT
+    primaer: NYSE
+    waehrung: USD
+    name: EQT CORP
+    boerse: SMART
+    art: aktie
+  ERIE:
+    con_id: 4730254
+    symbol: ERIE
+    lokal: ERIE
+    primaer: NASDAQ
+    waehrung: USD
+    name: ERIE INDEMNITY COMPANY-CL A
+    boerse: SMART
+    art: aktie
+  ES:
+    con_id: 182880167
+    symbol: ES
+    lokal: ES
+    primaer: NYSE
+    waehrung: USD
+    name: EVERSOURCE ENERGY
+    boerse: SMART
+    art: aktie
+  ESS:
+    con_id: 6946
+    symbol: ESS
+    lokal: ESS
+    primaer: NYSE
+    waehrung: USD
+    name: ESSEX PROPERTY TRUST INC
+    boerse: SMART
+    art: aktie
+  ETN:
+    con_id: 118017869
+    symbol: ETN
+    lokal: ETN
+    primaer: NYSE
+    waehrung: USD
+    name: EATON CORP PLC
+    boerse: SMART
+    art: aktie
+  ETR:
+    con_id: 6969
+    symbol: ETR
+    lokal: ETR
+    primaer: NYSE
+    waehrung: USD
+    name: ENTERGY CORP
+    boerse: SMART
+    art: aktie
+  EVRG:
+    con_id: 320106069
+    symbol: EVRG
+    lokal: EVRG
+    primaer: NASDAQ
+    waehrung: USD
+    name: EVERGY INC
+    boerse: SMART
+    art: aktie
+  EW:
+    con_id: 8101142
+    symbol: EW
+    lokal: EW
+    primaer: NYSE
+    waehrung: USD
+    name: EDWARDS LIFESCIENCES CORP
+    boerse: SMART
+    art: aktie
+  EXC:
+    con_id: 11000
+    symbol: EXC
+    lokal: EXC
+    primaer: NASDAQ
+    waehrung: USD
+    name: EXELON CORP
+    boerse: SMART
+    art: aktie
+  EXE:
+    con_id: 470458975
+    symbol: EXE
+    lokal: EXE
+    primaer: NASDAQ
+    waehrung: USD
+    name: EXPAND ENERGY CORP
+    boerse: SMART
+    art: aktie
+  EXPD:
+    con_id: 269082
+    symbol: EXPD
+    lokal: EXPD
+    primaer: NYSE
+    waehrung: USD
+    name: EXPEDITORS INTL WASH INC
+    boerse: SMART
+    art: aktie
+  EXPE:
+    con_id: 98542021
+    symbol: EXPE
+    lokal: EXPE
+    primaer: NASDAQ
+    waehrung: USD
+    name: EXPEDIA GROUP INC
+    boerse: SMART
+    art: aktie
+  EXR:
+    con_id: 30351205
+    symbol: EXR
+    lokal: EXR
+    primaer: NYSE
+    waehrung: USD
+    name: EXTRA SPACE STORAGE INC
+    boerse: SMART
+    art: aktie
+  F:
+    con_id: 9599491
+    symbol: F
+    lokal: F
+    primaer: NYSE
+    waehrung: USD
+    name: FORD MOTOR CO
+    boerse: SMART
+    art: aktie
+  FANG:
+    con_id: 115441080
+    symbol: FANG
+    lokal: FANG
+    primaer: NASDAQ
+    waehrung: USD
+    name: DIAMONDBACK ENERGY INC
+    boerse: SMART
+    art: aktie
+  FAST:
+    con_id: 269120
+    symbol: FAST
+    lokal: FAST
+    primaer: NASDAQ
+    waehrung: USD
+    name: FASTENAL CO
+    boerse: SMART
+    art: aktie
+  FCX:
+    con_id: 7089
+    symbol: FCX
+    lokal: FCX
+    primaer: NYSE
+    waehrung: USD
+    name: FREEPORT-MCMORAN INC
+    boerse: SMART
+    art: aktie
+  FDS:
+    con_id: 1847145
+    symbol: FDS
+    lokal: FDS
+    primaer: NYSE
+    waehrung: USD
+    name: FACTSET RESEARCH SYSTEMS INC
+    boerse: SMART
+    art: aktie
+  FDX:
+    con_id: 5100583
+    symbol: FDX
+    lokal: FDX
+    primaer: NYSE
+    waehrung: USD
+    name: FEDEX CORPORATION
+    boerse: SMART
+    art: aktie
+  FDXF:
+    con_id: 884688186
+    symbol: FDXF
+    lokal: FDXF
+    primaer: NYSE
+    waehrung: USD
+    name: FEDEX FREIGHT HOLDING CO
+    boerse: SMART
+    art: aktie
+  FE:
+    con_id: 3265376
+    symbol: FE
+    lokal: FE
+    primaer: NYSE
+    waehrung: USD
+    name: FIRSTENERGY CORP
+    boerse: SMART
+    art: aktie
+  FERG:
+    con_id: 717988170
+    symbol: FERG
+    lokal: FERG
+    primaer: NYSE
+    waehrung: USD
+    name: FERGUSON ENTERPRISES INC
+    boerse: SMART
+    art: aktie
+  FFIV:
+    con_id: 6248713
+    symbol: FFIV
+    lokal: FFIV
+    primaer: NASDAQ
+    waehrung: USD
+    name: F5 INC
+    boerse: SMART
+    art: aktie
+  FICO:
+    con_id: 269280
+    symbol: FICO
+    lokal: FICO
+    primaer: NYSE
+    waehrung: USD
+    name: FAIR ISAAC CORP
+    boerse: SMART
+    art: aktie
+  FIS:
+    con_id: 37866641
+    symbol: FIS
+    lokal: FIS
+    primaer: NYSE
+    waehrung: USD
+    name: FIDELITY NATIONAL INFO SERV
+    boerse: SMART
+    art: aktie
+  FISV:
+    con_id: 269315
+    symbol: FISV
+    lokal: FISV
+    primaer: NASDAQ
+    waehrung: USD
+    name: FISERV INC
+    boerse: SMART
+    art: aktie
+  FITB:
+    con_id: 269318
+    symbol: FITB
+    lokal: FITB
+    primaer: NYSE
+    waehrung: USD
+    name: FIFTH THIRD BANCORP
+    boerse: SMART
+    art: aktie
+  FIX:
+    con_id: 6607708
+    symbol: FIX
+    lokal: FIX
+    primaer: NYSE
+    waehrung: USD
+    name: COMFORT SYSTEMS USA INC
+    boerse: SMART
+    art: aktie
+  FLEX:
+    con_id: 4596077
+    symbol: FLEX
+    lokal: FLEX
+    primaer: NASDAQ
+    waehrung: USD
+    name: FLEX LTD
+    boerse: SMART
+    art: aktie
+  FOX:
+    con_id: 356858007
+    symbol: FOX
+    lokal: FOX
+    primaer: NASDAQ
+    waehrung: USD
+    name: FOX CORP - CLASS B
+    boerse: SMART
+    art: aktie
+  FOXA:
+    con_id: 356858008
+    symbol: FOXA
+    lokal: FOXA
+    primaer: NASDAQ
+    waehrung: USD
+    name: FOX CORP - CLASS A
+    boerse: SMART
+    art: aktie
+  FRT:
+    con_id: 535271307
+    symbol: FRT
+    lokal: FRT
+    primaer: NYSE
+    waehrung: USD
+    name: FEDERAL REALTY INVS TRUST
+    boerse: SMART
+    art: aktie
+  FSLR:
+    con_id: 41622169
+    symbol: FSLR
+    lokal: FSLR
+    primaer: NASDAQ
+    waehrung: USD
+    name: FIRST SOLAR INC
+    boerse: SMART
+    art: aktie
+  FTNT:
+    con_id: 70236214
+    symbol: FTNT
+    lokal: FTNT
+    primaer: NASDAQ
+    waehrung: USD
+    name: FORTINET INC
+    boerse: SMART
+    art: aktie
+  FTV:
+    con_id: 236074120
+    symbol: FTV
+    lokal: FTV
+    primaer: NYSE
+    waehrung: USD
+    name: FORTIVE CORP
+    boerse: SMART
+    art: aktie
+  GD:
+    con_id: 7496
+    symbol: GD
+    lokal: GD
+    primaer: NYSE
+    waehrung: USD
+    name: GENERAL DYNAMICS CORP
+    boerse: SMART
+    art: aktie
+  GDDY:
+    con_id: 188986978
+    symbol: GDDY
+    lokal: GDDY
+    primaer: NYSE
+    waehrung: USD
+    name: GODADDY INC - CLASS A
+    boerse: SMART
+    art: aktie
+  GE:
+    con_id: 498843743
+    symbol: GE
+    lokal: GE
+    primaer: NYSE
+    waehrung: USD
+    name: GENERAL ELECTRIC
+    boerse: SMART
+    art: aktie
+  GEHC:
+    con_id: 601776309
+    symbol: GEHC
+    lokal: GEHC
+    primaer: NASDAQ
+    waehrung: USD
+    name: GE HEALTHCARE TECHNOLOGY
+    boerse: SMART
+    art: aktie
+  GEN:
+    con_id: 390332324
+    symbol: GEN
+    lokal: GEN
+    primaer: NASDAQ
+    waehrung: USD
+    name: GEN DIGITAL INC
+    boerse: SMART
+    art: aktie
+  GEV:
+    con_id: 691984365
+    symbol: GEV
+    lokal: GEV
+    primaer: NYSE
+    waehrung: USD
+    name: GE VERNOVA INC
+    boerse: SMART
+    art: aktie
+  GILD:
+    con_id: 269753
+    symbol: GILD
+    lokal: GILD
+    primaer: NASDAQ
+    waehrung: USD
+    name: GILEAD SCIENCES INC
+    boerse: SMART
+    art: aktie
+  GIS:
+    con_id: 7616
+    symbol: GIS
+    lokal: GIS
+    primaer: NYSE
+    waehrung: USD
+    name: GENERAL MILLS INC
+    boerse: SMART
+    art: aktie
+  GL:
+    con_id: 375868349
+    symbol: GL
+    lokal: GL
+    primaer: NYSE
+    waehrung: USD
+    name: GLOBE LIFE INC
+    boerse: SMART
+    art: aktie
+  GLW:
+    con_id: 7655
+    symbol: GLW
+    lokal: GLW
+    primaer: NYSE
+    waehrung: USD
+    name: CORNING INC
+    boerse: SMART
+    art: aktie
+  GM:
+    con_id: 80986742
+    symbol: GM
+    lokal: GM
+    primaer: NYSE
+    waehrung: USD
+    name: GENERAL MOTORS CO
+    boerse: SMART
+    art: aktie
+  GNRC:
+    con_id: 72529783
+    symbol: GNRC
+    lokal: GNRC
+    primaer: NYSE
+    waehrung: USD
+    name: GENERAC HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  GOOG:
+    con_id: 208813720
+    symbol: GOOG
+    lokal: GOOG
+    primaer: NASDAQ
+    waehrung: USD
+    name: ALPHABET INC-CL C
+    boerse: SMART
+    art: aktie
+  GOOGL:
+    con_id: 208813719
+    symbol: GOOGL
+    lokal: GOOGL
+    primaer: NASDAQ
+    waehrung: USD
+    name: ALPHABET INC-CL A
+    boerse: SMART
+    art: aktie
+  GPC:
+    con_id: 7745
+    symbol: GPC
+    lokal: GPC
+    primaer: NYSE
+    waehrung: USD
+    name: GENUINE PARTS CO
+    boerse: SMART
+    art: aktie
+  GPN:
+    con_id: 11477774
+    symbol: GPN
+    lokal: GPN
+    primaer: NYSE
+    waehrung: USD
+    name: GLOBAL PAYMENTS INC
+    boerse: SMART
+    art: aktie
+  GRMN:
+    con_id: 76791198
+    symbol: GRMN
+    lokal: GRMN
+    primaer: NYSE
+    waehrung: USD
+    name: GARMIN LTD
+    boerse: SMART
+    art: aktie
+  GS:
+    con_id: 4627828
+    symbol: GS
+    lokal: GS
+    primaer: NYSE
+    waehrung: USD
+    name: GOLDMAN SACHS GROUP INC
+    boerse: SMART
+    art: aktie
+  GWW:
+    con_id: 7867
+    symbol: GWW
+    lokal: GWW
+    primaer: NYSE
+    waehrung: USD
+    name: WW GRAINGER INC
+    boerse: SMART
+    art: aktie
+  HAL:
+    con_id: 7890
+    symbol: HAL
+    lokal: HAL
+    primaer: NYSE
+    waehrung: USD
+    name: HALLIBURTON CO
+    boerse: SMART
+    art: aktie
+  HAS:
+    con_id: 754956
+    symbol: HAS
+    lokal: HAS
+    primaer: NASDAQ
+    waehrung: USD
+    name: HASBRO INC
+    boerse: SMART
+    art: aktie
+  HBAN:
+    con_id: 270018
+    symbol: HBAN
+    lokal: HBAN
+    primaer: NASDAQ
+    waehrung: USD
+    name: HUNTINGTON BANCSHARES INC
+    boerse: SMART
+    art: aktie
+  HCA:
+    con_id: 85076790
+    symbol: HCA
+    lokal: HCA
+    primaer: NYSE
+    waehrung: USD
+    name: HCA HEALTHCARE INC
+    boerse: SMART
+    art: aktie
+  HD:
+    con_id: 7930
+    symbol: HD
+    lokal: HD
+    primaer: NYSE
+    waehrung: USD
+    name: HOME DEPOT INC
+    boerse: SMART
+    art: aktie
+  HIG:
+    con_id: 1217009
+    symbol: HIG
+    lokal: HIG
+    primaer: NYSE
+    waehrung: USD
+    name: HARTFORD INSURANCE GROUP INC
+    boerse: SMART
+    art: aktie
+  HII:
+    con_id: 86033355
+    symbol: HII
+    lokal: HII
+    primaer: NYSE
+    waehrung: USD
+    name: HUNTINGTON INGALLS INDUSTRIE
+    boerse: SMART
+    art: aktie
+  HLT:
+    con_id: 257944570
+    symbol: HLT
+    lokal: HLT
+    primaer: NYSE
+    waehrung: USD
+    name: HILTON WORLDWIDE HOLDINGS IN
+    boerse: SMART
+    art: aktie
+  HON:
+    con_id: 892744244
+    symbol: HON
+    lokal: HON
+    primaer: NASDAQ
+    waehrung: USD
+    name: HONEYWELL INTERNATIONAL INC
+    boerse: SMART
+    art: aktie
+  HONA:
+    con_id: 891050670
+    symbol: HONA
+    lokal: HONA
+    primaer: NASDAQ
+    waehrung: USD
+    name: HONEYWELL AEROSPACE INC
+    boerse: SMART
+    art: aktie
+  HOOD:
+    con_id: 504546674
+    symbol: HOOD
+    lokal: HOOD
+    primaer: NASDAQ
+    waehrung: USD
+    name: ROBINHOOD MARKETS INC - A
+    boerse: SMART
+    art: aktie
+  HPE:
+    con_id: 209411798
+    symbol: HPE
+    lokal: HPE
+    primaer: NYSE
+    waehrung: USD
+    name: HEWLETT PACKARD ENTERPRISE
+    boerse: SMART
+    art: aktie
+  HPQ:
+    con_id: 209411801
+    symbol: HPQ
+    lokal: HPQ
+    primaer: NYSE
+    waehrung: USD
+    name: HP INC
+    boerse: SMART
+    art: aktie
+  HRL:
+    con_id: 8153
+    symbol: HRL
+    lokal: HRL
+    primaer: NYSE
+    waehrung: USD
+    name: HORMEL FOODS CORP
+    boerse: SMART
+    art: aktie
+  HSIC:
+    con_id: 3655640
+    symbol: HSIC
+    lokal: HSIC
+    primaer: NASDAQ
+    waehrung: USD
+    name: HENRY SCHEIN INC
+    boerse: SMART
+    art: aktie
+  HST:
+    con_id: 8057
+    symbol: HST
+    lokal: HST
+    primaer: NASDAQ
+    waehrung: USD
+    name: HOST HOTELS & RESORTS INC
+    boerse: SMART
+    art: aktie
+  HSY:
+    con_id: 8199
+    symbol: HSY
+    lokal: HSY
+    primaer: NYSE
+    waehrung: USD
+    name: HERSHEY CO/THE
+    boerse: SMART
+    art: aktie
+  HUBB:
+    con_id: 216386790
+    symbol: HUBB
+    lokal: HUBB
+    primaer: NYSE
+    waehrung: USD
+    name: HUBBELL INC
+    boerse: SMART
+    art: aktie
+  HUM:
+    con_id: 8251
+    symbol: HUM
+    lokal: HUM
+    primaer: NYSE
+    waehrung: USD
+    name: HUMANA INC
+    boerse: SMART
+    art: aktie
+  HWM:
+    con_id: 403121976
+    symbol: HWM
+    lokal: HWM
+    primaer: NYSE
+    waehrung: USD
+    name: HOWMET AEROSPACE INC
+    boerse: SMART
+    art: aktie
+  IBKR:
+    con_id: 43645865
+    symbol: IBKR
+    lokal: IBKR
+    primaer: NASDAQ
+    waehrung: USD
+    name: INTERACTIVE BROKERS GRO-CL A
+    boerse: SMART
+    art: aktie
+  IBM:
+    con_id: 8314
+    symbol: IBM
+    lokal: IBM
+    primaer: NYSE
+    waehrung: USD
+    name: INTL BUSINESS MACHINES CORP
+    boerse: SMART
+    art: aktie
+  ICE:
+    con_id: 136370275
+    symbol: ICE
+    lokal: ICE
+    primaer: NYSE
+    waehrung: USD
+    name: INTERCONTINENTAL EXCHANGE IN
+    boerse: SMART
+    art: aktie
+  IDXX:
+    con_id: 270413
+    symbol: IDXX
+    lokal: IDXX
+    primaer: NASDAQ
+    waehrung: USD
+    name: IDEXX LABORATORIES INC
+    boerse: SMART
+    art: aktie
+  IEX:
+    con_id: 8377
+    symbol: IEX
+    lokal: IEX
+    primaer: NYSE
+    waehrung: USD
+    name: IDEX CORP
+    boerse: SMART
+    art: aktie
+  IFF:
+    con_id: 8385
+    symbol: IFF
+    lokal: IFF
+    primaer: NYSE
+    waehrung: USD
+    name: INTL FLAVORS & FRAGRANCES
+    boerse: SMART
+    art: aktie
+  ILMN:
+    con_id: 9869443
+    symbol: ILMN
+    lokal: ILMN
+    primaer: NASDAQ
+    waehrung: USD
+    name: ILLUMINA INC
+    boerse: SMART
+    art: aktie
+  INCY:
+    con_id: 4369855
+    symbol: INCY
+    lokal: INCY
+    primaer: NASDAQ
+    waehrung: USD
+    name: INCYTE CORP
+    boerse: SMART
+    art: aktie
+  INTC:
+    con_id: 270639
+    symbol: INTC
+    lokal: INTC
+    primaer: NASDAQ
+    waehrung: USD
+    name: INTEL CORP
+    boerse: SMART
+    art: aktie
+  INTU:
+    con_id: 270662
+    symbol: INTU
+    lokal: INTU
+    primaer: NASDAQ
+    waehrung: USD
+    name: INTUIT INC
+    boerse: SMART
+    art: aktie
+  INVH:
+    con_id: 264405214
+    symbol: INVH
+    lokal: INVH
+    primaer: NYSE
+    waehrung: USD
+    name: INVITATION HOMES INC
+    boerse: SMART
+    art: aktie
+  IP:
+    con_id: 8511
+    symbol: IP
+    lokal: IP
+    primaer: NYSE
+    waehrung: USD
+    name: INTERNATIONAL PAPER CO
+    boerse: SMART
+    art: aktie
+  IQV:
+    con_id: 295757261
+    symbol: IQV
+    lokal: IQV
+    primaer: NYSE
+    waehrung: USD
+    name: IQVIA HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  IR:
+    con_id: 404509190
+    symbol: IR
+    lokal: IR
+    primaer: NYSE
+    waehrung: USD
+    name: INGERSOLL-RAND INC
+    boerse: SMART
+    art: aktie
+  IRM:
+    con_id: 180350774
+    symbol: IRM
+    lokal: IRM
+    primaer: NYSE
+    waehrung: USD
+    name: IRON MOUNTAIN INC
+    boerse: SMART
+    art: aktie
+  ISRG:
+    con_id: 9063285
+    symbol: ISRG
+    lokal: ISRG
+    primaer: NASDAQ
+    waehrung: USD
+    name: INTUITIVE SURGICAL INC
+    boerse: SMART
+    art: aktie
+  IT:
+    con_id: 4457287
+    symbol: IT
+    lokal: IT
+    primaer: NYSE
+    waehrung: USD
+    name: GARTNER INC
+    boerse: SMART
+    art: aktie
+  ITW:
+    con_id: 8620
+    symbol: ITW
+    lokal: ITW
+    primaer: NYSE
+    waehrung: USD
+    name: ILLINOIS TOOL WORKS
+    boerse: SMART
+    art: aktie
+  IVZ:
+    con_id: 47550606
+    symbol: IVZ
+    lokal: IVZ
+    primaer: NYSE
+    waehrung: USD
+    name: INVESCO LTD
+    boerse: SMART
+    art: aktie
+  J:
+    con_id: 582332987
+    symbol: J
+    lokal: J
+    primaer: NYSE
+    waehrung: USD
+    name: JACOBS SOLUTIONS INC
+    boerse: SMART
+    art: aktie
+  JBHT:
+    con_id: 270825
+    symbol: JBHT
+    lokal: JBHT
+    primaer: NASDAQ
+    waehrung: USD
+    name: HUNT (JB) TRANSPRT SVCS INC
+    boerse: SMART
+    art: aktie
+  JBL:
+    con_id: 4457282
+    symbol: JBL
+    lokal: JBL
+    primaer: NYSE
+    waehrung: USD
+    name: JABIL INC
+    boerse: SMART
+    art: aktie
+  JCI:
+    con_id: 244164913
+    symbol: JCI
+    lokal: JCI
+    primaer: NYSE
+    waehrung: USD
+    name: JOHNSON CONTROLS INTERNATION
+    boerse: SMART
+    art: aktie
+  JKHY:
+    con_id: 270869
+    symbol: JKHY
+    lokal: JKHY
+    primaer: NASDAQ
+    waehrung: USD
+    name: JACK HENRY & ASSOCIATES INC
+    boerse: SMART
+    art: aktie
+  JNJ:
+    con_id: 8719
+    symbol: JNJ
+    lokal: JNJ
+    primaer: NYSE
+    waehrung: USD
+    name: JOHNSON & JOHNSON
+    boerse: SMART
+    art: aktie
+  JPM:
+    con_id: 1520593
+    symbol: JPM
+    lokal: JPM
+    primaer: NYSE
+    waehrung: USD
+    name: JPMORGAN CHASE & CO
+    boerse: SMART
+    art: aktie
+  KDP:
+    con_id: 324057162
+    symbol: KDP
+    lokal: KDP
+    primaer: NASDAQ
+    waehrung: USD
+    name: KEURIG DR PEPPER INC
+    boerse: SMART
+    art: aktie
+  KEY:
+    con_id: 8809
+    symbol: KEY
+    lokal: KEY
+    primaer: NYSE
+    waehrung: USD
+    name: KEYCORP
+    boerse: SMART
+    art: aktie
+  KEYS:
+    con_id: 170167160
+    symbol: KEYS
+    lokal: KEYS
+    primaer: NYSE
+    waehrung: USD
+    name: KEYSIGHT TECHNOLOGIES IN
+    boerse: SMART
+    art: aktie
+  KHC:
+    con_id: 199169586
+    symbol: KHC
+    lokal: KHC
+    primaer: NYSE
+    waehrung: USD
+    name: KRAFT HEINZ CO/THE
+    boerse: SMART
+    art: aktie
+  KIM:
+    con_id: 8845
+    symbol: KIM
+    lokal: KIM
+    primaer: NYSE
+    waehrung: USD
+    name: KIMCO REALTY CORP
+    boerse: SMART
+    art: aktie
+  KKR:
+    con_id: 321328198
+    symbol: KKR
+    lokal: KKR
+    primaer: NYSE
+    waehrung: USD
+    name: KKR & CO INC
+    boerse: SMART
+    art: aktie
+  KLAC:
+    con_id: 270957
+    symbol: KLAC
+    lokal: KLAC
+    primaer: NASDAQ
+    waehrung: USD
+    name: KLA CORP
+    boerse: SMART
+    art: aktie
+  KMB:
+    con_id: 8864
+    symbol: KMB
+    lokal: KMB
+    primaer: NASDAQ
+    waehrung: USD
+    name: KIMBERLY-CLARK CORP
+    boerse: SMART
+    art: aktie
+  KMI:
+    con_id: 83975037
+    symbol: KMI
+    lokal: KMI
+    primaer: NYSE
+    waehrung: USD
+    name: KINDER MORGAN INC
+    boerse: SMART
+    art: aktie
+  KO:
+    con_id: 8894
+    symbol: KO
+    lokal: KO
+    primaer: NYSE
+    waehrung: USD
+    name: COCA-COLA CO/THE
+    boerse: SMART
+    art: aktie
+  KR:
+    con_id: 8908
+    symbol: KR
+    lokal: KR
+    primaer: NYSE
+    waehrung: USD
+    name: KROGER CO
+    boerse: SMART
+    art: aktie
+  L:
+    con_id: 9252
+    symbol: L
+    lokal: L
+    primaer: NYSE
+    waehrung: USD
+    name: LOEWS CORP
+    boerse: SMART
+    art: aktie
+  LDOS:
+    con_id: 134280621
+    symbol: LDOS
+    lokal: LDOS
+    primaer: NYSE
+    waehrung: USD
+    name: LEIDOS HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  LEN:
+    con_id: 9091
+    symbol: LEN
+    lokal: LEN
+    primaer: NYSE
+    waehrung: USD
+    name: LENNAR CORP-A
+    boerse: SMART
+    art: aktie
+  LH:
+    con_id: 703660032
+    symbol: LH
+    lokal: LH
+    primaer: NYSE
+    waehrung: USD
+    name: LABCORP HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  LHX:
+    con_id: 371886040
+    symbol: LHX
+    lokal: LHX
+    primaer: NYSE
+    waehrung: USD
+    name: L3HARRIS TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  LII:
+    con_id: 6608113
+    symbol: LII
+    lokal: LII
+    primaer: NYSE
+    waehrung: USD
+    name: LENNOX INTERNATIONAL INC
+    boerse: SMART
+    art: aktie
+  LIN:
+    con_id: 617155599
+    symbol: LIN
+    lokal: LIN
+    primaer: NASDAQ
+    waehrung: USD
+    name: LINDE PLC
+    boerse: SMART
+    art: aktie
+  LITE:
+    con_id: 201113895
+    symbol: LITE
+    lokal: LITE
+    primaer: NASDAQ
+    waehrung: USD
+    name: LUMENTUM HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  LLY:
+    con_id: 9160
+    symbol: LLY
+    lokal: LLY
+    primaer: NYSE
+    waehrung: USD
+    name: ELI LILLY & CO
+    boerse: SMART
+    art: aktie
+  LMT:
+    con_id: 611191
+    symbol: LMT
+    lokal: LMT
+    primaer: NYSE
+    waehrung: USD
+    name: LOCKHEED MARTIN CORP
+    boerse: SMART
+    art: aktie
+  LNT:
+    con_id: 5026984
+    symbol: LNT
+    lokal: LNT
+    primaer: NASDAQ
+    waehrung: USD
+    name: ALLIANT ENERGY CORP
+    boerse: SMART
+    art: aktie
+  LOW:
+    con_id: 9199
+    symbol: LOW
+    lokal: LOW
+    primaer: NYSE
+    waehrung: USD
+    name: LOWE'S COS INC
+    boerse: SMART
+    art: aktie
+  LRCX:
+    con_id: 732440574
+    symbol: LRCX
+    lokal: LRCX
+    primaer: NASDAQ
+    waehrung: USD
+    name: LAM RESEARCH CORP
+    boerse: SMART
+    art: aktie
+  LULU:
+    con_id: 45157951
+    symbol: LULU
+    lokal: LULU
+    primaer: NASDAQ
+    waehrung: USD
+    name: LULULEMON ATHLETICA INC
+    boerse: SMART
+    art: aktie
+  LUV:
+    con_id: 9282
+    symbol: LUV
+    lokal: LUV
+    primaer: NYSE
+    waehrung: USD
+    name: SOUTHWEST AIRLINES CO
+    boerse: SMART
+    art: aktie
+  LVS:
+    con_id: 32602412
+    symbol: LVS
+    lokal: LVS
+    primaer: NYSE
+    waehrung: USD
+    name: LAS VEGAS SANDS CORP
+    boerse: SMART
+    art: aktie
+  LYB:
+    con_id: 74866700
+    symbol: LYB
+    lokal: LYB
+    primaer: NYSE
+    waehrung: USD
+    name: LYONDELLBASELL INDU-CL A
+    boerse: SMART
+    art: aktie
+  LYV:
+    con_id: 37511786
+    symbol: LYV
+    lokal: LYV
+    primaer: NYSE
+    waehrung: USD
+    name: LIVE NATION ENTERTAINMENT IN
+    boerse: SMART
+    art: aktie
+  MA:
+    con_id: 38685693
+    symbol: MA
+    lokal: MA
+    primaer: NYSE
+    waehrung: USD
+    name: MASTERCARD INC - A
+    boerse: SMART
+    art: aktie
+  MAA:
+    con_id: 9317
+    symbol: MAA
+    lokal: MAA
+    primaer: NYSE
+    waehrung: USD
+    name: MID-AMERICA APARTMENT COMM
+    boerse: SMART
+    art: aktie
+  MAR:
+    con_id: 9358
+    symbol: MAR
+    lokal: MAR
+    primaer: NASDAQ
+    waehrung: USD
+    name: MARRIOTT INTERNATIONAL -CL A
+    boerse: SMART
+    art: aktie
+  MAS:
+    con_id: 9360
+    symbol: MAS
+    lokal: MAS
+    primaer: NYSE
+    waehrung: USD
+    name: MASCO CORP
+    boerse: SMART
+    art: aktie
+  MCD:
+    con_id: 9408
+    symbol: MCD
+    lokal: MCD
+    primaer: NYSE
+    waehrung: USD
+    name: MC DONALD'S-CORP
+    boerse: SMART
+    art: aktie
+  MCHP:
+    con_id: 271568
+    symbol: MCHP
+    lokal: MCHP
+    primaer: NASDAQ
+    waehrung: USD
+    name: MICROCHIP TECHNOLOGY INC
+    boerse: SMART
+    art: aktie
+  MCK:
+    con_id: 9657
+    symbol: MCK
+    lokal: MCK
+    primaer: NYSE
+    waehrung: USD
+    name: MCKESSON CORP
+    boerse: SMART
+    art: aktie
+  MCO:
+    con_id: 6497
+    symbol: MCO
+    lokal: MCO
+    primaer: NYSE
+    waehrung: USD
+    name: MOODY'S CORP
+    boerse: SMART
+    art: aktie
+  MDLZ:
+    con_id: 113599091
+    symbol: MDLZ
+    lokal: MDLZ
+    primaer: NASDAQ
+    waehrung: USD
+    name: MONDELEZ INTERNATIONAL INC-A
+    boerse: SMART
+    art: aktie
+  MDT:
+    con_id: 181387075
+    symbol: MDT
+    lokal: MDT
+    primaer: NYSE
+    waehrung: USD
+    name: MEDTRONIC PLC
+    boerse: SMART
+    art: aktie
+  MET:
+    con_id: 8093509
+    symbol: MET
+    lokal: MET
+    primaer: NYSE
+    waehrung: USD
+    name: METLIFE INC
+    boerse: SMART
+    art: aktie
+  META:
+    con_id: 107113386
+    symbol: META
+    lokal: META
+    primaer: NASDAQ
+    waehrung: USD
+    name: META PLATFORMS INC-CLASS A
+    boerse: SMART
+    art: aktie
+  MGM:
+    con_id: 9560
+    symbol: MGM
+    lokal: MGM
+    primaer: NYSE
+    waehrung: USD
+    name: MGM RESORTS INTERNATIONAL
+    boerse: SMART
+    art: aktie
+  MKC:
+    con_id: 271556
+    symbol: MKC
+    lokal: MKC
+    primaer: NYSE
+    waehrung: USD
+    name: MCCORMICK & CO-NON VTG SHRS
+    boerse: SMART
+    art: aktie
+  MLM:
+    con_id: 9690
+    symbol: MLM
+    lokal: MLM
+    primaer: NYSE
+    waehrung: USD
+    name: MARTIN MARIETTA MATERIALS
+    boerse: SMART
+    art: aktie
+  MMM:
+    con_id: 9720
+    symbol: MMM
+    lokal: MMM
+    primaer: NYSE
+    waehrung: USD
+    name: 3M CO
+    boerse: SMART
+    art: aktie
+  MNST:
+    con_id: 196986496
+    symbol: MNST
+    lokal: MNST
+    primaer: NASDAQ
+    waehrung: USD
+    name: MONSTER BEVERAGE CORP
+    boerse: SMART
+    art: aktie
+  MO:
+    con_id: 9769
+    symbol: MO
+    lokal: MO
+    primaer: NYSE
+    waehrung: USD
+    name: ALTRIA GROUP INC
+    boerse: SMART
+    art: aktie
+  MOS:
+    con_id: 88292752
+    symbol: MOS
+    lokal: MOS
+    primaer: NYSE
+    waehrung: USD
+    name: MOSAIC CO/THE
+    boerse: SMART
+    art: aktie
+  MPC:
+    con_id: 89495776
+    symbol: MPC
+    lokal: MPC
+    primaer: NYSE
+    waehrung: USD
+    name: MARATHON PETROLEUM CORP
+    boerse: SMART
+    art: aktie
+  MPWR:
+    con_id: 32106121
+    symbol: MPWR
+    lokal: MPWR
+    primaer: NASDAQ
+    waehrung: USD
+    name: MONOLITHIC POWER SYSTEMS INC
+    boerse: SMART
+    art: aktie
+  MRK:
+    con_id: 70101545
+    symbol: MRK
+    lokal: MRK
+    primaer: NYSE
+    waehrung: USD
+    name: MERCK & CO INC
+    boerse: SMART
+    art: aktie
+  MRNA:
+    con_id: 344809106
+    symbol: MRNA
+    lokal: MRNA
+    primaer: NASDAQ
+    waehrung: USD
+    name: MODERNA INC
+    boerse: SMART
+    art: aktie
+  MRSH:
+    con_id: 9705
+    symbol: MRSH
+    lokal: MRSH
+    primaer: NYSE
+    waehrung: USD
+    name: MARSH & MCLENNAN COS
+    boerse: SMART
+    art: aktie
+  MRVL:
+    con_id: 483492393
+    symbol: MRVL
+    lokal: MRVL
+    primaer: NASDAQ
+    waehrung: USD
+    name: MARVELL TECHNOLOGY INC
+    boerse: SMART
+    art: aktie
+  MS:
+    con_id: 2841574
+    symbol: MS
+    lokal: MS
+    primaer: NYSE
+    waehrung: USD
+    name: MORGAN STANLEY
+    boerse: SMART
+    art: aktie
+  MSCI:
+    con_id: 47101335
+    symbol: MSCI
+    lokal: MSCI
+    primaer: NYSE
+    waehrung: USD
+    name: MSCI INC
+    boerse: SMART
+    art: aktie
+  MSFT:
+    con_id: 272093
+    symbol: MSFT
+    lokal: MSFT
+    primaer: NASDAQ
+    waehrung: USD
+    name: MICROSOFT CORP
+    boerse: SMART
+    art: aktie
+  MSI:
+    con_id: 81581011
+    symbol: MSI
+    lokal: MSI
+    primaer: NYSE
+    waehrung: USD
+    name: MOTOROLA SOLUTIONS INC
+    boerse: SMART
+    art: aktie
+  MTB:
+    con_id: 2585323
+    symbol: MTB
+    lokal: MTB
+    primaer: NYSE
+    waehrung: USD
+    name: M & T BANK CORP
+    boerse: SMART
+    art: aktie
+  MTD:
+    con_id: 6477908
+    symbol: MTD
+    lokal: MTD
+    primaer: NYSE
+    waehrung: USD
+    name: METTLER-TOLEDO INTERNATIONAL
+    boerse: SMART
+    art: aktie
+  MU:
+    con_id: 9939
+    symbol: MU
+    lokal: MU
+    primaer: NASDAQ
+    waehrung: USD
+    name: MICRON TECHNOLOGY INC
+    boerse: SMART
+    art: aktie
+  NCLH:
+    con_id: 120643512
+    symbol: NCLH
+    lokal: NCLH
+    primaer: NYSE
+    waehrung: USD
+    name: NORWEGIAN CRUISE LINE HOLDIN
+    boerse: SMART
+    art: aktie
+  NDAQ:
+    con_id: 29380756
+    symbol: NDAQ
+    lokal: NDAQ
+    primaer: NASDAQ
+    waehrung: USD
+    name: NASDAQ INC
+    boerse: SMART
+    art: aktie
+  NDSN:
+    con_id: 272314
+    symbol: NDSN
+    lokal: NDSN
+    primaer: NASDAQ
+    waehrung: USD
+    name: NORDSON CORP
+    boerse: SMART
+    art: aktie
+  NEE:
+    con_id: 75960201
+    symbol: NEE
+    lokal: NEE
+    primaer: NYSE
+    waehrung: USD
+    name: NEXTERA ENERGY INC
+    boerse: SMART
+    art: aktie
+  NEM:
+    con_id: 10174
+    symbol: NEM
+    lokal: NEM
+    primaer: NYSE
+    waehrung: USD
+    name: NEWMONT CORP
+    boerse: SMART
+    art: aktie
+  NFLX:
+    con_id: 15124833
+    symbol: NFLX
+    lokal: NFLX
+    primaer: NASDAQ
+    waehrung: USD
+    name: NETFLIX INC
+    boerse: SMART
+    art: aktie
+  NI:
+    con_id: 10260
+    symbol: NI
+    lokal: NI
+    primaer: NYSE
+    waehrung: USD
+    name: NISOURCE INC
+    boerse: SMART
+    art: aktie
+  NKE:
+    con_id: 10291
+    symbol: NKE
+    lokal: NKE
+    primaer: NYSE
+    waehrung: USD
+    name: NIKE INC -CL B
+    boerse: SMART
+    art: aktie
+  NOC:
+    con_id: 10376
+    symbol: NOC
+    lokal: NOC
+    primaer: NYSE
+    waehrung: USD
+    name: NORTHROP GRUMMAN CORP
+    boerse: SMART
+    art: aktie
+  NOW:
+    con_id: 109911821
+    symbol: NOW
+    lokal: NOW
+    primaer: NYSE
+    waehrung: USD
+    name: SERVICENOW INC
+    boerse: SMART
+    art: aktie
+  NRG:
+    con_id: 10188791
+    symbol: NRG
+    lokal: NRG
+    primaer: NYSE
+    waehrung: USD
+    name: NRG ENERGY INC
+    boerse: SMART
+    art: aktie
+  NSC:
+    con_id: 10497
+    symbol: NSC
+    lokal: NSC
+    primaer: NYSE
+    waehrung: USD
+    name: NORFOLK SOUTHERN CORP
+    boerse: SMART
+    art: aktie
+  NTAP:
+    con_id: 49921110
+    symbol: NTAP
+    lokal: NTAP
+    primaer: NASDAQ
+    waehrung: USD
+    name: NETAPP INC
+    boerse: SMART
+    art: aktie
+  NTRS:
+    con_id: 272565
+    symbol: NTRS
+    lokal: NTRS
+    primaer: NASDAQ
+    waehrung: USD
+    name: NORTHERN TRUST CORP
+    boerse: SMART
+    art: aktie
+  NUE:
+    con_id: 10557
+    symbol: NUE
+    lokal: NUE
+    primaer: NYSE
+    waehrung: USD
+    name: NUCOR CORP
+    boerse: SMART
+    art: aktie
+  NVDA:
+    con_id: 4815747
+    symbol: NVDA
+    lokal: NVDA
+    primaer: NASDAQ
+    waehrung: USD
+    name: NVIDIA CORP
+    boerse: SMART
+    art: aktie
+  NVR:
+    con_id: 755864
+    symbol: NVR
+    lokal: NVR
+    primaer: NYSE
+    waehrung: USD
+    name: NVR INC
+    boerse: SMART
+    art: aktie
+  NWS:
+    con_id: 129348130
+    symbol: NWS
+    lokal: NWS
+    primaer: NASDAQ
+    waehrung: USD
+    name: NEWS CORP - CLASS B
+    boerse: SMART
+    art: aktie
+  NWSA:
+    con_id: 129348126
+    symbol: NWSA
+    lokal: NWSA
+    primaer: NASDAQ
+    waehrung: USD
+    name: NEWS CORP - CLASS A
+    boerse: SMART
+    art: aktie
+  NXPI:
+    con_id: 77791077
+    symbol: NXPI
+    lokal: NXPI
+    primaer: NASDAQ
+    waehrung: USD
+    name: NXP SEMICONDUCTORS NV
+    boerse: SMART
+    art: aktie
+  O:
+    con_id: 10672
+    symbol: O
+    lokal: O
+    primaer: NYSE
+    waehrung: USD
+    name: REALTY INCOME CORP
+    boerse: SMART
+    art: aktie
+  ODFL:
+    con_id: 272667
+    symbol: ODFL
+    lokal: ODFL
+    primaer: NASDAQ
+    waehrung: USD
+    name: OLD DOMINION FREIGHT LINE
+    boerse: SMART
+    art: aktie
+  OKE:
+    con_id: 921971937
+    symbol: OKE
+    lokal: OKE
+    primaer: NYSE
+    waehrung: USD
+    name: ONEOK INC
+    boerse: SMART
+    art: aktie
+  OMC:
+    con_id: 10811
+    symbol: OMC
+    lokal: OMC
+    primaer: NYSE
+    waehrung: USD
+    name: OMNICOM GROUP
+    boerse: SMART
+    art: aktie
+  ON:
+    con_id: 8677881
+    symbol: ON
+    lokal: ON
+    primaer: NASDAQ
+    waehrung: USD
+    name: ON SEMICONDUCTOR
+    boerse: SMART
+    art: aktie
+  ORCL:
+    con_id: 272800
+    symbol: ORCL
+    lokal: ORCL
+    primaer: NYSE
+    waehrung: USD
+    name: ORACLE CORP
+    boerse: SMART
+    art: aktie
+  ORLY:
+    con_id: 82457808
+    symbol: ORLY
+    lokal: ORLY
+    primaer: NASDAQ
+    waehrung: USD
+    name: O'REILLY AUTOMOTIVE INC
+    boerse: SMART
+    art: aktie
+  OTIS:
+    con_id: 410755402
+    symbol: OTIS
+    lokal: OTIS
+    primaer: NYSE
+    waehrung: USD
+    name: OTIS WORLDWIDE CORP
+    boerse: SMART
+    art: aktie
+  OXY:
+    con_id: 10880
+    symbol: OXY
+    lokal: OXY
+    primaer: NYSE
+    waehrung: USD
+    name: OCCIDENTAL PETROLEUM CORP
+    boerse: SMART
+    art: aktie
+  P:
+    con_id: 208813725
+    symbol: P
+    lokal: P
+    primaer: NYSE
+    waehrung: USD
+    name: EVERPURE INC-A
+    boerse: SMART
+    art: aktie
+  PANW:
+    con_id: 110619459
+    symbol: PANW
+    lokal: PANW
+    primaer: NASDAQ
+    waehrung: USD
+    name: PALO ALTO NETWORKS INC
+    boerse: SMART
+    art: aktie
+  PAYX:
+    con_id: 272942
+    symbol: PAYX
+    lokal: PAYX
+    primaer: NASDAQ
+    waehrung: USD
+    name: PAYCHEX INC
+    boerse: SMART
+    art: aktie
+  PCAR:
+    con_id: 272992
+    symbol: PCAR
+    lokal: PCAR
+    primaer: NASDAQ
+    waehrung: USD
+    name: PACCAR INC
+    boerse: SMART
+    art: aktie
+  PCG:
+    con_id: 2586035
+    symbol: PCG
+    lokal: PCG
+    primaer: NYSE
+    waehrung: USD
+    name: P G & E CORP
+    boerse: SMART
+    art: aktie
+  PEG:
+    con_id: 11005
+    symbol: PEG
+    lokal: PEG
+    primaer: NYSE
+    waehrung: USD
+    name: PUBLIC SERVICE ENTERPRISE GP
+    boerse: SMART
+    art: aktie
+  PEP:
+    con_id: 11017
+    symbol: PEP
+    lokal: PEP
+    primaer: NASDAQ
+    waehrung: USD
+    name: PEPSICO INC
+    boerse: SMART
+    art: aktie
+  PFE:
+    con_id: 11031
+    symbol: PFE
+    lokal: PFE
+    primaer: NYSE
+    waehrung: USD
+    name: PFIZER INC
+    boerse: SMART
+    art: aktie
+  PFG:
+    con_id: 11032
+    symbol: PFG
+    lokal: PFG
+    primaer: NASDAQ
+    waehrung: USD
+    name: PRINCIPAL FINANCIAL GROUP
+    boerse: SMART
+    art: aktie
+  PG:
+    con_id: 11054
+    symbol: PG
+    lokal: PG
+    primaer: NYSE
+    waehrung: USD
+    name: PROCTER & GAMBLE CO/THE
+    boerse: SMART
+    art: aktie
+  PGR:
+    con_id: 11080
+    symbol: PGR
+    lokal: PGR
+    primaer: NYSE
+    waehrung: USD
+    name: PROGRESSIVE CORP
+    boerse: SMART
+    art: aktie
+  PH:
+    con_id: 11094
+    symbol: PH
+    lokal: PH
+    primaer: NYSE
+    waehrung: USD
+    name: PARKER HANNIFIN CORP
+    boerse: SMART
+    art: aktie
+  PHM:
+    con_id: 11109
+    symbol: PHM
+    lokal: PHM
+    primaer: NYSE
+    waehrung: USD
+    name: PULTEGROUP INC
+    boerse: SMART
+    art: aktie
+  PKG:
+    con_id: 7740411
+    symbol: PKG
+    lokal: PKG
+    primaer: NYSE
+    waehrung: USD
+    name: PACKAGING CORP OF AMERICA
+    boerse: SMART
+    art: aktie
+  PLD:
+    con_id: 88819288
+    symbol: PLD
+    lokal: PLD
+    primaer: NYSE
+    waehrung: USD
+    name: PROLOGIS INC
+    boerse: SMART
+    art: aktie
+  PLTR:
+    con_id: 444857009
+    symbol: PLTR
+    lokal: PLTR
+    primaer: NASDAQ
+    waehrung: USD
+    name: PALANTIR TECHNOLOGIES INC-A
+    boerse: SMART
+    art: aktie
+  PM:
+    con_id: 49588376
+    symbol: PM
+    lokal: PM
+    primaer: NYSE
+    waehrung: USD
+    name: PHILIP MORRIS INTERNATIONAL
+    boerse: SMART
+    art: aktie
+  PNC:
+    con_id: 11240
+    symbol: PNC
+    lokal: PNC
+    primaer: NYSE
+    waehrung: USD
+    name: PNC FINANCIAL SERVICES GROUP
+    boerse: SMART
+    art: aktie
+  PNR:
+    con_id: 153068487
+    symbol: PNR
+    lokal: PNR
+    primaer: NYSE
+    waehrung: USD
+    name: PENTAIR PLC
+    boerse: SMART
+    art: aktie
+  PNW:
+    con_id: 11257
+    symbol: PNW
+    lokal: PNW
+    primaer: NYSE
+    waehrung: USD
+    name: PINNACLE WEST CAPITAL
+    boerse: SMART
+    art: aktie
+  PODD:
+    con_id: 44061838
+    symbol: PODD
+    lokal: PODD
+    primaer: NASDAQ
+    waehrung: USD
+    name: INSULET CORP
+    boerse: SMART
+    art: aktie
+  PPG:
+    con_id: 11295
+    symbol: PPG
+    lokal: PPG
+    primaer: NYSE
+    waehrung: USD
+    name: PPG INDUSTRIES INC
+    boerse: SMART
+    art: aktie
+  PPL:
+    con_id: 661547
+    symbol: PPL
+    lokal: PPL
+    primaer: NYSE
+    waehrung: USD
+    name: PPL CORP
+    boerse: SMART
+    art: aktie
+  PRU:
+    con_id: 13865082
+    symbol: PRU
+    lokal: PRU
+    primaer: NYSE
+    waehrung: USD
+    name: PRUDENTIAL FINANCIAL INC
+    boerse: SMART
+    art: aktie
+  PSA:
+    con_id: 12002
+    symbol: PSA
+    lokal: PSA
+    primaer: NYSE
+    waehrung: USD
+    name: PUBLIC STORAGE
+    boerse: SMART
+    art: aktie
+  PSX:
+    con_id: 105669270
+    symbol: PSX
+    lokal: PSX
+    primaer: NYSE
+    waehrung: USD
+    name: PHILLIPS 66
+    boerse: SMART
+    art: aktie
+  PTC:
+    con_id: 121507047
+    symbol: PTC
+    lokal: PTC
+    primaer: NASDAQ
+    waehrung: USD
+    name: PTC INC
+    boerse: SMART
+    art: aktie
+  PWR:
+    con_id: 6608432
+    symbol: PWR
+    lokal: PWR
+    primaer: NYSE
+    waehrung: USD
+    name: QUANTA SERVICES INC
+    boerse: SMART
+    art: aktie
+  PYPL:
+    con_id: 199169591
+    symbol: PYPL
+    lokal: PYPL
+    primaer: NASDAQ
+    waehrung: USD
+    name: PAYPAL HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  Q:
+    con_id: 824788107
+    symbol: Q
+    lokal: Q
+    primaer: NYSE
+    waehrung: USD
+    name: QNITY ELECTRONICS INC
+    boerse: SMART
+    art: aktie
+  QCOM:
+    con_id: 273544
+    symbol: QCOM
+    lokal: QCOM
+    primaer: NASDAQ
+    waehrung: USD
+    name: QUALCOMM INC
+    boerse: SMART
+    art: aktie
+  RCL:
+    con_id: 11520
+    symbol: RCL
+    lokal: RCL
+    primaer: NYSE
+    waehrung: USD
+    name: ROYAL CARIBBEAN CRUISES LTD
+    boerse: SMART
+    art: aktie
+  RDDT:
+    con_id: 692025016
+    symbol: RDDT
+    lokal: RDDT
+    primaer: NYSE
+    waehrung: USD
+    name: REDDIT INC-CL A
+    boerse: SMART
+    art: aktie
+  REG:
+    con_id: 11574
+    symbol: REG
+    lokal: REG
+    primaer: NASDAQ
+    waehrung: USD
+    name: REGENCY CENTERS CORP
+    boerse: SMART
+    art: aktie
+  REGN:
+    con_id: 273733
+    symbol: REGN
+    lokal: REGN
+    primaer: NASDAQ
+    waehrung: USD
+    name: REGENERON PHARMACEUTICALS
+    boerse: SMART
+    art: aktie
+  RF:
+    con_id: 273815
+    symbol: RF
+    lokal: RF
+    primaer: NYSE
+    waehrung: USD
+    name: REGIONS FINANCIAL CORP
+    boerse: SMART
+    art: aktie
+  RJF:
+    con_id: 11656
+    symbol: RJF
+    lokal: RJF
+    primaer: NYSE
+    waehrung: USD
+    name: RAYMOND JAMES FINANCIAL INC
+    boerse: SMART
+    art: aktie
+  RL:
+    con_id: 92306678
+    symbol: RL
+    lokal: RL
+    primaer: NYSE
+    waehrung: USD
+    name: RALPH LAUREN CORP
+    boerse: SMART
+    art: aktie
+  RMD:
+    con_id: 4817352
+    symbol: RMD
+    lokal: RMD
+    primaer: NYSE
+    waehrung: USD
+    name: RESMED INC
+    boerse: SMART
+    art: aktie
+  ROK:
+    con_id: 11697
+    symbol: ROK
+    lokal: ROK
+    primaer: NYSE
+    waehrung: USD
+    name: ROCKWELL AUTOMATION INC
+    boerse: SMART
+    art: aktie
+  ROL:
+    con_id: 11700
+    symbol: ROL
+    lokal: ROL
+    primaer: NYSE
+    waehrung: USD
+    name: ROLLINS INC
+    boerse: SMART
+    art: aktie
+  ROP:
+    con_id: 2585629
+    symbol: ROP
+    lokal: ROP
+    primaer: NASDAQ
+    waehrung: USD
+    name: ROPER TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  ROST:
+    con_id: 273939
+    symbol: ROST
+    lokal: ROST
+    primaer: NASDAQ
+    waehrung: USD
+    name: ROSS STORES INC
+    boerse: SMART
+    art: aktie
+  RSG:
+    con_id: 6478024
+    symbol: RSG
+    lokal: RSG
+    primaer: NYSE
+    waehrung: USD
+    name: REPUBLIC SERVICES INC
+    boerse: SMART
+    art: aktie
+  RTX:
+    con_id: 415342104
+    symbol: RTX
+    lokal: RTX
+    primaer: NYSE
+    waehrung: USD
+    name: RTX CORP
+    boerse: SMART
+    art: aktie
+  RVTY:
+    con_id: 6737
+    symbol: RVTY
+    lokal: RVTY
+    primaer: NYSE
+    waehrung: USD
+    name: REVVITY INC
+    boerse: SMART
+    art: aktie
+  SBAC:
+    con_id: 262397910
+    symbol: SBAC
+    lokal: SBAC
+    primaer: NASDAQ
+    waehrung: USD
+    name: SBA COMMUNICATIONS CORP
+    boerse: SMART
+    art: aktie
+  SBUX:
+    con_id: 274105
+    symbol: SBUX
+    lokal: SBUX
+    primaer: NASDAQ
+    waehrung: USD
+    name: STARBUCKS CORP
+    boerse: SMART
+    art: aktie
+  SCHW:
+    con_id: 11905
+    symbol: SCHW
+    lokal: SCHW
+    primaer: NYSE
+    waehrung: USD
+    name: SCHWAB (CHARLES) CORP
+    boerse: SMART
+    art: aktie
+  SHW:
+    con_id: 12120
+    symbol: SHW
+    lokal: SHW
+    primaer: NYSE
+    waehrung: USD
+    name: SHERWIN-WILLIAMS CO/THE
+    boerse: SMART
+    art: aktie
+  SJM:
+    con_id: 15130038
+    symbol: SJM
+    lokal: SJM
+    primaer: NYSE
+    waehrung: USD
+    name: JM SMUCKER CO/THE
+    boerse: SMART
+    art: aktie
+  SKYD:
+    con_id: 804144296
+    symbol: SKYD
+    lokal: SKYD
+    primaer: NYSE
+    waehrung: USD
+    name: SKYDANCE CORP
+    boerse: SMART
+    art: aktie
+  SLB:
+    con_id: 12200
+    symbol: SLB
+    lokal: SLB
+    primaer: NYSE
+    waehrung: USD
+    name: SLB LTD
+    boerse: SMART
+    art: aktie
+  SMCI:
+    con_id: 731466419
+    symbol: SMCI
+    lokal: SMCI
+    primaer: NASDAQ
+    waehrung: USD
+    name: SUPER MICRO COMPUTER INC
+    boerse: SMART
+    art: aktie
+  SNA:
+    con_id: 12259
+    symbol: SNA
+    lokal: SNA
+    primaer: NYSE
+    waehrung: USD
+    name: SNAP-ON INC
+    boerse: SMART
+    art: aktie
+  SNDK:
+    con_id: 760250490
+    symbol: SNDK
+    lokal: SNDK
+    primaer: NASDAQ
+    waehrung: USD
+    name: SANDISK CORP
+    boerse: SMART
+    art: aktie
+  SNPS:
+    con_id: 274499
+    symbol: SNPS
+    lokal: SNPS
+    primaer: NASDAQ
+    waehrung: USD
+    name: SYNOPSYS INC
+    boerse: SMART
+    art: aktie
+  SO:
+    con_id: 12300
+    symbol: SO
+    lokal: SO
+    primaer: NYSE
+    waehrung: USD
+    name: SOUTHERN CO/THE
+    boerse: SMART
+    art: aktie
+  SOLV:
+    con_id: 691984360
+    symbol: SOLV
+    lokal: SOLV
+    primaer: NYSE
+    waehrung: USD
+    name: SOLVENTUM CORP
+    boerse: SMART
+    art: aktie
+  SPG:
+    con_id: 2009113
+    symbol: SPG
+    lokal: SPG
+    primaer: NYSE
+    waehrung: USD
+    name: SIMON PROPERTY GROUP INC
+    boerse: SMART
+    art: aktie
+  SPGI:
+    con_id: 229629397
+    symbol: SPGI
+    lokal: SPGI
+    primaer: NYSE
+    waehrung: USD
+    name: S&P GLOBAL INC
+    boerse: SMART
+    art: aktie
+  SRE:
+    con_id: 11020
+    symbol: SRE
+    lokal: SRE
+    primaer: NYSE
+    waehrung: USD
+    name: SEMPRA
+    boerse: SMART
+    art: aktie
+  STE:
+    con_id: 358060563
+    symbol: STE
+    lokal: STE
+    primaer: NYSE
+    waehrung: USD
+    name: STERIS PLC
+    boerse: SMART
+    art: aktie
+  STLD:
+    con_id: 6478095
+    symbol: STLD
+    lokal: STLD
+    primaer: NASDAQ
+    waehrung: USD
+    name: STEEL DYNAMICS INC
+    boerse: SMART
+    art: aktie
+  STT:
+    con_id: 2730980
+    symbol: STT
+    lokal: STT
+    primaer: NYSE
+    waehrung: USD
+    name: STATE STREET CORP
+    boerse: SMART
+    art: aktie
+  STX:
+    con_id: 491932113
+    symbol: STX
+    lokal: STX
+    primaer: NASDAQ
+    waehrung: USD
+    name: SEAGATE TECHNOLOGY HOLDINGS
+    boerse: SMART
+    art: aktie
+  STZ:
+    con_id: 276066
+    symbol: STZ
+    lokal: STZ
+    primaer: NYSE
+    waehrung: USD
+    name: CONSTELLATION BRANDS INC-A
+    boerse: SMART
+    art: aktie
+  SW:
+    con_id: 713434903
+    symbol: SW
+    lokal: SW
+    primaer: NYSE
+    waehrung: USD
+    name: SMURFIT WESTROCK PLC
+    boerse: SMART
+    art: aktie
+  SWK:
+    con_id: 73354293
+    symbol: SWK
+    lokal: SWK
+    primaer: NYSE
+    waehrung: USD
+    name: STANLEY BLACK & DECKER INC
+    boerse: SMART
+    art: aktie
+  SWKS:
+    con_id: 4726021
+    symbol: SWKS
+    lokal: SWKS
+    primaer: NASDAQ
+    waehrung: USD
+    name: SKYWORKS SOLUTIONS INC
+    boerse: SMART
+    art: aktie
+  SYF:
+    con_id: 162231797
+    symbol: SYF
+    lokal: SYF
+    primaer: NYSE
+    waehrung: USD
+    name: SYNCHRONY FINANCIAL
+    boerse: SMART
+    art: aktie
+  SYK:
+    con_id: 4430948
+    symbol: SYK
+    lokal: SYK
+    primaer: NYSE
+    waehrung: USD
+    name: STRYKER CORP
+    boerse: SMART
+    art: aktie
+  SYY:
+    con_id: 12581
+    symbol: SYY
+    lokal: SYY
+    primaer: NYSE
+    waehrung: USD
+    name: SYSCO CORP
+    boerse: SMART
+    art: aktie
+  T:
+    con_id: 37018770
+    symbol: T
+    lokal: T
+    primaer: NYSE
+    waehrung: USD
+    name: AT&T INC
+    boerse: SMART
+    art: aktie
+  TDG:
+    con_id: 38285434
+    symbol: TDG
+    lokal: TDG
+    primaer: NYSE
+    waehrung: USD
+    name: TRANSDIGM GROUP INC
+    boerse: SMART
+    art: aktie
+  TDY:
+    con_id: 6340773
+    symbol: TDY
+    lokal: TDY
+    primaer: NYSE
+    waehrung: USD
+    name: TELEDYNE TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  TECH:
+    con_id: 172729810
+    symbol: TECH
+    lokal: TECH
+    primaer: NASDAQ
+    waehrung: USD
+    name: BIO-TECHNE CORP
+    boerse: SMART
+    art: aktie
+  TEL:
+    con_id: 731466408
+    symbol: TEL
+    lokal: TEL
+    primaer: NYSE
+    waehrung: USD
+    name: TE CONNECTIVITY PLC
+    boerse: SMART
+    art: aktie
+  TER:
+    con_id: 12729
+    symbol: TER
+    lokal: TER
+    primaer: NASDAQ
+    waehrung: USD
+    name: TERADYNE INC
+    boerse: SMART
+    art: aktie
+  TFC:
+    con_id: 393460310
+    symbol: TFC
+    lokal: TFC
+    primaer: NYSE
+    waehrung: USD
+    name: TRUIST FINANCIAL CORP
+    boerse: SMART
+    art: aktie
+  TGT:
+    con_id: 6437
+    symbol: TGT
+    lokal: TGT
+    primaer: NYSE
+    waehrung: USD
+    name: TARGET CORP
+    boerse: SMART
+    art: aktie
+  TJX:
+    con_id: 12814
+    symbol: TJX
+    lokal: TJX
+    primaer: NYSE
+    waehrung: USD
+    name: TJX COMPANIES INC
+    boerse: SMART
+    art: aktie
+  TKO:
+    con_id: 652841542
+    symbol: TKO
+    lokal: TKO
+    primaer: NYSE
+    waehrung: USD
+    name: TKO GROUP HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  TMO:
+    con_id: 12869
+    symbol: TMO
+    lokal: TMO
+    primaer: NYSE
+    waehrung: USD
+    name: THERMO FISHER SCIENTIFIC INC
+    boerse: SMART
+    art: aktie
+  TMUS:
+    con_id: 125980227
+    symbol: TMUS
+    lokal: TMUS
+    primaer: NASDAQ
+    waehrung: USD
+    name: T-MOBILE US INC
+    boerse: SMART
+    art: aktie
+  TPL:
+    con_id: 463654490
+    symbol: TPL
+    lokal: TPL
+    primaer: NYSE
+    waehrung: USD
+    name: TEXAS PACIFIC LAND CORP
+    boerse: SMART
+    art: aktie
+  TPR:
+    con_id: 292491487
+    symbol: TPR
+    lokal: TPR
+    primaer: NYSE
+    waehrung: USD
+    name: TAPESTRY INC
+    boerse: SMART
+    art: aktie
+  TRGP:
+    con_id: 81671838
+    symbol: TRGP
+    lokal: TRGP
+    primaer: NYSE
+    waehrung: USD
+    name: TARGA RESOURCES CORP
+    boerse: SMART
+    art: aktie
+  TRMB:
+    con_id: 275294
+    symbol: TRMB
+    lokal: TRMB
+    primaer: NASDAQ
+    waehrung: USD
+    name: TRIMBLE INC
+    boerse: SMART
+    art: aktie
+  TROW:
+    con_id: 275321
+    symbol: TROW
+    lokal: TROW
+    primaer: NASDAQ
+    waehrung: USD
+    name: T ROWE PRICE GROUP INC
+    boerse: SMART
+    art: aktie
+  TRV:
+    con_id: 43150617
+    symbol: TRV
+    lokal: TRV
+    primaer: NYSE
+    waehrung: USD
+    name: TRAVELERS COS INC/THE
+    boerse: SMART
+    art: aktie
+  TSCO:
+    con_id: 6858322
+    symbol: TSCO
+    lokal: TSCO
+    primaer: NASDAQ
+    waehrung: USD
+    name: TRACTOR SUPPLY COMPANY
+    boerse: SMART
+    art: aktie
+  TSLA:
+    con_id: 76792991
+    symbol: TSLA
+    lokal: TSLA
+    primaer: NASDAQ
+    waehrung: USD
+    name: TESLA INC
+    boerse: SMART
+    art: aktie
+  TSN:
+    con_id: 275405
+    symbol: TSN
+    lokal: TSN
+    primaer: NYSE
+    waehrung: USD
+    name: TYSON FOODS INC-CL A
+    boerse: SMART
+    art: aktie
+  TT:
+    con_id: 406709270
+    symbol: TT
+    lokal: TT
+    primaer: NYSE
+    waehrung: USD
+    name: TRANE TECHNOLOGIES PLC
+    boerse: SMART
+    art: aktie
+  TTWO:
+    con_id: 6478131
+    symbol: TTWO
+    lokal: TTWO
+    primaer: NASDAQ
+    waehrung: USD
+    name: TAKE-TWO INTERACTIVE SOFTWRE
+    boerse: SMART
+    art: aktie
+  TWLO:
+    con_id: 237794430
+    symbol: TWLO
+    lokal: TWLO
+    primaer: NYSE
+    waehrung: USD
+    name: TWILIO INC - A
+    boerse: SMART
+    art: aktie
+  TXN:
+    con_id: 13096
+    symbol: TXN
+    lokal: TXN
+    primaer: NASDAQ
+    waehrung: USD
+    name: TEXAS INSTRUMENTS INC
+    boerse: SMART
+    art: aktie
+  TXT:
+    con_id: 13101
+    symbol: TXT
+    lokal: TXT
+    primaer: NYSE
+    waehrung: USD
+    name: TEXTRON INC
+    boerse: SMART
+    art: aktie
+  TYL:
+    con_id: 13116
+    symbol: TYL
+    lokal: TYL
+    primaer: NYSE
+    waehrung: USD
+    name: TYLER TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  UAL:
+    con_id: 79498203
+    symbol: UAL
+    lokal: UAL
+    primaer: NASDAQ
+    waehrung: USD
+    name: UNITED AIRLINES HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  UBER:
+    con_id: 365207014
+    symbol: UBER
+    lokal: UBER
+    primaer: NYSE
+    waehrung: USD
+    name: UBER TECHNOLOGIES INC
+    boerse: SMART
+    art: aktie
+  UDR:
+    con_id: 43274444
+    symbol: UDR
+    lokal: UDR
+    primaer: NYSE
+    waehrung: USD
+    name: UDR INC
+    boerse: SMART
+    art: aktie
+  UHS:
+    con_id: 13206
+    symbol: UHS
+    lokal: UHS
+    primaer: NYSE
+    waehrung: USD
+    name: UNIVERSAL HEALTH SERVICES-B
+    boerse: SMART
+    art: aktie
+  ULTA:
+    con_id: 46970422
+    symbol: ULTA
+    lokal: ULTA
+    primaer: NASDAQ
+    waehrung: USD
+    name: ULTA BEAUTY INC
+    boerse: SMART
+    art: aktie
+  UNH:
+    con_id: 13272
+    symbol: UNH
+    lokal: UNH
+    primaer: NYSE
+    waehrung: USD
+    name: UNITEDHEALTH GROUP INC
+    boerse: SMART
+    art: aktie
+  UNP:
+    con_id: 13284
+    symbol: UNP
+    lokal: UNP
+    primaer: NYSE
+    waehrung: USD
+    name: UNION PACIFIC CORP
+    boerse: SMART
+    art: aktie
+  UPS:
+    con_id: 6231002
+    symbol: UPS
+    lokal: UPS
+    primaer: NYSE
+    waehrung: USD
+    name: UNITED PARCEL SERVICE-CL B
+    boerse: SMART
+    art: aktie
+  URI:
+    con_id: 3629755
+    symbol: URI
+    lokal: URI
+    primaer: NYSE
+    waehrung: USD
+    name: UNITED RENTALS INC
+    boerse: SMART
+    art: aktie
+  USB:
+    con_id: 11669769
+    symbol: USB
+    lokal: USB
+    primaer: NYSE
+    waehrung: USD
+    name: US BANCORP
+    boerse: SMART
+    art: aktie
+  V:
+    con_id: 49462172
+    symbol: V
+    lokal: V
+    primaer: NYSE
+    waehrung: USD
+    name: VISA INC-CLASS A SHARES
+    boerse: SMART
+    art: aktie
+  VEEV:
+    con_id: 136254493
+    symbol: VEEV
+    lokal: VEEV
+    primaer: NYSE
+    waehrung: USD
+    name: VEEVA SYSTEMS INC-CLASS A
+    boerse: SMART
+    art: aktie
+  VICI:
+    con_id: 292080616
+    symbol: VICI
+    lokal: VICI
+    primaer: NYSE
+    waehrung: USD
+    name: VICI PROPERTIES INC
+    boerse: SMART
+    art: aktie
+  VLO:
+    con_id: 13497
+    symbol: VLO
+    lokal: VLO
+    primaer: NYSE
+    waehrung: USD
+    name: VALERO ENERGY CORP
+    boerse: SMART
+    art: aktie
+  VLTO:
+    con_id: 655276622
+    symbol: VLTO
+    lokal: VLTO
+    primaer: NYSE
+    waehrung: USD
+    name: VERALTO CORP
+    boerse: SMART
+    art: aktie
+  VMC:
+    con_id: 13515
+    symbol: VMC
+    lokal: VMC
+    primaer: NYSE
+    waehrung: USD
+    name: VULCAN MATERIALS CO
+    boerse: SMART
+    art: aktie
+  VMRK:
+    con_id: 6917
+    symbol: VMRK
+    lokal: VMRK
+    primaer: NYSE
+    waehrung: USD
+    name: VIVMARK RESIDENTIAL
+    boerse: SMART
+    art: aktie
+  VRSK:
+    con_id: 69293559
+    symbol: VRSK
+    lokal: VRSK
+    primaer: NASDAQ
+    waehrung: USD
+    name: VERISK ANALYTICS INC
+    boerse: SMART
+    art: aktie
+  VRSN:
+    con_id: 4173050
+    symbol: VRSN
+    lokal: VRSN
+    primaer: NASDAQ
+    waehrung: USD
+    name: VERISIGN INC
+    boerse: SMART
+    art: aktie
+  VRT:
+    con_id: 402783527
+    symbol: VRT
+    lokal: VRT
+    primaer: NYSE
+    waehrung: USD
+    name: VERTIV HOLDINGS CO-A
+    boerse: SMART
+    art: aktie
+  VRTX:
+    con_id: 275850
+    symbol: VRTX
+    lokal: VRTX
+    primaer: NASDAQ
+    waehrung: USD
+    name: VERTEX PHARMACEUTICALS INC
+    boerse: SMART
+    art: aktie
+  VST:
+    con_id: 254457731
+    symbol: VST
+    lokal: VST
+    primaer: NYSE
+    waehrung: USD
+    name: VISTRA CORP
+    boerse: SMART
+    art: aktie
+  VTR:
+    con_id: 4044062
+    symbol: VTR
+    lokal: VTR
+    primaer: NYSE
+    waehrung: USD
+    name: VENTAS INC.
+    boerse: SMART
+    art: aktie
+  VTRS:
+    con_id: 454859695
+    symbol: VTRS
+    lokal: VTRS
+    primaer: NASDAQ
+    waehrung: USD
+    name: VIATRIS INC
+    boerse: SMART
+    art: aktie
+  VYLR:
+    con_id: 924693476
+    symbol: VYLR
+    lokal: VYLR
+    primaer: NYSE
+    waehrung: USD
+    name: VYLOR INC
+    boerse: SMART
+    art: aktie
+  VZ:
+    con_id: 4901
+    symbol: VZ
+    lokal: VZ
+    primaer: NYSE
+    waehrung: USD
+    name: VERIZON COMMUNICATIONS INC
+    boerse: SMART
+    art: aktie
+  WAB:
+    con_id: 661633
+    symbol: WAB
+    lokal: WAB
+    primaer: NYSE
+    waehrung: USD
+    name: WABTEC CORP
+    boerse: SMART
+    art: aktie
+  WAT:
+    con_id: 1448494
+    symbol: WAT
+    lokal: WAT
+    primaer: NYSE
+    waehrung: USD
+    name: WATERS CORP
+    boerse: SMART
+    art: aktie
+  WDAY:
+    con_id: 115324104
+    symbol: WDAY
+    lokal: WDAY
+    primaer: NASDAQ
+    waehrung: USD
+    name: WORKDAY INC-CLASS A
+    boerse: SMART
+    art: aktie
+  WDC:
+    con_id: 13681
+    symbol: WDC
+    lokal: WDC
+    primaer: NASDAQ
+    waehrung: USD
+    name: WESTERN DIGITAL CORP
+    boerse: SMART
+    art: aktie
+  WEC:
+    con_id: 198560237
+    symbol: WEC
+    lokal: WEC
+    primaer: NYSE
+    waehrung: USD
+    name: WEC ENERGY GROUP INC
+    boerse: SMART
+    art: aktie
+  WELL:
+    con_id: 207739931
+    symbol: WELL
+    lokal: WELL
+    primaer: NYSE
+    waehrung: USD
+    name: WELLTOWER INC
+    boerse: SMART
+    art: aktie
+  WFC:
+    con_id: 10375
+    symbol: WFC
+    lokal: WFC
+    primaer: NYSE
+    waehrung: USD
+    name: WELLS FARGO & CO
+    boerse: SMART
+    art: aktie
+  WM:
+    con_id: 13379
+    symbol: WM
+    lokal: WM
+    primaer: NYSE
+    waehrung: USD
+    name: WASTE MANAGEMENT INC
+    boerse: SMART
+    art: aktie
+  WMB:
+    con_id: 13805
+    symbol: WMB
+    lokal: WMB
+    primaer: NYSE
+    waehrung: USD
+    name: WILLIAMS COS INC
+    boerse: SMART
+    art: aktie
+  WMT:
+    con_id: 13824
+    symbol: WMT
+    lokal: WMT
+    primaer: NASDAQ
+    waehrung: USD
+    name: WALMART INC
+    boerse: SMART
+    art: aktie
+  WRB:
+    con_id: 266822
+    symbol: WRB
+    lokal: WRB
+    primaer: NYSE
+    waehrung: USD
+    name: WR BERKLEY CORP
+    boerse: SMART
+    art: aktie
+  WSM:
+    con_id: 5019164
+    symbol: WSM
+    lokal: WSM
+    primaer: NYSE
+    waehrung: USD
+    name: WILLIAMS-SONOMA INC
+    boerse: SMART
+    art: aktie
+  WST:
+    con_id: 13909
+    symbol: WST
+    lokal: WST
+    primaer: NYSE
+    waehrung: USD
+    name: WEST PHARMACEUTICAL SERVICES
+    boerse: SMART
+    art: aktie
+  WTW:
+    con_id: 217947855
+    symbol: WTW
+    lokal: WTW
+    primaer: NASDAQ
+    waehrung: USD
+    name: WILLIS TOWERS WATSON PLC
+    boerse: SMART
+    art: aktie
+  WY:
+    con_id: 13949
+    symbol: WY
+    lokal: WY
+    primaer: NYSE
+    waehrung: USD
+    name: WEYERHAEUSER CO
+    boerse: SMART
+    art: aktie
+  WYNN:
+    con_id: 16454492
+    symbol: WYNN
+    lokal: WYNN
+    primaer: NASDAQ
+    waehrung: USD
+    name: WYNN RESORTS LTD
+    boerse: SMART
+    art: aktie
+  XEL:
+    con_id: 10517
+    symbol: XEL
+    lokal: XEL
+    primaer: NASDAQ
+    waehrung: USD
+    name: XCEL ENERGY INC
+    boerse: SMART
+    art: aktie
+  XOM:
+    con_id: 895178251
+    symbol: XOM
+    lokal: XOM
+    primaer: NYSE
+    waehrung: USD
+    name: EXXONMOBIL HOLDINGS CORP
+    boerse: SMART
+    art: aktie
+  XYL:
+    con_id: 95703740
+    symbol: XYL
+    lokal: XYL
+    primaer: NYSE
+    waehrung: USD
+    name: XYLEM INC
+    boerse: SMART
+    art: aktie
+  XYZ:
+    con_id: 212671971
+    symbol: XYZ
+    lokal: XYZ
+    primaer: NYSE
+    waehrung: USD
+    name: BLOCK INC
+    boerse: SMART
+    art: aktie
+  YUM:
+    con_id: 3206042
+    symbol: YUM
+    lokal: YUM
+    primaer: NYSE
+    waehrung: USD
+    name: YUM! BRANDS INC
+    boerse: SMART
+    art: aktie
+  ZBH:
+    con_id: 12851783
+    symbol: ZBH
+    lokal: ZBH
+    primaer: NYSE
+    waehrung: USD
+    name: ZIMMER BIOMET HOLDINGS INC
+    boerse: SMART
+    art: aktie
+  ZBRA:
+    con_id: 276304
+    symbol: ZBRA
+    lokal: ZBRA
+    primaer: NASDAQ
+    waehrung: USD
+    name: ZEBRA TECHNOLOGIES CORP-CL A
+    boerse: SMART
+    art: aktie
+  ZTS:
+    con_id: 121665622
+    symbol: ZTS
+    lokal: ZTS
+    primaer: NYSE
+    waehrung: USD
+    name: ZOETIS INC
+    boerse: SMART
+    art: aktie
+nicht_aufloesbar:
+  SXRM.DE: 'ISIN IE00B3VWN518: kein eindeutiger Kontrakt in USD mit Xetra-Platz IBIS2 (0 Treffer)'
+  KVUE: 0 Treffer (Symbol KVUE, SMART, USD)

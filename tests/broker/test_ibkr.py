@@ -25,7 +25,7 @@ class IBAttrappe:
             if anfrage.conId and int(e["con_id"]) == anfrage.conId or (not anfrage.conId and anfrage.symbol == e["symbol"]
                                                                         and anfrage.exchange in ("IBIS2", "SMART")):
                 # wie IBKR: unter SMART ist localSymbol das IBKR-Symbol (IEMA), nur unter IBIS2 das Xetra-Kürzel (EUNM)
-                lokal = e["symbol"] if anfrage.exchange == "SMART" else e["xetra_kuerzel"]
+                lokal = e["lokal"] if anfrage.exchange == "SMART" else t.split(".")[0]
                 return [SimpleNamespace(contract=SimpleNamespace(conId=int(e["con_id"]), symbol=e["symbol"], localSymbol=lokal,
                                                                  exchange=anfrage.exchange, primaryExchange="AEB", currency=e["waehrung"]),
                                         validExchanges="SMART,AEB,IBIS2", marketRuleIds=self.regel_ids.get(t, "1874,1874,1874"))]
@@ -254,3 +254,29 @@ def test_kontrakt_unveraendert_wie_von_ibkr(tmp_path):
         assert gesendet.exchange == "SMART" and gesendet.primaryExchange == "AEB" and gesendet.localSymbol != ticker[:-3]
     a = anfragen[-1]
     assert a.conId and a.exchange == "SMART" and not a.symbol and not a.localSymbol and not a.primaryExchange
+
+
+def test_ibkr_gebuehr_leerwert():
+    from tradingbot.broker.ibkr import ibkr_gebuehr
+    assert ibkr_gebuehr(SimpleNamespace(commissionReport=SimpleNamespace(commission=1.7976931348623157e308))) is None
+    assert ibkr_gebuehr(SimpleNamespace(commissionReport=None)) is None
+    assert ibkr_gebuehr(SimpleNamespace(commissionReport=SimpleNamespace(commission=0.0))) == 0.0
+    assert ibkr_gebuehr(SimpleNamespace(commissionReport=SimpleNamespace(commission=1.25))) == 1.25
+
+
+def test_tabelle_deckt_universum_ab():
+    """Zuordnungstabelle 04.11.2026: Core, Satellite (außer SXRM), Xetra-Gold, EUR.USD und S&P-500-Aktien."""
+    from tradingbot.broker.ibkr import kontrakttabelle, nicht_aufloesbar
+    tab = kontrakttabelle()
+    assert int(tab["4GLD.DE"]["con_id"]) == 50784405 and tab["4GLD.DE"]["boerse"] == "IBIS"
+    assert int(tab["EUR.USD"]["con_id"]) == 12087792 and tab["EUR.USD"]["boerse"] == "IDEALPRO"
+    assert sum(1 for e in tab.values() if e["art"] == "aktie") > 450 and "SXRM.DE" in nicht_aufloesbar()
+
+
+def test_nicht_aufloesbar_veto(tmp_path):
+    from tradingbot.broker.basis import KontraktUnbekannt
+    b = broker(tmp_path)
+    with pytest.raises(KontraktUnbekannt, match="SXRM.DE"):
+        b.kontrakt_aufloesen("SXRM.DE", "etf", "USD")
+    k = b.kontrakt_aufloesen("EUR.USD", "fx", "USD")
+    assert k.conId == 12087792

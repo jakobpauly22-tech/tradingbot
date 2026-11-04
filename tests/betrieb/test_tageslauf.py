@@ -46,11 +46,19 @@ class BrokerAttrappe:
         self.antwort, self.unbekannt = antwort, set(unbekannt)
 
     def verbunden(self):
-        return self._verbunden
+        return self._verbunden and not self._getrennt
 
     def verbinden(self):
+        if self._getrennt:
+            self._getrennt = False
+            return
         if not self._verbunden:
             raise ConnectionRefusedError("Gateway aus")
+
+    _getrennt = False
+
+    def trennen(self):
+        self._getrennt = True
 
     def ausfuehrungen(self):
         return self._fills
@@ -414,3 +422,39 @@ def test_orders_unterwegs_halbieren_nicht_die_stueckzahl(umgebung):
     assert verglichen
     for t in verglichen:
         assert neu[t] == kaeufe[t], (t, neu[t], kaeufe[t])
+
+
+def test_gebuehr_ibkr_gegen_modell_und_trennen(umgebung):
+    """Kasse bucht die Modellgebühr (1,25 € Minimum, Tiered), die IBKR-Gebühr (Paper ≈ 0) steht daneben und im Protokoll
+    (Jakob 04.11.2026). Nach Freigabe/Senden wird die Verbindung getrennt."""
+    j, rm = umgebung
+    lauf(j, rm)
+    z = next(x for x in j.vorschlaege(buch="real") if x["status"] == "vorgeschlagen")
+    b = BrokerAttrappe()
+    m = freigeben_und_senden(j, [z["id"]], b, ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    assert "Verbindung zum Gateway getrennt" in m and not b.verbunden()
+    fills = [{"exec_id": "e1", "order_ref": f"real:{z['id']}", "ticker": "SPYI.DE", "richtung": 1, "stueck": 20, "preis": 11.62,
+              "waehrung": "EUR", "gebuehr": 0.0, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04T09:00", "boerse": "IBIS2"},
+             {"exec_id": "e2", "order_ref": f"real:{z['id']}", "ticker": "SPYI.DE", "richtung": 1, "stueck": 22, "preis": 11.62,
+              "waehrung": "EUR", "gebuehr": None, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04T09:00", "boerse": "IBIS2"}]
+    naechster = datetime(2026, 11, 4, 19, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+    e = lauf(j, rm, jetzt=naechster, broker=BrokerAttrappe(fills=fills, positionen=[Position("DU1", "SPYI.DE", 42, 11.62)]))
+    zeilen = [x for x in e.meldungen if x.startswith("Ausführung real")]
+    assert len(zeilen) == 2 and "Gebühr IBKR 0.00 EUR, Modell 1.25 € (gebucht), Abweichung IBKR − Modell -1.25 €" in zeilen[0]
+    assert "nicht gemeldet" in zeilen[1] and "Modell 0.00 €" in zeilen[1]        # Minimum nur einmal je Order
+    assert abs(j.kasse("real") - (500 - 42 * 11.62 - 1.25)) < 1e-6
+    r = j.db.execute("SELECT SUM(gebuehr_eur), SUM(gebuehr_ibkr) FROM ausfuehrungen").fetchone()
+    assert abs(r[0] - 1.25) < 1e-9 and r[1] == 0.0
+
+
+def test_technikbuch_ohne_kauf_baut_am_naechsten_tag_wieder_auf(umgebung):
+    """Momentum war am 03.11. gesperrt, der Zustand galt trotzdem als aufgebaut → am 04.11. keine Vorschläge bis zur
+    Monatsprüfung. Korrektur 04.11.2026: ohne Bestand und ohne Order unterwegs Aufbau wie beim ersten Lauf."""
+    j, rm = umgebung
+    e1 = lauf(j, rm)
+    erst = {bv.vorschlag.ticker for bv, _ in e1.vorschlaege if bv.vorschlag.buch == "momentum" and bv.vorschlag.richtung > 0}
+    assert erst
+    naechster = datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))      # kein erster Handelstag des Monats
+    e2 = lauf(j, rm, jetzt=naechster)
+    zweit = {bv.vorschlag.ticker for bv, _ in e2.vorschlaege if bv.vorschlag.buch == "momentum" and bv.vorschlag.richtung > 0}
+    assert zweit == erst and any("Aufbau wie beim ersten Lauf" in m for m in e2.meldungen)

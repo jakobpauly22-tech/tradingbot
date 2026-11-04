@@ -44,20 +44,50 @@ class Laufergebnis:
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
-def einlesen(journal, broker, fx: dict[str, float]) -> list[str]:
-    """Ausführungen der Bot-Orders ins Journal; gibt die Bücher mit neuen Ausführungen zurück."""
+def modellgebuehr_eur(kosten, ticker: str, waehrung: str, stueck: float, wert_eur: float, fx: dict[str, float]) -> float:
+    """Gebühr laut Kostenmodell (config/backtest.yaml, IBKR Tiered: 1,25 € Minimum an EUR-Börsen; US-Aktien je Stück)."""
+    plan = "USD" if waehrung == "USD" and not ticker.endswith(".DE") else "EUR"
+    return float(kosten.gebuehren_eur(plan, stueck, wert_eur, fx.get("USD", 1.0)))
+
+
+def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: list[str] | None = None) -> list[str]:
+    """Ausführungen der Bot-Orders ins Journal; gibt die Bücher mit neuen Ausführungen zurück.
+
+    Mit `kosten` (Jakob 04.11.2026): gebucht wird die Modellgebühr je Order (bei Teilausführungen anteilig, das Minimum
+    einmal je Order); die tatsächliche IBKR-Gebühr wird daneben gespeichert und im Protokoll gegenübergestellt."""
     neu = []
     for a in broker.ausfuehrungen():
-        fg = fx.get(a["gebuehr_waehrung"], 1.0) if a["gebuehr_waehrung"] != "EUR" else 1.0
+        ibkr, ibkr_w = a["gebuehr"], a["gebuehr_waehrung"]
+        fg = fx.get(ibkr_w, 1.0) if ibkr_w != "EUR" else 1.0
+        ibkr_eur = None if ibkr is None else ibkr / fg
         if a.get("art") == "fx":
-            if journal.tausch(a["exec_id"], a["order_ref"], a["von"], a["nach"], a["betrag_von"], a["betrag_nach"], a["gebuehr"] / fg, a["zeit"]):
+            modell = kosten.tauschkosten_eur("USD", a["betrag_nach"], fx.get("USD", 1.0)) if kosten else (ibkr_eur or 0.0)
+            if journal.tausch(a["exec_id"], a["order_ref"], a["von"], a["nach"], a["betrag_von"], a["betrag_nach"], modell, a["zeit"],
+                              gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w):
                 neu.append(a["order_ref"].split(":")[0])
+                if protokoll is not None:
+                    protokoll.append(f"Tausch {a['betrag_von']:,.2f} EUR → {a['betrag_nach']:,.2f} USD: Gebühr IBKR "
+                                     f"{'nicht gemeldet' if ibkr is None else f'{ibkr:.2f} {ibkr_w}'}, Modell {modell:.2f} €")
             continue
         f = fx.get(a["waehrung"], 1.0) if a["waehrung"] != "EUR" else 1.0
-        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], a["preis"] / f, a["gebuehr"] / fg, a["zeit"],
-                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=a["gebuehr"], gebuehr_waehrung=a["gebuehr_waehrung"],
-                               boerse=a.get("boerse")):
+        preis_eur = a["preis"] / f
+        if kosten:
+            s0, w0, g0 = journal.gebuchte_gebuehr(a["order_ref"])
+            gesamt = modellgebuehr_eur(kosten, a["ticker"], a["waehrung"], s0 + a["stueck"], w0 + a["stueck"] * preis_eur, fx)
+            modell_eur = max(gesamt - g0, 0.0)
+        else:
+            modell_eur = ibkr_eur or 0.0
+        plan_w = "USD" if a["waehrung"] == "USD" and not a["ticker"].endswith(".DE") else "EUR"
+        modell_fw = modell_eur * (fx.get("USD", 1.0) if plan_w == "USD" else 1.0)
+        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], preis_eur, modell_eur, a["zeit"],
+                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=modell_fw, gebuehr_waehrung=plan_w,
+                               boerse=a.get("boerse"), gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w):
             neu.append(a["order_ref"].split(":")[0])
+            if protokoll is not None:
+                abw = "" if ibkr_eur is None else f", Abweichung IBKR − Modell {ibkr_eur - modell_eur:+.2f} €"
+                protokoll.append(f"Ausführung {a['order_ref'].split(':')[0]} {'KAUF' if a['richtung'] > 0 else 'VERKAUF'} {a['stueck']:g} × "
+                                 f"{a['ticker']} @ {a['preis']:.4f} {a['waehrung']} ({a.get('boerse') or '–'}): Gebühr IBKR "
+                                 f"{'nicht gemeldet' if ibkr is None else f'{ibkr:.2f} {ibkr_w}'}, Modell {modell_eur:.2f} € (gebucht){abw}")
     return sorted(set(neu))
 
 
@@ -145,9 +175,11 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         try:
             if not broker.verbunden():
                 broker.verbinden()
-            neu = einlesen(journal, broker, fx)
+            zeilen: list[str] = []
+            neu = einlesen(journal, broker, fx, kosten=risk.kosten, protokoll=zeilen)
             if neu:
                 erg.meldungen.append(f"Neue Ausführungen eingelesen: {', '.join(neu)}")
+                erg.meldungen += zeilen
             offen_liste = broker.offene_orders()
             offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offen_liste]
             n = verfallene_markieren(journal, {o.order_ref for o in offen_liste}, xetra)
@@ -207,6 +239,11 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         bestand = journal.bestand(buch)
         werte_buch[buch] = journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
         vor = journal.zustand_fuer_signaltag(buch, tag)
+        if vor and not any(x > 0 for x in bestand.values()) and not journal.unterwegs(buch):
+            # aufgebaut erst mit Bestand oder Orders unterwegs (wie Fundamental, Korrektur 04.11.2026): Zustände aus Läufen
+            # ohne Kauf (Buch gesperrt, nicht freigegeben, abgelehnt, verfallen) gelten nicht – Aufbau wie beim ersten Lauf
+            erg.meldungen.append(f"{buch}: noch kein Bestand und keine Order unterwegs – Aufbau wie beim ersten Lauf")
+            vor = {}
         frei_buch, _ = kasse_frei(journal, buch, fx)
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
@@ -344,7 +381,15 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
         return meldungen + [f"Probe: {len(ids)} Vorschläge freigegeben, nichts gesendet, kein Messbeginn"]
     if not messbeginn:
         meldungen.append("Senden ist ausgeschaltet: Freigaben zählen nicht als Messbeginn")
-    meldungen = _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen)
+    try:
+        meldungen = _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen)
+    finally:                                                 # Verbindung nach Freigabe/Senden trennen (Jakob 04.11.2026)
+        try:
+            if broker is not None and broker.verbunden():
+                broker.trennen()
+                meldungen.append("Verbindung zum Gateway getrennt")
+        except Exception as f:  # noqa: BLE001
+            meldungen.append(f"Trennen fehlgeschlagen ({type(f).__name__}: {f})")
     try:                                                     # Sicherung nach Freigabe/Senden (Jakob 03.11.2026)
         ziel = journal.sichern(None, jetzt=datetime.now())
         meldungen.append(f"Journal gesichert nach Freigabe/Senden: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
@@ -364,7 +409,9 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
         return meldungen + [f"Gateway nicht verbunden ({type(f).__name__}) – nichts gesendet. Freigaben bleiben bis 24 Uhr; Gateway starten und erneut senden."]
     kurse_laden = kurse_laden or _yahoo_kurse
     fx = {"USD": float(kurse_laden("EURUSD=X", jetzt.date(), "fx")["close"].iloc[-1])}
-    neu = einlesen(journal, broker, fx)
+    zeilen: list[str] = []
+    neu = einlesen(journal, broker, fx, kosten=risk.kosten, protokoll=zeilen)
+    meldungen += zeilen
     freigegeben = journal.vorschlaege(status=("freigegeben",))
     betroffen = {z["buch"] for z in freigegeben} & set(neu)
     if betroffen:
