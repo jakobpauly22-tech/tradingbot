@@ -91,6 +91,14 @@ def main() -> int:
             if i % 100 == 0:
                 print(f"  {i} geprüft")
     ib.disconnect()
+    if a.ohne_aktien and ZIEL.exists():                    # bestehende Aktien-Einträge (und ihre Fehler) behalten
+        alt = YAML(typ="safe").load(ZIEL.read_text(encoding="utf-8")) or {}
+        for t, e in (alt.get("kontrakte") or {}).items():
+            if e.get("art") == "aktie":
+                eintraege.setdefault(t, e)
+        for t, x in (alt.get("nicht_aufloesbar") or {}).items():
+            if not t.endswith(".DE") and t != "EUR.USD":
+                fehler.setdefault(t, x)
     for t, e in eintraege.items():
         if e["art"] != "aktie":
             print(f"{t:9} conId {e['con_id']:>10}  Symbol {e['symbol']:6} lokal {e['lokal']:8} primär {e['primaer']:8} {e['waehrung']}  {e['name']}")
