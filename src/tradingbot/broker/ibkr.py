@@ -88,6 +88,10 @@ def kontrakt(ticker: str, art: str = "etf", waehrung: str | None = None):
     return Stock(ticker.replace("-", " "), "SMART", "USD")      # Yahoo „BF-B“ = IBKR „BF B“
 
 
+def us_aktie(auftrag) -> bool:
+    return auftrag.art == "aktie" and not auftrag.ticker.endswith(".DE")
+
+
 def ibkr_gebuehr(fill) -> float | None:
     """Gebühr aus dem CommissionReport; None, wenn keiner vorliegt oder IBKR den Leerwert (UNSET_DOUBLE) meldet."""
     bericht = getattr(fill, "commissionReport", None)
@@ -163,6 +167,14 @@ class IbkrBroker:
     def positionen(self) -> list[Position]:
         return [Position(p.account, ticker_aus(p.contract), float(p.position), float(p.avgCost)) for p in self.ib.positions()
                 if getattr(p.contract, "secType", "STK") != "CASH"]              # Devisenbestände sind Kasse, keine Position
+
+    def kasse_je_waehrung(self) -> dict[str, float]:
+        """Kontokasse je Währung laut IBKR (accountValues, Tag „CashBalance“, ohne die Summenzeile BASE)."""
+        kassen = {}
+        for w in self.ib.accountValues():
+            if w.tag == "CashBalance" and w.currency and w.currency != "BASE":
+                kassen[w.currency] = kassen.get(w.currency, 0.0) + float(w.value)
+        return kassen
 
     def offene_orders(self) -> list[OffeneOrder]:
         ergebnis = []
@@ -286,7 +298,10 @@ class IbkrBroker:
             order = MarketOrder("SELL", auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
         elif auftrag.richtung > 0:
             limit, _ = self.limit_runden(auftrag.ticker, auftrag.limit, auftrag.richtung)     # Kursstufe (Fehler 110 am 03.11.2026)
-            order = LimitOrder(aktion, auftrag.stueck, limit, tif="DAY", orderRef=auftrag.order_ref)
+            # US-Käufe als Limit-On-Open (Jakob 04.11.2026): Ausführung zur Eröffnung, unabhängig von der Freigabezeit.
+            # Nimmt IBKR OPG nicht an, wird die Order abgelehnt gemeldet – kein Ersatz-Ordertyp ohne Jakobs Zustimmung.
+            tif = "OPG" if us_aktie(auftrag) else "DAY"
+            order = LimitOrder(aktion, auftrag.stueck, limit, tif=tif, orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
         trade = self.ib.placeOrder(k, order)

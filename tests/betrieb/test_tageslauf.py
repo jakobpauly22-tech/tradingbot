@@ -424,9 +424,9 @@ def test_orders_unterwegs_halbieren_nicht_die_stueckzahl(umgebung):
         assert neu[t] == kaeufe[t], (t, neu[t], kaeufe[t])
 
 
-def test_gebuehr_ibkr_gegen_modell_und_trennen(umgebung):
-    """Kasse bucht die Modellgebühr (1,25 € Minimum, Tiered), die IBKR-Gebühr (Paper ≈ 0) steht daneben und im Protokoll
-    (Jakob 04.11.2026). Nach Freigabe/Senden wird die Verbindung getrennt."""
+def test_gebuehr_ibkr_gebucht_modell_daneben_und_trennen(umgebung):
+    """Entscheidung 04.11.2026: Kasse bucht die IBKR-Gebühr (Paper Festpreis 3 €), Modellgebühr (Tiered 1,25 €) daneben,
+    Minimum einmal je Order; Buchwert zweifach im Protokoll; Verbindung nach Freigabe/Senden getrennt."""
     j, rm = umgebung
     lauf(j, rm)
     z = next(x for x in j.vorschlaege(buch="real") if x["status"] == "vorgeschlagen")
@@ -434,18 +434,84 @@ def test_gebuehr_ibkr_gegen_modell_und_trennen(umgebung):
     m = freigeben_und_senden(j, [z["id"]], b, ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
     assert "Verbindung zum Gateway getrennt" in m and not b.verbunden()
     fills = [{"exec_id": "e1", "order_ref": f"real:{z['id']}", "ticker": "SPYI.DE", "richtung": 1, "stueck": 20, "preis": 11.62,
-              "waehrung": "EUR", "gebuehr": 0.0, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04T09:00", "boerse": "IBIS2"},
+              "waehrung": "EUR", "gebuehr": 3.0, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04 08:00:05+00:00", "boerse": "GETTEX2"},
              {"exec_id": "e2", "order_ref": f"real:{z['id']}", "ticker": "SPYI.DE", "richtung": 1, "stueck": 22, "preis": 11.62,
-              "waehrung": "EUR", "gebuehr": None, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04T09:00", "boerse": "IBIS2"}]
+              "waehrung": "EUR", "gebuehr": None, "gebuehr_waehrung": "EUR", "zeit": "2026-11-04 08:00:05+00:00", "boerse": "GETTEX2"}]
     naechster = datetime(2026, 11, 4, 19, 0, tzinfo=ZoneInfo("Europe/Berlin"))
     e = lauf(j, rm, jetzt=naechster, broker=BrokerAttrappe(fills=fills, positionen=[Position("DU1", "SPYI.DE", 42, 11.62)]))
     zeilen = [x for x in e.meldungen if x.startswith("Ausführung real")]
-    assert len(zeilen) == 2 and "Gebühr IBKR 0.00 EUR, Modell 1.25 € (gebucht), Abweichung IBKR − Modell -1.25 €" in zeilen[0]
-    assert "nicht gemeldet" in zeilen[1] and "Modell 0.00 €" in zeilen[1]        # Minimum nur einmal je Order
-    assert abs(j.kasse("real") - (500 - 42 * 11.62 - 1.25)) < 1e-6
-    r = j.db.execute("SELECT SUM(gebuehr_eur), SUM(gebuehr_ibkr) FROM ausfuehrungen").fetchone()
-    assert abs(r[0] - 1.25) < 1e-9 and r[1] == 0.0
+    assert len(zeilen) == 2 and "Gebühr IBKR 3.00 EUR (gebucht), Modell 1.25 €, Abweichung IBKR − Modell +1.75 €" in zeilen[0]
+    assert "am GETTEX2 um 2026-11-04 08:00:05+00:00" in zeilen[0] and "Eröffnung" in zeilen[0]
+    assert "nicht gemeldet – vorläufig Modell 0.00 € gebucht" in zeilen[1]           # Minimum nur einmal je Order
+    assert abs(j.kasse("real") - (500 - 42 * 11.62 - 3.0)) < 1e-6
+    assert abs(j.kasse_modell("real") - (500 - 42 * 11.62 - 1.25)) < 1e-6
+    assert any(x.startswith("real: Buchwert wie gebucht (Paper, Festpreis)") and "mit Modellgebühr (Tiered" in x for x in e.meldungen)
+    w = j.db.execute("SELECT wert, wert_modell FROM buchwerte WHERE buch='real' AND tag='2026-11-04'").fetchone()
+    assert abs((w["wert_modell"] - w["wert"]) - 1.75) < 1e-6
+    r = j.db.execute("SELECT eroeffnung, boerse FROM ausfuehrungen WHERE exec_id='e1'").fetchone()
+    assert r["eroeffnung"] is not None and r["boerse"] == "GETTEX2"
 
+
+class KontoAttrappe(BrokerAttrappe):
+    def __init__(self, kasse, **kw):
+        super().__init__(**kw)
+        self._kasse = kasse
+
+    def kasse_je_waehrung(self):
+        return dict(self._kasse)
+
+
+def test_kassenabgleich(umgebung):
+    from tradingbot.betrieb.tageslauf import kassenabgleich
+    j, rm = umgebung
+    lauf(j, rm)
+    b = lade_konfiguration("betrieb")
+    diff, text = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_000.0}), b)
+    assert diff == [] and "erstmals festgehalten" in text and j.zustand("_konto")["kassenbasis"]["EUR"] == 1_000_000.0
+    diff, text = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_000.03}), b)
+    assert diff == [] and "stimmt" in text                                         # innerhalb der Toleranz
+    diff, _ = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 999_997.0}), b)
+    assert diff and "Kasse EUR" in diff[0] and "-3.00" in diff[0]
+    # im Tageslauf stoppt eine Kassenabweichung wie eine Bestandsabweichung
+    e = lauf(j, rm, broker=KontoAttrappe({"EUR": 999_997.0}))
+    assert e.gestoppt and "Kasse EUR" in e.gestoppt
+
+
+def test_nachkauf_technik_momentum_nach_ablehnung(umgebung):
+    """Restfall (04.11.2026): Momentum-Käufe, teils angenommen, teils abgelehnt → am nächsten Abend werden die abgelehnten
+    neu vorgeschlagen, solange 12−1 > 0 (auch ohne Monatsprüfung)."""
+    j, rm = umgebung
+    lauf(j, rm)
+    ids = [z["id"] for z in j.vorschlaege(buch="momentum") if z["status"] == "vorgeschlagen" and z["richtung"] > 0]
+    assert len(ids) >= 2
+    alle = dict(AN["buecher"])
+    an = {**AN, "buecher": {n: {**bk, "senden_freigeschaltet": True} for n, bk in alle.items()}}
+    freigeben_und_senden(j, ids[:1], BrokerAttrappe(), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    freigeben_und_senden(j, ids[1:], BrokerAttrappe(antwort="abgelehnt"), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    abgelehnt = {z["ticker"] for z in j.vorschlaege(buch="momentum") if z["status"] == "abgelehnt"}
+    naechster = datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+    e = lauf(j, rm, jetzt=naechster)
+    neu = {bv.vorschlag.ticker for bv, _ in e.vorschlaege if bv.vorschlag.buch == "momentum" and bv.vorschlag.richtung > 0}
+    assert abgelehnt and abgelehnt <= neu
+    assert not (neu & {z["ticker"] for z in j.unterwegs("momentum")})
+
+
+def test_nachkauf_fundamental_bis_zum_stichtag(umgebung):
+    j, rm = umgebung
+    lauf(j, rm)
+    ids = [z["id"] for z in j.vorschlaege(buch="fundamental_a") if z["status"] == "vorgeschlagen" and z["richtung"] > 0 and z["art"] != "fx"]
+    an = {**AN, "buecher": {n: {**bk, "senden_freigeschaltet": True} for n, bk in AN["buecher"].items()}}
+    fx = [z["id"] for z in j.vorschlaege(buch="fundamental_a") if z["art"] == "fx" and z["status"] == "vorgeschlagen"]
+    m = freigeben_und_senden(j, fx + ids[:5], BrokerAttrappe(), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    j.tausch("t1", f"fundamental_a:{fx[0]}", "EUR", "USD", 9000.0, 9900.0, 2.0, "2026-11-02T23:00")   # Tausch ausgeführt
+    freigeben_und_senden(j, ids[5:7], BrokerAttrappe(antwort="abgelehnt"), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    abgelehnt = {z["ticker"] for z in j.vorschlaege(buch="fundamental_a") if z["status"] == "abgelehnt"}
+    assert len(abgelehnt) == 2 and "ziel" in j.zustand("fundamental_a")
+    naechster = datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))       # kein Quartalsstichtag
+    e = lauf(j, rm, jetzt=naechster)
+    neu = {bv.vorschlag.ticker for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx"}
+    assert neu == abgelehnt
+    assert any("fundamental_a: Nachkauf 2 Titel" in m for m in e.meldungen)
 
 def test_technikbuch_ohne_kauf_baut_am_naechsten_tag_wieder_auf(umgebung):
     """Momentum war am 03.11. gesperrt, der Zustand galt trotzdem als aufgebaut → am 04.11. keine Vorschläge bis zur

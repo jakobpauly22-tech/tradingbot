@@ -54,12 +54,16 @@ class Journal:
                 self.db.execute(f"ALTER TABLE vorschlaege ADD COLUMN {name} TEXT")
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
         for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT"), ("boerse", "TEXT"),
-                          ("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT")):
+                          ("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL"),
+                          ("eroeffnung", "REAL")):
             if name not in spalten:                                   # ältere Journale ergänzen
                 self.db.execute(f"ALTER TABLE ausfuehrungen ADD COLUMN {name} {typ}")
-        if "gebuehr_ibkr" not in {z["name"] for z in self.db.execute("PRAGMA table_info(tausche)")}:
-            self.db.execute("ALTER TABLE tausche ADD COLUMN gebuehr_ibkr REAL")
-            self.db.execute("ALTER TABLE tausche ADD COLUMN gebuehr_ibkr_waehrung TEXT")
+        t_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(tausche)")}
+        for name, typ in (("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL")):
+            if name not in t_spalten:
+                self.db.execute(f"ALTER TABLE tausche ADD COLUMN {name} {typ}")
+        if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
+            self.db.execute("ALTER TABLE buchwerte ADD COLUMN wert_modell REAL")
         self.db.commit()
 
     def schliessen(self):
@@ -90,6 +94,18 @@ class Journal:
         tausch = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur), 0) AS t FROM tausche WHERE buch=?", (buch,)).fetchone()["t"]
         return self.startkapital(buch) + handel + div - tausch
 
+    def gebuehren_differenz(self, buch: str) -> float:
+        """Gebucht (IBKR) minus Modellgebühr in EUR, über alle Ausführungen und Tausche des Buchs (fehlende Modellwerte = 0)."""
+        a = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur - COALESCE(gebuehr_modell_eur, gebuehr_eur)), 0) FROM ausfuehrungen WHERE buch=?",
+                            (buch,)).fetchone()[0]
+        t = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur - COALESCE(gebuehr_modell_eur, gebuehr_eur)), 0) FROM tausche WHERE buch=?",
+                            (buch,)).fetchone()[0]
+        return float(a + t)
+
+    def kasse_modell(self, buch: str) -> float:
+        """Kasse mit Modellgebühr (Tiered) statt der gebuchten Paper-Gebühr – zweite Kennzahl im Bericht (04.11.2026)."""
+        return self.kasse(buch) + self.gebuehren_differenz(buch)
+
     def kasse_je_waehrung(self, buch: str) -> dict[str, float]:
         """Kasse des Buchs je Währung (keine darf negativ werden, Risk-Manager Regel 10)."""
         kassen = {"EUR": self.startkapital(buch)}
@@ -107,12 +123,14 @@ class Journal:
         return kassen
 
     def tausch(self, exec_id, order_ref, von, nach, betrag_von, betrag_nach, gebuehr_eur, zeit, *, gebuehr_ibkr=None,
-               gebuehr_ibkr_waehrung=None) -> bool:
+               gebuehr_ibkr_waehrung=None, gebuehr_modell_eur=None) -> bool:
         buch, _, vid = order_ref.partition(":")
         neu = self.db.execute("INSERT OR IGNORE INTO tausche (exec_id, order_ref, buch, von, nach, betrag_von, betrag_nach, gebuehr_eur, zeit, "
                               "gebuehr_ibkr, gebuehr_ibkr_waehrung) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                               (exec_id, order_ref, buch, von, nach, betrag_von, betrag_nach, gebuehr_eur, str(zeit), gebuehr_ibkr,
                                gebuehr_ibkr_waehrung)).rowcount > 0
+        if neu and gebuehr_modell_eur is not None:
+            self.db.execute("UPDATE tausche SET gebuehr_modell_eur=? WHERE exec_id=?", (gebuehr_modell_eur, exec_id))
         if neu:
             self.status_setzen(vid, "ausgefuehrt")
         self.db.commit()
@@ -224,10 +242,23 @@ class Journal:
         return res
 
     def gebuchte_gebuehr(self, order_ref: str) -> tuple[float, float, float]:
-        """Bisher gebucht je Order (Teilausführungen): (Stück, Kurswert in EUR, Gebühr in EUR)."""
-        z = self.db.execute("SELECT COALESCE(SUM(stueck),0) s, COALESCE(SUM(stueck*preis_eur),0) w, COALESCE(SUM(gebuehr_eur),0) g "
+        """Bisher je Order (Teilausführungen): (Stück, Kurswert in EUR, Modellgebühr in EUR)."""
+        z = self.db.execute("SELECT COALESCE(SUM(stueck),0) s, COALESCE(SUM(stueck*preis_eur),0) w, "
+                            "COALESCE(SUM(COALESCE(gebuehr_modell_eur, gebuehr_eur)),0) g "
                             "FROM ausfuehrungen WHERE order_ref=?", (order_ref,)).fetchone()
         return float(z["s"]), float(z["w"]), float(z["g"])
+
+    def nachkauf_kandidaten(self, buch: str, seit) -> set[str]:
+        """Titel, deren letzter Kaufvorschlag seit `seit` von IBKR abgelehnt wurde oder verfallen ist, ohne Bestand und ohne
+        Order unterwegs (Restfall eines Aufbaus, Jakob 04.11.2026). Ob das Signal noch gilt, prüft das Buch."""
+        letzte: dict[str, str] = {}
+        for z in self.db.execute("SELECT ticker, status FROM vorschlaege WHERE buch=? AND richtung>0 AND art!='fx' AND signaltag>=? "
+                                 "AND status IN ('abgelehnt','verfallen','gesendet','unbestaetigt','ausgefuehrt') ORDER BY signaltag, aktualisiert",
+                                 (buch, str(pd.Timestamp(seit).date()))):
+            letzte[z["ticker"]] = z["status"]
+        bestand = {t for t, s in self.bestand(buch).items() if s > 0}
+        unterwegs = {z["ticker"] for z in self.unterwegs(buch)}
+        return {t for t, s in letzte.items() if s in ("abgelehnt", "verfallen") and t not in bestand and t not in unterwegs}
 
     def gesendete_refs(self) -> set[str]:
         return {f"{z['buch']}:{z['id']}" for z in self.db.execute("SELECT buch, id FROM vorschlaege WHERE (order_id IS NOT NULL AND status NOT IN ('abgelehnt','vorgeschlagen','veto','ersetzt','abgelaufen')) "
@@ -240,20 +271,22 @@ class Journal:
 
     # --- Ausführungen und Dividenden --------------------------------------------------------------------------
     def ausfuehrung(self, exec_id, order_ref, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, *, waehrung="EUR", preis=None,
-                    gebuehr=None, gebuehr_waehrung=None, boerse=None, gebuehr_ibkr=None, gebuehr_ibkr_waehrung=None) -> bool:
+                    gebuehr=None, gebuehr_waehrung=None, boerse=None, gebuehr_ibkr=None, gebuehr_ibkr_waehrung=None,
+                    gebuehr_modell_eur=None, eroeffnung=None) -> bool:
         """Ausführung ins Journal; `boerse` = Ausführungsplatz laut IBKR (SMART-Routing, Jakob 03.11.2026).
 
-        Gebühren (Jakob 04.11.2026): `gebuehr_eur`/`gebuehr` sind die gebuchte Gebühr (Kostenmodell, maßgeblich für Kasse
-        und Auswertungen); `gebuehr_ibkr` ist die tatsächliche Gebühr aus dem CommissionReport (None = nicht gemeldet),
-        nur zum Ausweis der Abweichung."""
+        Gebühren (Jakob 04.11.2026, zweite Entscheidung): `gebuehr_eur`/`gebuehr` sind die gebuchte, tatsächliche IBKR-Gebühr
+        (Kasse stimmt mit IBKR überein); `gebuehr_modell_eur` ist die Gebühr laut Kostenmodell (Tiered, 1,25 € Minimum),
+        maßgeblich für den späteren Echtbetrieb und die zweite Kennzahl im Bericht. `eroeffnung` = Eröffnungskurs des
+        Ausführungstags am Heimatplatz (Xetra bzw. US) in der Handelswährung."""
         buch, _, vid = order_ref.partition(":")
         neu = self.db.execute("INSERT OR IGNORE INTO ausfuehrungen (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, zeit, "
                               "waehrung, preis, gebuehr, gebuehr_waehrung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                               (exec_id, order_ref, buch, ticker, richtung, stueck, preis_eur, gebuehr_eur, str(zeit), waehrung,
                                preis if preis is not None else preis_eur, gebuehr, gebuehr_waehrung or waehrung)).rowcount > 0
         if neu:
-            self.db.execute("UPDATE ausfuehrungen SET boerse=?, gebuehr_ibkr=?, gebuehr_ibkr_waehrung=? WHERE exec_id=?",
-                            (boerse, gebuehr_ibkr, gebuehr_ibkr_waehrung, exec_id))
+            self.db.execute("UPDATE ausfuehrungen SET boerse=?, gebuehr_ibkr=?, gebuehr_ibkr_waehrung=?, gebuehr_modell_eur=?, eroeffnung=? "
+                            "WHERE exec_id=?", (boerse, gebuehr_ibkr, gebuehr_ibkr_waehrung, gebuehr_modell_eur, eroeffnung, exec_id))
             self.status_setzen(vid, "ausgefuehrt")
         self.db.commit()
         return neu
@@ -263,8 +296,9 @@ class Journal:
         self.db.commit()
         return neu
 
-    def buchwert_speichern(self, buch: str, tag, wert: float, kasse: float):
-        self.db.execute("INSERT OR REPLACE INTO buchwerte VALUES (?,?,?,?)", (buch, str(pd.Timestamp(tag).date()), wert, kasse))
+    def buchwert_speichern(self, buch: str, tag, wert: float, kasse: float, wert_modell: float | None = None):
+        self.db.execute("INSERT OR REPLACE INTO buchwerte (buch, tag, wert, kasse, wert_modell) VALUES (?,?,?,?,?)",
+                        (buch, str(pd.Timestamp(tag).date()), wert, kasse, wert_modell))
         self.db.commit()
 
     def buchwerte(self, buch: str) -> pd.Series:

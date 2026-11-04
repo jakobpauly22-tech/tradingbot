@@ -160,7 +160,8 @@ def erster_handelstag_im_monat(boerse: str, tag) -> bool:
 
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
-                gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0) -> tuple[list[BuchVorschlag], dict]:
+                gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0,
+                nachkauf: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict]:
     """`kasse` = freie Kasse (nach Orders unterwegs), `reserviert` = durch Orders unterwegs gebundene Kasse; der Buchwert
     für Zielgewichte und 1-%-Risiko enthält beides (Korrektur 03.11.2026: sonst halbe Stückzahlen bei Orders unterwegs)."""
     from tradingbot.backtest.marktdaten import Marktdaten, Sicht
@@ -171,8 +172,28 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
     m = Marktdaten(kurse_eur)
     ziel = s.zielgewichte(tag, Sicht(m, tag, {t: v for t, v in bestand.items() if v > 0}, kasse))
     vorschlaege = []
-    if ziel is not None:
-        wert = kasse + reserviert + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())
+    wert = kasse + reserviert + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())
+    # Nachkauf (Jakob 04.11.2026): abgelehnte oder verfallene Käufe erneut, solange das Signal gilt (Crossover: SMA50 über
+    # SMA200; Momentum: 12−1 > 0 aus der letzten Monatsprüfung). Gewicht wie bei der Strategie, begrenzt auf den freien Anteil.
+    ziel = {} if ziel is None else dict(ziel.items())
+    regel_n = s.regeln.get(regel)
+    belegt = sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items()) / wert if wert > 0 else 0.0
+    belegt += reserviert / wert if wert > 0 else 0.0
+    frei_anteil = max(0.0, 1.0 - belegt - sum(w for w in ziel.values() if not math.isnan(w) and w > 0) - 0.005)
+    for t in sorted(nachkauf):
+        if t in ziel or t in s.pos or t in gesperrt_titel or bestand.get(t, 0) > 0 or t not in s.ind or tag not in s.ind[t].index or regel_n is None:
+            continue
+        aktiv = regel_n.gilt_noch(t, tag) if hasattr(regel_n, "gilt_noch") else regel_n.einstieg(t, tag) is not None
+        if regel == "crossover":
+            aktiv = regel_n._ueber(t, tag)
+        w = min(s._gewicht(t, tag), frei_anteil) if aktiv else 0.0
+        if w <= 0:
+            continue
+        ziel[t] = w
+        frei_anteil -= w
+        s.pos[t] = Position(regel, tag, atr_signal=float(s.ind[t].loc[tag, "atr"]))
+        s._log(tag, t, "kaufen", regel, "Nachkauf nach Ablehnung/Verfall, Signal gilt noch", w)
+    if ziel:
         protokoll = {p["ticker"]: p for p in s.protokoll if pd.Timestamp(p["tag"]) == tag}
         frei = kasse
         for t, w in ziel.items():
@@ -281,14 +302,19 @@ def quartalsstichtag(tag) -> bool:
 
 def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurse_usd: dict[str, float], eurusd: float,
                     kasse: float, bestand: dict[str, float], zustand: dict, konfig_fundamental: dict, aufschlag: float,
-                    gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0) -> tuple[list[BuchVorschlag], dict, str]:
+                    gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0,
+                    nachkauf: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict, str]:
     """Erster Lauf: sofort aufbauen; danach nur am Quartalsstichtag. Gibt Vorschläge, neuen Zustand und Begründung zurück."""
     tag = pd.Timestamp(tag)
     # aufgebaut mit Bestand oder mit gesendeten, noch nicht ausgeführten Orders („unterwegs“); verfallene Aufbauten wiederholen
     aufgebaut = any(v > 0 for v in bestand.values()) or bool(gesperrt_titel)
-    if aufgebaut and not quartalsstichtag(tag):
-        return [], zustand, "kein Quartalsstichtag"
     sp = konfig_fundamental["schattenportfolio"]
+    nachkauf_ziel = {t: w for t, w in (zustand.get("ziel") or {}).items() if t in nachkauf}
+    if aufgebaut and not quartalsstichtag(tag):
+        if not nachkauf_ziel:
+            return [], zustand, "kein Quartalsstichtag"
+        return _fundamental_nachkauf(buch, variante, tag, rangliste, kurse_usd, eurusd, kasse, reserviert, bestand, zustand,
+                                     nachkauf_ziel, aufschlag, gebuehr)
     wert_pos = {t: st * kurse_usd[t] / eurusd for t, st in bestand.items() if t in kurse_usd}
     wert = kasse + reserviert + sum(wert_pos.values())          # Buchwert inkl. Kasse für Orders unterwegs
     gewichte = pd.Series({t: v / wert for t, v in wert_pos.items()}, dtype=float)
@@ -334,4 +360,36 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
     grund = "Aufbau" if not aufgebaut else "Quartalsstichtag"
     if nicht_kaufbar:
         grund += "; nicht kaufbar, ein Anteil teurer als die Zielposition (Platz bleibt Kasse): " + ", ".join(nicht_kaufbar)
-    return vorschlaege, {"letzter_signaltag": str(tag.date())}, grund
+    # Zielportfolio bis zum nächsten Quartalsstichtag merken (Nachkauf abgelehnter/verfallener Käufe, 04.11.2026)
+    halten = {t: (w if not math.isnan(w) else float(gewichte.get(t, 0.0))) for t, w in ziel.items()}
+    neu_ziel = {t: float(w) for t, w in halten.items() if w and w > 0}
+    raenge = {t: gruende[t].get("rang") for t in neu_ziel if t in gruende}
+    return vorschlaege, {"letzter_signaltag": str(tag.date()), "ziel": neu_ziel, "rang": raenge}, grund
+
+
+def _fundamental_nachkauf(buch, variante, tag, rangliste, kurse_usd, eurusd, kasse, reserviert, bestand, zustand, nachkauf_ziel,
+                          aufschlag, gebuehr):
+    """Abgelehnte/verfallene Käufe des letzten Aufbaus bzw. Stichtags neu vorschlagen (Gewicht wie am Stichtag)."""
+    wert = kasse + reserviert + sum(st * kurse_usd[t] / eurusd for t, st in bestand.items() if t in kurse_usd)
+    vorschlaege, frei, fehlt = [], kasse, []
+    zeilen = rangliste.set_index("ticker") if "ticker" in rangliste.columns else pd.DataFrame()
+    for t, w in sorted(nachkauf_ziel.items()):
+        if t not in kurse_usd:
+            fehlt.append(t)
+            continue
+        kurs_eur = kurse_usd[t] / eurusd
+        limit_eur = limit_preis(kurse_usd[t], aufschlag) / eurusd
+        n = stueck_fuer(w * wert, frei, limit_eur, gebuehr)
+        if n <= 0:
+            continue
+        rang = (zustand.get("rang") or {}).get(t)
+        these = (f"Fundamental {variante}: Nachkauf {t} (Rang {rang} am letzten Stichtag {zustand.get('letzter_signaltag')}); "
+                 f"der Kauf wurde abgelehnt oder ist verfallen, das Signal gilt bis zum nächsten Quartalsstichtag.")
+        bv = _kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD")
+        bv.kern = f"Nachkauf: Rang {rang} am Stichtag {zustand.get('letzter_signaltag')}, Kauf abgelehnt oder verfallen."
+        bv.details = (details_fundamental(t, zeilen.loc[t], None, variante, rang, kurse_usd[t], n, limit_eur, w * wert)
+                      if t in zeilen.index else f"Zahlen:\n  • Kurs {_z(kurse_usd[t])} USD, {n} Stück ≈ {_z(n * limit_eur)} €")
+        vorschlaege.append(bv)
+        frei -= n * limit_eur + gebuehr(n, n * limit_eur)
+    grund = f"Nachkauf {len(vorschlaege)} Titel (abgelehnt/verfallen)" + (f"; ohne Kurs: {', '.join(fehlt)}" if fehlt else "")
+    return vorschlaege, zustand, grund

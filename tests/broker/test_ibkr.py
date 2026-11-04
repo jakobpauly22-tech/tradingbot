@@ -280,3 +280,13 @@ def test_nicht_aufloesbar_veto(tmp_path):
         b.kontrakt_aufloesen("SXRM.DE", "etf", "USD")
     k = b.kontrakt_aufloesen("EUR.USD", "fx", "USD")
     assert k.conId == 12087792
+
+
+def test_us_kauf_limit_on_open(tmp_path):
+    """US-Käufe als Limit-On-Open (tif OPG, 04.11.2026); Xetra-Käufe bleiben DAY."""
+    b = broker(tmp_path)
+    b.sende(Auftrag("crossover", "u1", "AAPL", 1, 2, 150.0, "aktie", "USD"), set())
+    k, o = b.ib.gesendet[-1]
+    assert (o.orderType, o.tif, o.lmtPrice) == ("LMT", "OPG", 150.0) and k.currency == "USD"
+    b.sende(Auftrag("crossover", "u2", "SXR1.DE", 1, 1, 221.30), set())
+    assert b.ib.gesendet[-1][1].tif == "DAY"

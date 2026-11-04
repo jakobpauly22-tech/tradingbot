@@ -50,11 +50,20 @@ def modellgebuehr_eur(kosten, ticker: str, waehrung: str, stueck: float, wert_eu
     return float(kosten.gebuehren_eur(plan, stueck, wert_eur, fx.get("USD", 1.0)))
 
 
-def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: list[str] | None = None) -> list[str]:
+def _ausfuehrungstag(zeit, ticker: str):
+    """Handelstag der Ausführung in der Zeitzone des Heimatplatzes (Xetra: Berlin, US: New York)."""
+    ts = pd.Timestamp(str(zeit))
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert("Europe/Berlin" if ticker.endswith(".DE") else "America/New_York").date()
+
+
+def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: list[str] | None = None, eroeffnung=None) -> list[str]:
     """Ausführungen der Bot-Orders ins Journal; gibt die Bücher mit neuen Ausführungen zurück.
 
-    Mit `kosten` (Jakob 04.11.2026): gebucht wird die Modellgebühr je Order (bei Teilausführungen anteilig, das Minimum
-    einmal je Order); die tatsächliche IBKR-Gebühr wird daneben gespeichert und im Protokoll gegenübergestellt."""
+    Gebühren (Jakob 04.11.2026): gebucht wird die tatsächliche IBKR-Gebühr (Kasse = IBKR); fehlt der CommissionReport,
+    wird vorläufig die Modellgebühr gebucht und das gemeldet. Die Modellgebühr (Tiered) steht daneben. `eroeffnung(ticker,
+    tag)` liefert den Eröffnungskurs des Ausführungstags (Abweichung im Protokoll)."""
     neu = []
     for a in broker.ausfuehrungen():
         ibkr, ibkr_w = a["gebuehr"], a["gebuehr_waehrung"]
@@ -62,8 +71,9 @@ def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: l
         ibkr_eur = None if ibkr is None else ibkr / fg
         if a.get("art") == "fx":
             modell = kosten.tauschkosten_eur("USD", a["betrag_nach"], fx.get("USD", 1.0)) if kosten else (ibkr_eur or 0.0)
-            if journal.tausch(a["exec_id"], a["order_ref"], a["von"], a["nach"], a["betrag_von"], a["betrag_nach"], modell, a["zeit"],
-                              gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w):
+            gebucht = ibkr_eur if ibkr_eur is not None else modell
+            if journal.tausch(a["exec_id"], a["order_ref"], a["von"], a["nach"], a["betrag_von"], a["betrag_nach"], gebucht, a["zeit"],
+                              gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w, gebuehr_modell_eur=modell):
                 neu.append(a["order_ref"].split(":")[0])
                 if protokoll is not None:
                     protokoll.append(f"Tausch {a['betrag_von']:,.2f} EUR → {a['betrag_nach']:,.2f} USD: Gebühr IBKR "
@@ -77,18 +87,72 @@ def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: l
             modell_eur = max(gesamt - g0, 0.0)
         else:
             modell_eur = ibkr_eur or 0.0
-        plan_w = "USD" if a["waehrung"] == "USD" and not a["ticker"].endswith(".DE") else "EUR"
-        modell_fw = modell_eur * (fx.get("USD", 1.0) if plan_w == "USD" else 1.0)
-        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], preis_eur, modell_eur, a["zeit"],
-                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=modell_fw, gebuehr_waehrung=plan_w,
-                               boerse=a.get("boerse"), gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w):
+        if ibkr is not None:
+            gebucht_eur, gebucht_fw, gebucht_w = ibkr_eur, ibkr, ibkr_w
+        else:                                                    # kein CommissionReport: vorläufig Modell, gemeldet
+            plan_w = "USD" if a["waehrung"] == "USD" and not a["ticker"].endswith(".DE") else "EUR"
+            gebucht_eur, gebucht_w = modell_eur, plan_w
+            gebucht_fw = modell_eur * (fx.get("USD", 1.0) if plan_w == "USD" else 1.0)
+        eroeffnung_kurs = None
+        if eroeffnung is not None:
+            try:
+                eroeffnung_kurs = eroeffnung(a["ticker"], _ausfuehrungstag(a["zeit"], a["ticker"]))
+            except Exception:  # noqa: BLE001 – Kurs fehlt: nur im Protokoll vermerkt
+                eroeffnung_kurs = None
+        if journal.ausfuehrung(a["exec_id"], a["order_ref"], a["ticker"], a["richtung"], a["stueck"], preis_eur, gebucht_eur, a["zeit"],
+                               waehrung=a["waehrung"], preis=a["preis"], gebuehr=gebucht_fw, gebuehr_waehrung=gebucht_w,
+                               boerse=a.get("boerse"), gebuehr_ibkr=ibkr, gebuehr_ibkr_waehrung=ibkr_w, gebuehr_modell_eur=modell_eur,
+                               eroeffnung=eroeffnung_kurs):
             neu.append(a["order_ref"].split(":")[0])
             if protokoll is not None:
                 abw = "" if ibkr_eur is None else f", Abweichung IBKR − Modell {ibkr_eur - modell_eur:+.2f} €"
+                geb = (f"Gebühr IBKR {ibkr:.2f} {ibkr_w} (gebucht), Modell {modell_eur:.2f} €{abw}" if ibkr is not None
+                       else f"Gebühr IBKR nicht gemeldet – vorläufig Modell {modell_eur:.2f} € gebucht")
+                eroe = (f"; Eröffnung {eroeffnung_kurs:.4f}, Abweichung {a['preis'] / eroeffnung_kurs - 1:+.2%}" if eroeffnung_kurs
+                        else "; Eröffnungskurs nicht verfügbar")
                 protokoll.append(f"Ausführung {a['order_ref'].split(':')[0]} {'KAUF' if a['richtung'] > 0 else 'VERKAUF'} {a['stueck']:g} × "
-                                 f"{a['ticker']} @ {a['preis']:.4f} {a['waehrung']} ({a.get('boerse') or '–'}): Gebühr IBKR "
-                                 f"{'nicht gemeldet' if ibkr is None else f'{ibkr:.2f} {ibkr_w}'}, Modell {modell_eur:.2f} € (gebucht){abw}")
+                                 f"{a['ticker']} @ {a['preis']:.4f} {a['waehrung']} am {a.get('boerse') or '–'} um {a['zeit']}: {geb}{eroe}")
     return sorted(set(neu))
+
+
+def _eroeffnung_fn(kurse_laden):
+    """Eröffnungskurs am Heimatplatz in der Handelswährung (Xetra-ETF: EUR-Reihe, US-Aktie: USD-Reihe)."""
+    def eroeffnung(ticker, tag):
+        art = "etf" if ticker.endswith(".DE") else "aktie_usd"
+        k = kurse_laden(ticker, tag, art)
+        k = k[k.index.normalize() == pd.Timestamp(tag)]
+        return float(k["open"].iloc[-1]) if len(k) else None
+    return eroeffnung
+
+
+def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[str], str]:
+    """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
+    (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05)."""
+    if not hasattr(broker, "kasse_je_waehrung"):
+        return [], ""
+    ibkr = broker.kasse_je_waehrung()
+    if not ibkr:
+        return [], "Kassen-Abgleich: IBKR meldet keine Kontokasse (accountValues leer) – nicht geprüft"
+    bot: dict[str, float] = {}
+    for n in buecher:
+        start = journal.startkapital(n)
+        for w, betrag in journal.kasse_je_waehrung(n).items():
+            bot[w] = bot.get(w, 0.0) + betrag - (start if w == "EUR" else 0.0)
+    basis = journal.zustand("_konto").get("kassenbasis")
+    if basis is None:
+        basis = {w: ibkr.get(w, 0.0) - bot.get(w, 0.0) for w in sorted(set(ibkr) | set(bot))}
+        journal.zustand_speichern("_konto", {"kassenbasis": basis, "festgehalten": str(pd.Timestamp.now().date())})
+        journal.ereignis("kassenbasis", "Kassenbasis festgehalten: " + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()))
+        return [], "Kassen-Abgleich: Kassenbasis erstmals festgehalten (" + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()) + \
+            ") – bitte mit dem Startguthaben des Paper-Kontos vergleichen"
+    tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
+    abw = []
+    for w in sorted(set(ibkr) | set(bot) | set(basis)):
+        soll = basis.get(w, 0.0) + bot.get(w, 0.0)
+        if abs(ibkr.get(w, 0.0) - soll) > tol:
+            abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {ibkr.get(w, 0.0) - soll:+,.2f})")
+    return abw, ("" if abw else "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" +
+                 ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")")
 
 
 def verfallene_markieren(journal, offene_refs: set[str], letzte_sitzung) -> int:
@@ -176,7 +240,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             if not broker.verbunden():
                 broker.verbinden()
             zeilen: list[str] = []
-            neu = einlesen(journal, broker, fx, kosten=risk.kosten, protokoll=zeilen)
+            neu = einlesen(journal, broker, fx, kosten=risk.kosten, protokoll=zeilen, eroeffnung=_eroeffnung_fn(kurse_laden))
             if neu:
                 erg.meldungen.append(f"Neue Ausführungen eingelesen: {', '.join(neu)}")
                 erg.meldungen += zeilen
@@ -186,6 +250,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             if n:
                 erg.meldungen.append(f"{n} nicht ausgeführte Order(s) verfallen")
             diff = abgleich(journal, list(b["buecher"]), broker.positionen())
+            kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b)
+            if kasse_text:
+                erg.meldungen.append(kasse_text)
+            diff += kasse_diff
             if diff:
                 erg.gestoppt = "Abgleich mit IBKR weicht ab – Tageslauf gestoppt: " + "; ".join(diff)
                 journal.ereignis("abgleich", erg.gestoppt)
@@ -247,14 +315,20 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         frei_buch, _ = kasse_frei(journal, buch, fx)
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
-                           reserviert=journal.kasse(buch) - frei_buch)
+                           reserviert=journal.kasse(buch) - frei_buch,
+                           nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)))
         journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)
 
     # Fundamental-Bücher (Bewertung nur, wenn ein Buch sie heute braucht)
     fb = {n: v for n, v in (("fundamental_a", "A"), ("fundamental_b", "B")) if n in b["buecher"]}
-    braucht = [n for n in fb if (not journal.bestand(n) and not journal.unterwegs(n)) or quartalsstichtag(nyse)]
+    def _nachkauf(n):
+        seit = (journal.zustand(n) or {}).get("letzter_signaltag")
+        return journal.nachkauf_kandidaten(n, seit) if seit else set()
+
+    nachkauf_fb = {n: _nachkauf(n) for n in fb}
+    braucht = [n for n in fb if (not journal.bestand(n) and not journal.unterwegs(n)) or quartalsstichtag(nyse) or nachkauf_fb[n]]
     kurse_usd: dict[str, float] = {}
     for n in fb:
         bestand = journal.bestand(n)
@@ -272,11 +346,12 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             rl = rangliste(bewertung, fb[n])
             bestand = journal.bestand(n)
             preise = {r.symbol: float(r.schluss_usd) for r in bewertung.itertuples() if r.symbol}
-            preise.update({t: float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1]) for t in bestand if t not in preise})
+            preise.update({t: float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1]) for t in set(bestand) | nachkauf_fb[n] if t not in preise})
             frei_n = kasse_frei(journal, n, fx)[0]
             v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, frei_n, bestand,
                                           journal.zustand(n), kf, aufschlag, gebuehr_fuer("USD", eurusd),
-                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)}, reserviert=journal.kasse(n) - frei_n)
+                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)}, reserviert=journal.kasse(n) - frei_n,
+                                          nachkauf=nachkauf_fb[n])
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue
@@ -309,7 +384,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                                     kern=bv.kern, details=bv.details)
         erg.vorschlaege.append((bv, u))
     for n, w in werte_buch.items():
-        journal.buchwert_speichern(n, tag, w, journal.kasse(n))
+        w_modell = w + journal.gebuehren_differenz(n)
+        journal.buchwert_speichern(n, tag, w, journal.kasse(n), w_modell)
+        erg.meldungen.append(f"{n}: Buchwert wie gebucht (Paper, Festpreis) {w:,.2f} €, mit Modellgebühr (Tiered, 1,25 € Minimum) "
+                             f"{w_modell:,.2f} € (maßgeblich für den Echtbetrieb)")
     journal.ereignis("tageslauf", f"{len(erg.vorschlaege)} Vorschläge, Befunde in {sorted(erg.befunde)}; Xetra {xetra:%d.%m.%Y}, NYSE {nyse:%d.%m.%Y}")
     if sichern:
         ziel = journal.sichern(None, jetzt=jetzt)
@@ -461,7 +539,9 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
         if antwort.status == "abgelehnt":
             journal.status_setzen(z["id"], "abgelehnt", order_id=antwort.order_id, meldung=antwort.text)
             journal.ereignis("abgelehnt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])
-            meldungen.append(f"{z['id']}: von IBKR ABGELEHNT (Order {antwort.order_id}) – {antwort.text}")
+            opg = " – Limit-On-Open (OPG) nicht angenommen; kein Ersatz-Ordertyp ohne Jakobs Zustimmung" if (
+                z["art"] == "aktie" and not z["ticker"].endswith(".DE") and z["richtung"] > 0) else ""
+            meldungen.append(f"{z['id']}: von IBKR ABGELEHNT (Order {antwort.order_id}) – {antwort.text}{opg}")
             continue
         if antwort.status == "unbestaetigt":
             journal.status_setzen(z["id"], "unbestaetigt", order_id=antwort.order_id, meldung=antwort.text)
