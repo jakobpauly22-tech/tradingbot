@@ -151,6 +151,28 @@ def nicht_handelbare_entfernen(bewertung: pd.DataFrame, nyse, max_alter_handelst
     return bewertung[~(alt | unbekannt)], meldungen
 
 
+US_OFFEN_BIS = time(22, 0)           # US-Handel offen bis 22:00 Uhr deutscher Zeit (im Regelfall)
+FX_PAUSE = (time(22, 55), time(23, 15))  # IDEALPRO-Tagesschluss
+
+
+def zeitfenster_hinweis(jetzt: datetime, vorschlaege) -> list[str]:
+    """Hinweis für US-Orders mit OPG und den EUR→USD-Tausch (Jakob 04.11.2026): Freigabe vor 22:00 Uhr (US-Handel offen)
+    oder zwischen 22:55 und 23:15 Uhr (FX-Tagesschluss). `vorschlaege`: OrderVorschläge oder Journalzeilen."""
+    def feld(v, n):
+        return v[n] if not hasattr(v, n) else getattr(v, n)
+    us = [v for v in vorschlaege if feld(v, "art") == "aktie" and not str(feld(v, "ticker")).endswith(".DE") and feld(v, "richtung") > 0]
+    fx = [v for v in vorschlaege if feld(v, "art") == "fx"]
+    t = jetzt.time()
+    hinweise = []
+    if us and t < US_OFFEN_BIS:
+        hinweise.append(f"HINWEIS Zeitpunkt: {len(us)} US-Käufe mit Limit-On-Open – Freigabe vor 22:00 Uhr, der US-Handel ist noch offen "
+                        f"(jetzt {jetzt:%H:%M}); besser zwischen 22:05 und 22:50 Uhr freigeben")
+    if (us or fx) and FX_PAUSE[0] <= t <= FX_PAUSE[1]:
+        hinweise.append(f"HINWEIS Zeitpunkt: {'EUR→USD-Tausch' if fx else ''}{' und ' if fx and us else ''}{'US-Käufe' if us else ''} "
+                        f"im FX-Tagesschluss 22:55–23:15 Uhr (jetzt {jetzt:%H:%M}); besser zwischen 22:05 und 22:50 Uhr freigeben")
+    return hinweise
+
+
 def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[str], str]:
     """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
     (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05)."""
@@ -172,13 +194,32 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
         return [], "Kassen-Abgleich: Kassenbasis erstmals festgehalten (" + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()) + \
             ") – bitte mit dem Startguthaben des Paper-Kontos vergleichen"
     tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
-    abw = []
+    grenze = float(b.get("sicherheit", {}).get("abgleich_buchung_ohne_buchbezug_max", 10.0))
+    abw, uebernommen = [], []
     for w in sorted(set(ibkr) | set(bot) | set(basis)):
         soll = basis.get(w, 0.0) + bot.get(w, 0.0)
-        if abs(ibkr.get(w, 0.0) - soll) > tol:
-            abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {ibkr.get(w, 0.0) - soll:+,.2f})")
-    return abw, ("" if abw else "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" +
-                 ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")")
+        d = ibkr.get(w, 0.0) - soll
+        if abs(d) <= tol:
+            continue
+        if abs(d) <= grenze:
+            # Buchung ohne Buchbezug (Zinsen, Kontogebühren; Jakob 04.11.2026): in die Kassenbasis, protokolliert
+            basis[w] = basis.get(w, 0.0) + d
+            uebernommen.append(f"{w} {d:+,.2f}")
+        else:
+            abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {d:+,.2f}, über "
+                       f"{grenze:.0f} € – unerklärte Buchung, bitte im Client Portal klären)")
+    if uebernommen and not abw:
+        konto = journal.zustand("_konto")
+        konto["kassenbasis"] = basis
+        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": str(pd.Timestamp.now().date()), "betraege": uebernommen})
+        journal.zustand_speichern("_konto", konto)
+        journal.ereignis("kassenbasis", "Buchung ohne Buchbezug (Zinsen/Kontogebühren vermutet) in die Kassenbasis: " + ", ".join(uebernommen))
+    if abw:
+        return abw, ""
+    text = "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" + ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")"
+    if uebernommen:
+        text += "; Buchung ohne Buchbezug in die Kassenbasis übernommen: " + ", ".join(uebernommen)
+    return [], text
 
 
 def verfallene_markieren(journal, offene_refs: set[str], letzte_sitzung) -> int:
@@ -362,6 +403,15 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
             kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
             werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
+    if fundamental_bewertung is None and fb:
+        try:
+            from tradingbot.daten.universum import universum_aktualisieren
+            stand = universum_aktualisieren(erzwingen=quartalsstichtag(nyse))
+            erg.meldungen.append(f"S&P-500-Liste: Wikipedia, abgerufen {stand['wikipedia_aktuell'][:16].replace('T', ' ')} UTC"
+                                 f"{' (Quartalsstichtag: neu abgerufen)' if quartalsstichtag(nyse) else ''}; letzte erfasste Änderung "
+                                 f"{stand['letzte_aenderung']} (rein: {stand['zugang'] or '–'}, raus: {stand['abgang'] or '–'})")
+        except Exception as f:  # noqa: BLE001
+            erg.meldungen.append(f"S&P-500-Liste nicht aktualisiert ({type(f).__name__}: {f}) – Stand unverändert")
     if braucht:
         bewertung, _, meldungen = (fundamental_bewertung or _fundamental_bewertung)(pd.Timestamp(nyse))
         erg.meldungen += meldungen[:5]
@@ -416,6 +466,12 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         journal.buchwert_speichern(n, tag, w, journal.kasse(n), w_modell)
         erg.meldungen.append(f"{n}: Buchwert wie gebucht (Paper, Festpreis) {w:,.2f} €, mit Modellgebühr (Tiered, 1,25 € Minimum) "
                              f"{w_modell:,.2f} € (maßgeblich für den Echtbetrieb)")
+    us_fx = [bv.vorschlag for bv, u in erg.vorschlaege if u.frei and (bv.vorschlag.art == "fx" or
+             (bv.vorschlag.art == "aktie" and not bv.vorschlag.ticker.endswith(".DE") and bv.vorschlag.richtung > 0))]
+    if us_fx:
+        erg.meldungen.append("Zeitpunkt: US-Käufe (Limit-On-Open) und EUR→USD-Tausch nicht vor 22:00 Uhr (US-Handel offen) und nicht "
+                             "zwischen 22:55 und 23:15 Uhr (FX-Tagesschluss) freigeben; empfohlen 22:05–22:50 Uhr")
+        erg.meldungen += zeitfenster_hinweis(jetzt, us_fx)
     journal.ereignis("tageslauf", f"{len(erg.vorschlaege)} Vorschläge, Befunde in {sorted(erg.befunde)}; Xetra {xetra:%d.%m.%Y}, NYSE {nyse:%d.%m.%Y}")
     if sichern:
         ziel = journal.sichern(None, jetzt=jetzt)
@@ -472,6 +528,8 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     if not probe and not (FREIGABE_VON <= jetzt.time()):
         return [f"Freigabe nur zwischen 18 und 24 Uhr (jetzt {jetzt:%H:%M})"]
     global_an = bool(b["ibkr"].get("senden_freigeschaltet", False))
+    zeilen = [z for z in journal.vorschlaege() if z["id"] in set(ids)]
+    meldungen += zeitfenster_hinweis(jetzt, zeilen)
     for i in ids:
         z = journal.db.execute("SELECT buch FROM vorschlaege WHERE id=?", (i,)).fetchone()
         buch_an = bool(z) and buch_freigeschaltet(b, z["buch"])

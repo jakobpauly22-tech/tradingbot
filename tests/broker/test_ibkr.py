@@ -142,8 +142,9 @@ def test_kontrakte_xetra_aktie_und_us():
 
 
 def test_senden_je_buch_freigeschaltet(tmp_path):
-    """Freischaltung je Buch (03.11.2026): real und crossover an, Fundamental A/B und Momentum gesperrt."""
+    """Freischaltung je Buch: gesperrte Bücher (hier Fundamental A/B und Momentum wie am 03.11.2026) senden nicht."""
     b = broker(tmp_path)
+    b.betrieb = {**b.betrieb, "buecher": {n: {**bk, "senden_freigeschaltet": n in ("real", "crossover")} for n, bk in b.betrieb["buecher"].items()}}
     for buch in ("fundamental_a", "fundamental_b", "momentum"):
         with pytest.raises(SendenGesperrt, match=f"Buch {buch} ist zum Senden nicht freigeschaltet"):
             b.sende(Auftrag(buch, "v5", "SPYI.DE", 1, 1, 204.0), set())
@@ -290,3 +291,10 @@ def test_us_kauf_limit_on_open(tmp_path):
     assert (o.orderType, o.tif, o.lmtPrice) == ("LMT", "OPG", 150.0) and k.currency == "USD"
     b.sende(Auftrag("crossover", "u2", "SXR1.DE", 1, 1, 221.30), set())
     assert b.ib.gesendet[-1][1].tif == "DAY"
+
+
+def test_universum_ohne_sxrm_mit_iusm():
+    """SXRM durch IUSM ersetzt (Jakob 04.11.2026); IUSM ist ohne IBKR-Prüfung nicht in der Kontrakttabelle."""
+    t = lade_konfiguration("technik")
+    ticker = {e["ticker"]: e for e in t["universum"]["etfs"]}
+    assert "SXRM.DE" not in ticker and ticker["IUSM.DE"]["isin"] == "IE00B1FZS798" and "handelswaehrung" not in ticker["IUSM.DE"]

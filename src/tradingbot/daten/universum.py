@@ -592,3 +592,18 @@ def vorgaenger_fehlt(zehn_k: pd.DatetimeIndex, von, ab=pd.Timestamp("2011-01-01"
         return True
     start = max(pd.Timestamp(von) if pd.notna(von) else ab, ab)
     return zehn_k[0] > start + pd.Timedelta(days=460)
+
+
+def universum_aktualisieren(erzwingen: bool = False) -> dict:
+    """S&P-500-Zusammensetzung für den Betrieb (Jakob 04.11.2026): wöchentlich (Wikipedia-Cache höchstens 7 Tage alt) und
+    an jedem Quartalsstichtag erzwungen neu (Cache höchstens 12 Stunden). Gibt den Stand zurück: Abruf der Liste,
+    letzte erfasste Änderung (Datum, Zugang, Abgang)."""
+    if erzwingen:
+        lade_wikipedia(max_alter=timedelta(hours=12))
+    else:
+        lade_wikipedia()
+    t, meta = lade_universum(neu_berechnen=erzwingen)
+    letzte = max(d for d in (t["von"].max(), t["bis"].max()) if pd.notna(d))
+    zugang = ", ".join(t.loc[t["von"] == letzte, "ticker"].astype(str))
+    abgang = ", ".join(t.loc[t["bis"] == letzte, "ticker"].astype(str))
+    return {**meta, "letzte_aenderung": str(pd.Timestamp(letzte).date()), "zugang": zugang, "abgang": abgang}

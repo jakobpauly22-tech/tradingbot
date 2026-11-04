@@ -167,7 +167,13 @@ class Freigabefenster:
         if not ids:
             messagebox.showinfo("Freigabe", "Nichts ausgewählt.")
             return
-        if not messagebox.askyesno("Freigabe bestätigen", f"{len(ids)} Vorschläge freigeben" + ("" if self.probe else " und senden") + "?"):
+        from datetime import datetime
+
+        from tradingbot.betrieb.tageslauf import zeitfenster_hinweis
+        gewaehlt = [bv.vorschlag for bv, _ in self.erg.vorschlaege if bv.vorschlag.id in set(ids)]
+        hinweis = "\n\n".join(zeitfenster_hinweis(datetime.now(), gewaehlt))
+        if not messagebox.askyesno("Freigabe bestätigen", f"{len(ids)} Vorschläge freigeben" + ("" if self.probe else " und senden") + "?"
+                                   + (f"\n\n{hinweis}" if hinweis else "")):
             return
         meldungen = self.senden_fn(ids)
         self.protokoll.insert("end", "\n".join(meldungen) + "\n")

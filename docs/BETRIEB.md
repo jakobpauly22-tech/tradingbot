@@ -51,5 +51,19 @@ gibt es nur bei iShares:
   Die Xetra-Historie (IBB1 ab 02.2019) reicht nicht bis 2012 zurück.
 - Andere 7–10-Jahre-ETFs (Invesco, Xtrackers, Amundi, SPDR) folgen Bloomberg- oder iBoxx-Indizes, nicht dem ICE-Index.
 
-Ob IUSM bei IBKR an Xetra in EUR handelbar ist, war noch nicht prüfbar, weil das Gateway aus war. Prüfen mit
-`tools/kontrakte_pruefen.py`, nachdem die ISIN eingetragen ist.
+**Entscheidung (Jakob 04.11.2026):** IUSM ersetzt SXRM (gleicher Fonds, ausschüttende Klasse, analog IUSA statt SXR8).
+Ausschüttungen fließen wie bei IUSA in die Kasse; es gibt keine neue Variante. Eingetragen in `config/technik.yaml`. Den
+Kontrakt trägt `tools/kontrakte_pruefen.py` nach dem Gateway-Start ein, nur wenn IBKR IUSM an Xetra in EUR führt. Bis
+dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
+
+## Kassenbasis und Zeitfenster (04.11.2026)
+
+- Buchungen ohne Buchbezug (Zinsen, Kontogebühren) gehen in die Kassenbasis und werden protokolliert (Ereignis
+  `kassenbasis`, Liste im Zustand `_konto`). Der Abgleich stoppt nur, wenn eine Abweichung je Währung 10 € übersteigt
+  (`sicherheit.abgleich_buchung_ohne_buchbezug_max`). Ob eine Buchung bis 10 € tatsächlich Zins oder Gebühr ist, kann die
+  API nicht belegen (dafür wären Flex-Abfragen nötig). Sie gilt deshalb als „vermutet“ und steht im Protokoll.
+- **Zeitpunkt der Freigabe:** Für US-Käufe (Limit-On-Open) und den EUR→USD-Tausch zeigt der Tageslauf einen Hinweis, und
+  bei der Freigabe erscheint eine Warnung in der Bestätigung: nicht vor 22:00 Uhr (US-Handel offen) und nicht zwischen
+  22:55 und 23:15 Uhr (FX-Tagesschluss). Empfohlen sind 22:05–22:50 Uhr. Das ist ein Hinweis, keine Sperre.
+- **S&P-500-Liste:** Sie wird wöchentlich erneuert (Wikipedia-Cache höchstens 7 Tage alt) und an jedem Quartalsstichtag
+  zwingend neu abgerufen. Den Stand zeigt das Protokoll: Abruf der Liste und letzte erfasste Änderung.

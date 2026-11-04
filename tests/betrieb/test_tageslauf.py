@@ -470,10 +470,10 @@ def test_kassenabgleich(umgebung):
     assert diff == [] and "erstmals festgehalten" in text and j.zustand("_konto")["kassenbasis"]["EUR"] == 1_000_000.0
     diff, text = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_000.03}), b)
     assert diff == [] and "stimmt" in text                                         # innerhalb der Toleranz
-    diff, _ = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 999_997.0}), b)
-    assert diff and "Kasse EUR" in diff[0] and "-3.00" in diff[0]
-    # im Tageslauf stoppt eine Kassenabweichung wie eine Bestandsabweichung
-    e = lauf(j, rm, broker=KontoAttrappe({"EUR": 999_997.0}))
+    diff, _ = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 999_970.0}), b)
+    assert diff and "Kasse EUR" in diff[0] and "-30.00" in diff[0]
+    # im Tageslauf stoppt eine Kassenabweichung über 10 € wie eine Bestandsabweichung
+    e = lauf(j, rm, broker=KontoAttrappe({"EUR": 999_970.0}))
     assert e.gestoppt and "Kasse EUR" in e.gestoppt
 
 
@@ -543,3 +543,41 @@ def test_nicht_notierte_titel_werden_nicht_vorgeschlagen(umgebung):
         return b, s, m
     e = tageslauf(ABEND, j, kurse_laden=kurse_attrappe(), fundamental_bewertung=bewertung_mit_alt, risk=rm, sichern=False)
     assert not any(bv.vorschlag.ticker == "US0" for bv, _ in e.vorschlaege)
+
+
+def test_kassenbasis_buchung_ohne_buchbezug(umgebung):
+    """Zinsen/Kontogebühren bis 10 € gehen in die Kassenbasis (protokolliert), darüber stoppt der Abgleich (04.11.2026)."""
+    from tradingbot.betrieb.tageslauf import kassenabgleich
+    j, rm = umgebung
+    lauf(j, rm)
+    b = lade_konfiguration("betrieb")
+    kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_000.0}), b)
+    diff, text = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_004.20}), b)       # Zinsgutschrift
+    assert diff == [] and "Buchung ohne Buchbezug" in text and "+4.20" in text
+    assert abs(j.zustand("_konto")["kassenbasis"]["EUR"] - 1_000_004.20) < 1e-9
+    assert j.zustand("_konto")["buchungen_ohne_buchbezug"][0]["betraege"] == ["EUR +4.20"]
+    diff, _ = kassenabgleich(j, list(b["buecher"]), KontoAttrappe({"EUR": 1_000_004.20 - 12.0}), b)  # 12 € unerklärt
+    assert diff and "unerklärte Buchung" in diff[0]
+
+
+def test_zeitfenster_hinweis():
+    from types import SimpleNamespace as N
+    from tradingbot.betrieb.tageslauf import zeitfenster_hinweis
+    us = N(art="aktie", ticker="DPZ", richtung=1)
+    fx = N(art="fx", ticker="EUR.USD", richtung=-1)
+    etf = N(art="etf", ticker="EUNM.DE", richtung=1)
+    assert len(zeitfenster_hinweis(datetime(2026, 11, 4, 21, 30), [us, fx])) == 1             # US-Handel offen
+    assert zeitfenster_hinweis(datetime(2026, 11, 4, 22, 5), [us, fx]) == []
+    assert zeitfenster_hinweis(datetime(2026, 11, 4, 22, 50), [us, fx]) == []
+    assert "FX-Tagesschluss" in zeitfenster_hinweis(datetime(2026, 11, 4, 23, 0), [fx])[0]
+    assert zeitfenster_hinweis(datetime(2026, 11, 4, 21, 0), [etf]) == []                      # Xetra-ETFs ohne Hinweis
+
+
+def test_hinweis_bei_freigabe_und_im_lauf(umgebung):
+    j, rm = umgebung
+    e = lauf(j, rm)
+    assert any(m.startswith("Zeitpunkt: US-Käufe (Limit-On-Open)") for m in e.meldungen)
+    fx = [z["id"] for z in j.vorschlaege(buch="fundamental_a") if z["art"] == "fx" and z["status"] == "vorgeschlagen"]
+    an = {**AN, "buecher": {n: {**bk, "senden_freigeschaltet": True} for n, bk in AN["buecher"].items()}}
+    m = freigeben_und_senden(j, fx, BrokerAttrappe(), ABEND.replace(hour=23, minute=0), risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    assert any("FX-Tagesschluss" in x for x in m)
