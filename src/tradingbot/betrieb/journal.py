@@ -115,10 +115,15 @@ class Journal:
             kassen[w] = kassen.get(w, 0.0) - z["richtung"] * z["stueck"] * preis
             gw = z["gebuehr_waehrung"] or "EUR"
             kassen[gw] = kassen.get(gw, 0.0) - (z["gebuehr"] if z["gebuehr"] is not None and gw != "EUR" else z["gebuehr_eur"])
-        for z in self.db.execute("SELECT von, nach, betrag_von, betrag_nach, gebuehr_eur FROM tausche WHERE buch=?", (buch,)):
+        for z in self.db.execute("SELECT von, nach, betrag_von, betrag_nach, gebuehr_eur, gebuehr_ibkr, gebuehr_ibkr_waehrung FROM tausche "
+                                 "WHERE buch=?", (buch,)):
             kassen[z["von"]] = kassen.get(z["von"], 0.0) - z["betrag_von"]
             kassen[z["nach"]] = kassen.get(z["nach"], 0.0) + z["betrag_nach"]
-            kassen["EUR"] -= z["gebuehr_eur"]
+            gw = z["gebuehr_ibkr_waehrung"] if z["gebuehr_ibkr"] is not None else "EUR"
+            if gw and gw != "EUR":                                   # IBKR rechnet die Tauschgebühr in USD ab
+                kassen[gw] = kassen.get(gw, 0.0) - z["gebuehr_ibkr"]
+            else:
+                kassen["EUR"] -= z["gebuehr_eur"]
         kassen["EUR"] += self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
         return kassen
 

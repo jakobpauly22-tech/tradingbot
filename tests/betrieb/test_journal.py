@@ -82,3 +82,13 @@ def test_sicherung_ueberschreibt_nie(tmp_path):
     a, b = j.sichern(str(tmp_path / "s"), jetzt=t), j.sichern(str(tmp_path / "s"), jetzt=t)
     assert a != b and a.exists() and b.exists()
     j.schliessen()
+
+
+def test_tauschgebuehr_in_usd_abgezogen(tmp_path):
+    from tradingbot.betrieb.journal import Journal
+    j = Journal(tmp_path / "j.sqlite")
+    j.buch_anlegen("fundamental_a", 10_000.0)
+    j.tausch("t1", "fundamental_a:x", "EUR", "USD", 9000.0, 9900.0, 2.0 / 1.1, "2026-11-04T09:00", gebuehr_ibkr=2.0, gebuehr_ibkr_waehrung="USD")
+    k = j.kasse_je_waehrung("fundamental_a")
+    assert abs(k["EUR"] - 1000.0) < 1e-9 and abs(k["USD"] - 9898.0) < 1e-9
+    j.schliessen()

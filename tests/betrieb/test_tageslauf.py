@@ -524,3 +524,22 @@ def test_technikbuch_ohne_kauf_baut_am_naechsten_tag_wieder_auf(umgebung):
     e2 = lauf(j, rm, jetzt=naechster)
     zweit = {bv.vorschlag.ticker for bv, _ in e2.vorschlaege if bv.vorschlag.buch == "momentum" and bv.vorschlag.richtung > 0}
     assert zweit == erst and any("Aufbau wie beim ersten Lauf" in m for m in e2.meldungen)
+
+
+def test_nicht_notierte_titel_werden_nicht_vorgeschlagen(umgebung):
+    """KVUE-Fall (04.11.2026): Titel mit veraltetem Kurs oder ohne IBKR-Kontrakt fallen vor der Rangliste heraus."""
+    from tradingbot.betrieb.tageslauf import nicht_handelbare_entfernen
+    j, rm = umgebung
+    bew, _, _ = bewertung_attrappe(pd.Timestamp("2026-11-02"))
+    bew.loc[0, "kursdatum"] = pd.Timestamp("2026-10-30")
+    bew.loc[1, "symbol"] = "KVUE"                                    # steht in config/kontrakte.yaml unter nicht_aufloesbar
+    rest, meld = nicht_handelbare_entfernen(bew, pd.Timestamp("2026-11-09"))
+    assert "US0" not in set(rest["symbol"]) and "KVUE" not in set(rest["symbol"]) and len(rest) == len(bew) - 2
+    assert any("US0" in m and "letzter Kurs 30.10.2026" in m for m in meld) and any("KVUE" in m and "IBKR" in m for m in meld)
+
+    def bewertung_mit_alt(tag):
+        b, s, m = bewertung_attrappe(tag)
+        b.loc[0, "kursdatum"] = pd.Timestamp(tag) - pd.Timedelta(days=20)
+        return b, s, m
+    e = tageslauf(ABEND, j, kurse_laden=kurse_attrappe(), fundamental_bewertung=bewertung_mit_alt, risk=rm, sichern=False)
+    assert not any(bv.vorschlag.ticker == "US0" for bv, _ in e.vorschlaege)

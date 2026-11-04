@@ -31,14 +31,14 @@ buecher:
     rolle: core                        # 20 Einzelaktien, Originalscore (docs/FUNDAMENTAL.md)
     max_orders_pro_tag: 25
     freigabe: sammel                   # Sammelfreigabe je Buch, nur im Paper-Konto
-    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
+    senden_freigeschaltet: true           # 04.11.2026: freigeschaltet (Jakob; Fundamental nach Fertigstellung von Nachkauf und Limit-On-Open)
   fundamental_b:
     art: skalierung
     budget_eur: 10000.0
     rolle: core                        # nur Qualitätshälfte
     max_orders_pro_tag: 25
     freigabe: sammel
-    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
+    senden_freigeschaltet: true           # 04.11.2026: freigeschaltet (Jakob; Fundamental nach Fertigstellung von Nachkauf und Limit-On-Open)
   crossover:
     art: skalierung
     budget_eur: 10000.0                # ab hier wirkt die Mindestgebühr nicht mehr (Orders ≥ 2.500 €)
@@ -52,7 +52,7 @@ buecher:
     rolle: satellite
     max_orders_pro_tag: 25
     freigabe: sammel
-    senden_freigeschaltet: false          # 03.11.2026: gesperrt bis zur Freigabe nach Prüfung der ersten Ausführungen
+    senden_freigeschaltet: true           # 04.11.2026: freigeschaltet (Jakob; Fundamental nach Fertigstellung von Nachkauf und Limit-On-Open)
 
 ibkr:
   host: 127.0.0.1                      # nur lokal

@@ -125,6 +125,32 @@ def _eroeffnung_fn(kurse_laden):
     return eroeffnung
 
 
+def nicht_handelbare_entfernen(bewertung: pd.DataFrame, nyse, max_alter_handelstage: int = 5) -> tuple[pd.DataFrame, list[str]]:
+    """Titel, die nicht mehr notiert oder bei IBKR nicht handelbar sind, dürfen nicht vorgeschlagen werden (Jakob
+    04.11.2026, Anlass KVUE: in der Wikipedia-Zusammensetzung noch Mitglied, letzter Kurs 30.10.2026, bei IBKR kein Kontrakt).
+    Raus: (a) letzter Kurs älter als `max_alter_handelstage` NYSE-Handelstage, (b) in config/kontrakte.yaml unter
+    `nicht_aufloesbar`. Gibt die bereinigte Bewertung und Meldungen zurück."""
+    from tradingbot.broker.ibkr import nicht_aufloesbar
+
+    if bewertung is None or not len(bewertung) or "symbol" not in bewertung.columns:
+        return bewertung, []
+    grenze = pd.Timestamp(nyse) - pd.offsets.BDay(max_alter_handelstage)
+    kursdatum = pd.to_datetime(bewertung["kursdatum"]) if "kursdatum" in bewertung.columns else pd.Series(pd.Timestamp(nyse), index=bewertung.index)
+    alt = kursdatum < grenze
+    unbekannt = bewertung["symbol"].isin(set(nicht_aufloesbar()))
+    raus = bewertung[alt | unbekannt]
+    meldungen = []
+    for r in raus.itertuples():
+        grund = []
+        if alt.loc[r.Index]:
+            grund.append(f"letzter Kurs {pd.Timestamp(kursdatum.loc[r.Index]).date():%d.%m.%Y}")
+        if unbekannt.loc[r.Index]:
+            grund.append("bei IBKR nicht handelbar")
+        meldungen.append(f"Fundamental: {r.symbol} nicht vorschlagbar ({', '.join(grund)}) – vermutlich nicht mehr notiert oder nicht "
+                         f"mehr im Index; Zusammensetzung prüfen")
+    return bewertung[~(alt | unbekannt)], meldungen
+
+
 def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[str], str]:
     """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
     (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05)."""
@@ -339,6 +365,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     if braucht:
         bewertung, _, meldungen = (fundamental_bewertung or _fundamental_bewertung)(pd.Timestamp(nyse))
         erg.meldungen += meldungen[:5]
+        bewertung, raus = nicht_handelbare_entfernen(bewertung, nyse)
+        erg.meldungen += raus
         from tradingbot.engines.fundamental.aktuell import rangliste
 
         fundamental_gruende = {r.symbol: list(r.gruende) for r in bewertung.itertuples() if r.symbol}
