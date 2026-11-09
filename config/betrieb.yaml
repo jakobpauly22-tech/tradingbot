@@ -76,11 +76,17 @@ waehrung:
 
 nachtrag:
   # Ausführungen außerhalb des API-Zeitfensters (verpasster Abend; betrieb/nachtrag.py, Jakob 09.11.2026). reqExecutions
-  # liefert nur den laufenden Tag. Weg: Flex-Abfrage (IBKR_FLEX_TOKEN, IBKR_FLEX_QUERY_ID in .env), sonst Position mit
-  # Einstand (nur Käufe, Order erklärt die Position allein, Preis innerhalb Tief/Hoch des Ausführungstags). Ohne Beleg stoppt
-  # der Tageslauf. Gebühr für den Weg über die Position: Paper-Festpreis je Order, wie IBKR ihn meldet (docs/BETRIEB.md,
-  # 04.11.2026); IBKR führt den Einstand inklusive Gebühr. Leer (null) = nur Flex.
-  gebuehr_je_order: 3.0
+  # liefert nur den laufenden Tag. Weg: Flex-Abfrage (FLEX_TOKEN, FLEX_QUERY_ID in .env), sonst Position mit Einstand (nur
+  # Käufe, Order erklärt die Position allein, Preis innerhalb Tief/Hoch des Ausführungstags). Ohne Beleg stoppt der Tageslauf.
+  # IBKR führt den Einstand inklusive Gebühr; für den Weg über die Position gilt die Gebühr je Markt und Währung nach dem
+  # Festpreis-Plan des Paper-Kontos (Jakob 09.11.2026). Sie wird als „angenommen“ markiert und beim nächsten Flex-Abruf
+  # abgeglichen. Leer (null) = nur Flex.
+  gebuehr:
+    xetra_eur: {je_order: 3.00}          # Paper-Konto, von IBKR je Order gemeldet (docs/BETRIEB.md, 04.11.2026)
+    # IBKR Pro Fixed, United States: USD 0.005 je Aktie, Minimum USD 1.00, Maximum 1 % des Orderwerts.
+    # Quelle: https://www.interactivebrokers.com/en/pricing/commissions-stocks.php (geprüft 09.11.2026). Regulierungsgebühren
+    # bei Käufen nur FINRA CAT (USD 0.000003 je Stück), vernachlässigt; SEC/FINRA TAF nur bei Verkäufen (kein Nachtrag).
+    us_usd: {je_aktie: 0.005, minimum: 1.00, maximum_anteil: 0.01}
 
 freigabe:
   # Tageslauf abends nach Börsenschluss; Freigabe 18–24 Uhr; Orders werden sofort nach der Freigabe gesendet, gültig für

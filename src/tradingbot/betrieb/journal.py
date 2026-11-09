@@ -55,13 +55,16 @@ class Journal:
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
         for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT"), ("boerse", "TEXT"),
                           ("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL"),
-                          ("eroeffnung", "REAL"), ("quelle", "TEXT")):
+                          ("eroeffnung", "REAL"), ("quelle", "TEXT"), ("gebuehr_angenommen", "INTEGER DEFAULT 0")):
             if name not in spalten:                                   # ältere Journale ergänzen
                 self.db.execute(f"ALTER TABLE ausfuehrungen ADD COLUMN {name} {typ}")
         t_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(tausche)")}
         for name, typ in (("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL"), ("quelle", "TEXT")):
             if name not in t_spalten:
                 self.db.execute(f"ALTER TABLE tausche ADD COLUMN {name} {typ}")
+        # Nachträge vom 09.11.2026 (Weg über die Position) tragen eine angenommene Gebühr (Jakob 09.11.2026)
+        self.db.execute("UPDATE ausfuehrungen SET gebuehr_angenommen=1 WHERE quelle LIKE 'IBKR Position (Einstand)%' "
+                        "AND COALESCE(gebuehr_angenommen, 0)=0")
         if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
             self.db.execute("ALTER TABLE buchwerte ADD COLUMN wert_modell REAL")
         self.db.commit()
@@ -296,10 +299,26 @@ class Journal:
         self.db.commit()
         return neu
 
-    def quelle_setzen(self, exec_id: str, quelle: str):
-        """Beleg einer nachgetragenen Ausführung (betrieb/nachtrag.py, Jakob 09.11.2026); leer = IBKR-API am Ausführungstag."""
-        self.db.execute("UPDATE ausfuehrungen SET quelle=? WHERE exec_id=?", (quelle, exec_id))
+    def quelle_setzen(self, exec_id: str, quelle: str, *, gebuehr_angenommen: bool = False):
+        """Beleg einer nachgetragenen Ausführung (betrieb/nachtrag.py, Jakob 09.11.2026); leer = IBKR-API am Ausführungstag.
+        `gebuehr_angenommen`: Gebühr nicht von IBKR gemeldet, sondern nach Plan angenommen (Abgleich beim Flex-Abruf)."""
+        self.db.execute("UPDATE ausfuehrungen SET quelle=?, gebuehr_angenommen=? WHERE exec_id=?",
+                        (quelle, int(gebuehr_angenommen), exec_id))
         self.db.execute("UPDATE tausche SET quelle=? WHERE exec_id=?", (quelle, exec_id))
+        self.db.commit()
+
+    def angenommene(self) -> list[sqlite3.Row]:
+        """Ausführungen mit angenommener Gebühr (Nachtrag über die Position), offen für den Abgleich mit Flex."""
+        return self.db.execute("SELECT * FROM ausfuehrungen WHERE gebuehr_angenommen=1 ORDER BY zeit").fetchall()
+
+    def ausfuehrungen_entfernen(self, exec_ids: list[str]):
+        """Nur für den Abgleich angenommener Nachträge: die abgeleitete Zeile wird durch die Flex-Ausführungen ersetzt
+        (alt und neu stehen im Ereignis „nachtrag_abgleich“)."""
+        for e in exec_ids:
+            z = self.db.execute("SELECT gebuehr_angenommen FROM ausfuehrungen WHERE exec_id=?", (e,)).fetchone()
+            if z is None or not z["gebuehr_angenommen"]:
+                raise ValueError(f"{e}: keine Ausführung mit angenommener Gebühr – wird nicht entfernt")
+            self.db.execute("DELETE FROM ausfuehrungen WHERE exec_id=?", (e,))
         self.db.commit()
 
     def dividende(self, buch, ticker, ex_tag, stueck, betrag_eur) -> bool:
@@ -342,11 +361,21 @@ class Journal:
             return z                                     # ältere Form: flacher Zustand
         return z["vor"] if z["signaltag"] == str(pd.Timestamp(tag).date()) else z["nach"]
 
+    def vorlauf_signaltag(self, buch: str, tag) -> str | None:
+        """Signaltag des Laufs, aus dem der Ausgangszustand für `tag` stammt (verpasste Tage dazwischen, Jakob 09.11.2026)."""
+        z = self.zustand(buch)
+        if "signaltag" not in z:
+            return None
+        return z.get("vor_signaltag") if z["signaltag"] == str(pd.Timestamp(tag).date()) else z["signaltag"]
+
     def zustand_nach_lauf(self, buch: str, tag, vor: dict, nach: dict):
         alt = self.zustand(buch)
+        vor_signaltag = alt.get("signaltag")
         if alt.get("signaltag") == str(pd.Timestamp(tag).date()):
             vor = alt["vor"]                             # der Stand vor dem Tag bleibt der vom ersten Lauf
-        self.zustand_speichern(buch, {"signaltag": str(pd.Timestamp(tag).date()), "vor": vor, "nach": nach})
+            vor_signaltag = alt.get("vor_signaltag")
+        self.zustand_speichern(buch, {"signaltag": str(pd.Timestamp(tag).date()), "vor": vor, "nach": nach,
+                                      "vor_signaltag": vor_signaltag})
 
     def zustand(self, buch: str) -> dict:
         z = self.db.execute("SELECT json FROM zustand WHERE buch=?", (buch,)).fetchone()

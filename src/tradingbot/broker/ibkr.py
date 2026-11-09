@@ -179,6 +179,15 @@ class IbkrBroker:
                 kassen[w.tag][w.currency] = kassen[w.tag].get(w.currency, 0.0) + float(w.value)
         return kassen["CashBalance"] or kassen["$LEDGER-CashBalance"]
 
+    def aufgelaufene_zinsen(self) -> dict[str, float]:
+        """Aufgelaufene, noch nicht gebuchte Zinsen je Währung (accountValues „AccruedCash“, sonst „$LEDGER-AccruedCash“,
+        ohne BASE). Für den Beleg von Zinsbuchungen im Kassen-Abgleich (Jakob 09.11.2026)."""
+        werte: dict[str, dict[str, float]] = {"AccruedCash": {}, "$LEDGER-AccruedCash": {}}
+        for w in self.ib.accountValues():
+            if w.tag in werte and w.currency and w.currency != "BASE":
+                werte[w.tag][w.currency] = werte[w.tag].get(w.currency, 0.0) + float(w.value)
+        return werte["AccruedCash"] or werte["$LEDGER-AccruedCash"]
+
     def offene_orders(self) -> list[OffeneOrder]:
         ergebnis = []
         for t in self.ib.openTrades():

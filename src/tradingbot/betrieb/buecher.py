@@ -161,16 +161,41 @@ def erster_handelstag_im_monat(boerse: str, tag) -> bool:
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
                 gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0,
-                nachkauf: set[str] = frozenset()) -> tuple[list[BuchVorschlag], dict]:
+                nachkauf: set[str] = frozenset(), verpasste_tage=()) -> tuple[list[BuchVorschlag], dict]:
     """`kasse` = freie Kasse (nach Orders unterwegs), `reserviert` = durch Orders unterwegs gebundene Kasse; der Buchwert
-    für Zielgewichte und 1-%-Risiko enthält beides (Korrektur 03.11.2026: sonst halbe Stückzahlen bei Orders unterwegs)."""
+    für Zielgewichte und 1-%-Risiko enthält beides (Korrektur 03.11.2026: sonst halbe Stückzahlen bei Orders unterwegs).
+
+    `verpasste_tage` (Jakob 09.11.2026): Handelstage ohne Lauf seit dem letzten Signaltag. Die Strategie prüft deren
+    Schlusskurse der Reihe nach wie im Backtest; Ausstiege (Stop, Signalende, Zeit-Stop) werden zum heutigen Abend
+    nachgeholt und im Vorschlag vermerkt („Stop … gerissen am 06.11., nachgeholt“). Einstiege verpasster Tage werden
+    verworfen; eingestiegen wird nur, wenn das Signal am aktuellen Tag gilt (Monatsprüfung Momentum am aktuellen Tag)."""
     from tradingbot.backtest.marktdaten import Marktdaten, Sicht
 
     tag = pd.Timestamp(tag)
     s = SatelliteStrategie([regel], kurse_eur, konfig_technik)
     zustand_laden(s, zustand, tag, erster_handelstag_im_monat("xetra", tag))
     m = Marktdaten(kurse_eur)
-    ziel = s.zielgewichte(tag, Sicht(m, tag, {t: v for t, v in bestand.items() if v > 0}, kasse))
+    gehalten = {t: v for t, v in bestand.items() if v > 0}
+    nachgeholt: dict[str, tuple[pd.Timestamp, str]] = {}
+    if gehalten and verpasste_tage:
+        pruefmonate = {n: dict(r.pruefmonat) for n, r in s.regeln.items() if hasattr(r, "pruefmonat")}
+        for d in sorted(pd.Timestamp(x) for x in verpasste_tage):
+            if d >= tag or any(d not in s.ind[t].index for t in gehalten if t in s.ind):
+                continue
+            vorher = set(s.pos)
+            z_d = s.zielgewichte(d, Sicht(m, d, gehalten, kasse))
+            z_d = {} if z_d is None else z_d
+            for t, w in dict(z_d.items()).items():
+                if w == 0 and t in gehalten and t not in nachgeholt:
+                    g = next((p["grund"] for p in reversed(s.protokoll) if p["ticker"] == t and pd.Timestamp(p["tag"]) == d
+                              and p["aktion"] == "verkaufen"), "Ausstieg")
+                    nachgeholt[t] = (d, g)
+            for t in set(s.pos) - vorher:                 # Einstiege verpasster Tage verwerfen
+                if t not in gehalten:
+                    del s.pos[t]
+        for n, pm in pruefmonate.items():                  # Monatsprüfung (Einstiege) am aktuellen Tag
+            s.regeln[n].pruefmonat = pm
+    ziel = s.zielgewichte(tag, Sicht(m, tag, gehalten, kasse))
     vorschlaege = []
     wert = kasse + reserviert + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())
     # Nachkauf (Jakob 04.11.2026): abgelehnte oder verfallene Käufe erneut, solange das Signal gilt (Crossover: SMA50 über
@@ -193,8 +218,14 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
         frei_anteil -= w
         s.pos[t] = Position(regel, tag, atr_signal=float(s.ind[t].loc[tag, "atr"]))
         s._log(tag, t, "kaufen", regel, "Nachkauf nach Ablehnung/Verfall, Signal gilt noch", w)
+    for t, (d, g) in nachgeholt.items():
+        if t not in gesperrt_titel:
+            ziel[t] = 0.0
     if ziel:
         protokoll = {p["ticker"]: p for p in s.protokoll if pd.Timestamp(p["tag"]) == tag}
+        for t, (d, g) in nachgeholt.items():
+            protokoll[t] = {"ticker": t, "grund": f"{g} gerissen am {d:%d.%m.}, nachgeholt" if g.startswith("Stop")
+                            else f"{g} am {d:%d.%m.}, nachgeholt"}
         frei = kasse
         for t, w in ziel.items():
             if math.isnan(w):

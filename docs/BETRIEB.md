@@ -77,9 +77,9 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
 - **Festgelegter Weg** (`betrieb/nachtrag.py`, im Tageslauf vor dem Abgleich): Eine Order unterwegs, deren Handelstag vorbei
   ist und die bei IBKR nicht mehr offen ist, gilt nur dann als verfallen, wenn die IBKR-Position nicht von den Büchern
   abweicht (Tausch: USD-Kasse). Weicht sie ab, wird mit Beleg nachgetragen und gemeldet: (a) Flex-Abfrage (Trades;
-  `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID` in `.env`), sonst (b) Position mit Einstand, nur bei Käufen, die die Position
-  allein erklären. Der Preis ergibt sich als Einstand minus Paper-Festpreis je Stück (`config/betrieb.yaml`,
-  `nachtrag.gebuehr_je_order`), plausibilisiert gegen Limit und Tief/Hoch des Ausführungstags. Ohne Beleg stoppt der Lauf,
+  `FLEX_TOKEN`, `FLEX_QUERY_ID` in `.env`), sonst (b) Position mit Einstand, nur bei Käufen, die die Position
+  allein erklären. Der Preis ergibt sich als Einstand minus angenommener Gebühr je Stück (`config/betrieb.yaml`,
+  `nachtrag.gebuehr`, je Markt und Währung, siehe unten), plausibilisiert gegen Limit und Tief/Hoch des Ausführungstags. Ohne Beleg stoppt der Lauf,
   nichts wird gebucht oder verfallen. Quelle je Ausführung in `ausfuehrungen.quelle`, Ereignis `nachtrag` im Journal.
   Werkzeug ohne Tageslauf: `tools/ausfuehrungen_nachtragen.py` (Trockenlauf auf Kopie, `--buchen` mit Sicherung).
 - **Beleg des Einstands:** IBKR führt den Einstand inklusive Gebühr. Geprüft am 09.11.: Einstand × Stück − 3,00 € ergibt
@@ -94,3 +94,23 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   Bericht vom 09.11.2026).
 - **Probelauf auf einer Kopie des echten Journals:** `tools/tageslauf.py --kopie` (Gateway nur lesend, sendet nie, keine
   Sicherung).
+
+## Entscheidungen Jakob 09.11.2026 (nach dem Nachtrag)
+
+- **Verpasste Tage im Technikbuch:** Der Tageslauf prüft die Schlusskurse seit dem letzten Lauf der Reihe nach (Signaltag
+  des Vorlaufs im Strategiezustand, `vor_signaltag`). Ausstiege aus verpassten Tagen (Stop, Signalende, Zeit-Stop) werden
+  wie im Backtest zur nächsten Gelegenheit nachgeholt; der Vorschlag nennt den Tag („Stop 69.04 gerissen am 06.11.,
+  nachgeholt“). Einstiege verpasster Tage werden verworfen, gekauft wird nur, wenn das Signal am aktuellen Tag gilt (auch
+  die Monatsprüfung von Momentum läuft am aktuellen Tag). Fundamental- und Realbuch haben keine Tagesausstiege.
+- **Zinsen:** Steigt die Kontokasse um einen Betrag, um den die aufgelaufenen Zinsen (`AccruedCash`) seit dem letzten
+  Abgleich gefallen sind (Toleranz 0,05), ist das eine belegte Zinsbuchung: in die Kassenbasis, Ereignis und Protokoll,
+  kein Stopp. Die Bücher erhalten keine Zinsen (wie im Backtest). Andere Abweichungen über 10 € stoppen weiter. Der Stand
+  der aufgelaufenen Zinsen wird bei jedem stimmenden Abgleich im Zustand `_konto` festgehalten.
+- **Flex:** Token und Abfrage-ID nur in der `.env` als `FLEX_TOKEN` und `FLEX_QUERY_ID` (richtet Jakob ein).
+- **Gebühr beim Nachtrag über die Position**, je Markt und Währung (`nachtrag.gebuehr`): Xetra EUR 3,00 € je Order
+  (Paper-Festpreis); US-Aktien nach IBKR Pro Fixed, 0,005 USD je Aktie, mindestens 1,00 USD, höchstens 1 % des
+  Orderwerts (Quelle: interactivebrokers.com/en/pricing/commissions-stocks.php, geprüft 09.11.2026; FINRA-CAT-Gebühr
+  0,000003 USD je Stück vernachlässigt). Die Gebühr ist als „angenommen“ markiert (`ausfuehrungen.gebuehr_angenommen`;
+  die fünf Nachträge vom 09.11. ebenso). Beim nächsten Flex-Abruf werden sie abgeglichen: Die abgeleitete Zeile wird
+  durch die Flex-Ausführungen ersetzt, alt und neu stehen im Ereignis `nachtrag_abgleich`. Weicht die Stückzahl ab, stoppt
+  der Lauf. Fehlt eine Order in der Flex-Abfrage, bleibt sie „angenommen“ (Zeitraum der Abfrage weit genug wählen).

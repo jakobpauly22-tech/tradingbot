@@ -4,6 +4,7 @@ import copy
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
 from test_tageslauf import ABEND, AN, BrokerAttrappe, KontoAttrappe, kurse_attrappe, lauf, umgebung  # noqa: F401
@@ -16,10 +17,13 @@ SPAETER = datetime(2026, 11, 5, 19, 30, tzinfo=ZoneInfo("Europe/Berlin"))   # Ab
 HANDELSTAG = date(2026, 11, 3)                                                # Order vom 02.11. abends gilt am 03.11.
 
 
+PLAN = {"xetra_eur": {"je_order": 3.0}, "us_usd": {"je_aktie": 0.005, "minimum": 1.0, "maximum_anteil": 0.01}}
+
+
 def _konfig(gebuehr=3.0):
     k = {n: lade_konfiguration(n) for n in ("betrieb", "technik", "fundamental", "backtest")}
     k["betrieb"] = copy.deepcopy(k["betrieb"])
-    k["betrieb"]["nachtrag"] = {"gebuehr_je_order": gebuehr}
+    k["betrieb"]["nachtrag"] = {"gebuehr": None if gebuehr is None else {**PLAN, "xetra_eur": {"je_order": gebuehr}}}
     return k
 
 
@@ -130,3 +134,150 @@ def test_flex_tausch():
     a = flex_ausfuehrungen(zeilen, {"fundamental_a:t"})[0]
     assert a["art"] == "fx" and a["von"] == "EUR" and a["nach"] == "USD" and a["betrag_von"] == 9000
     assert a["betrag_nach"] == pytest.approx(9900) and a["gebuehr"] == 2 and a["zeit"] == "2026-11-03T22:10:00"
+
+
+# --- Gebühr je Markt und Währung, angenommen, Abgleich mit Flex (Jakob 09.11.2026) -----------------------------------------
+def test_nachtrag_gebuehr_je_markt():
+    from tradingbot.betrieb.nachtrag import nachtrag_gebuehr
+    assert nachtrag_gebuehr(PLAN, "SPYI.DE", 42, 11.6)[0] == 3.0
+    assert nachtrag_gebuehr(PLAN, "AAPL", 10, 100.1)[0] == pytest.approx(1.0)              # Minimum 1 USD
+    assert nachtrag_gebuehr(PLAN, "F", 1000, 12.0)[0] == pytest.approx(5.0)                # 0,005 je Aktie
+    assert nachtrag_gebuehr(PLAN, "X", 1, 50.0)[0] == pytest.approx(0.5, abs=0.01)         # höchstens 1 % des Orderwerts
+    g = lade_konfiguration("betrieb")["nachtrag"]["gebuehr"]                               # Konfiguration wie festgelegt
+    assert g["xetra_eur"]["je_order"] == 3.0 and g["us_usd"] == {"je_aktie": 0.005, "minimum": 1.0, "maximum_anteil": 0.01}
+
+
+def _nachgetragen(j, rm):
+    z = _gesendet(j, rm)
+    preis = _tagespreis()
+    broker = KontoAttrappe({"EUR": 1_000_000.0 - preis * z["stueck"] - 3.0},
+                           positionen=[Position("DU1", "SPYI.DE", z["stueck"], (preis * z["stueck"] + 3.0) / z["stueck"])])
+    e = lauf(j, rm, jetzt=SPAETER, broker=broker, konfig=_konfig(), flex=None)
+    assert e.gestoppt is None and len(j.angenommene()) == 1
+    return z, preis, broker
+
+
+def test_angenommene_gebuehr_mit_flex_abgeglichen(umgebung):
+    j, rm = umgebung
+    z, preis, broker = _nachgetragen(j, rm)
+    kasse_vorher = j.kasse("real")
+    ref = f"real:{z['id']}"
+    teil = z["stueck"] // 2
+    p1, p2 = preis - 0.01, (preis * z["stueck"] - (preis - 0.01) * teil) / (z["stueck"] - teil)   # gleicher Kurswert
+    zeilen = [{"orderReference": ref, "ibExecID": f"x{i}", "assetCategory": "STK", "symbol": "SPYI", "conid": "0", "currency": "EUR",
+               "buySell": "BUY", "quantity": str(q), "tradePrice": str(p), "ibCommission": str(-g), "ibCommissionCurrency": "EUR",
+               "dateTime": "20261103;090001", "exchange": "GETTEX2"}
+              for i, (q, p, g) in enumerate(((teil, p1, 3.0), (z["stueck"] - teil, p2, 0.0)))]
+    e = lauf(j, rm, jetzt=SPAETER.replace(day=6), broker=broker, konfig=_konfig(), flex=lambda: (zeilen, "IBKR Flex-Abfrage 7, erstellt y"))
+    assert e.gestoppt is None, e.gestoppt
+    assert any(m.startswith(f"Abgleich {ref} mit IBKR Flex-Abfrage 7") and "(angenommen)" in m for m in e.meldungen)
+    a = j.db.execute("SELECT exec_id, gebuehr_angenommen, quelle FROM ausfuehrungen ORDER BY exec_id").fetchall()
+    assert [r["exec_id"] for r in a] == ["x0", "x1"] and not any(r["gebuehr_angenommen"] for r in a)
+    assert j.angenommene() == [] and j.bestand("real") == {"SPYI.DE": z["stueck"]}
+    assert abs(j.kasse("real") - kasse_vorher) < 1e-6
+    assert j.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='nachtrag_abgleich'").fetchone()[0] == 1
+
+
+def test_angenommene_gebuehr_flex_stueck_weicht_ab_stoppt(umgebung):
+    j, rm = umgebung
+    z, preis, broker = _nachgetragen(j, rm)
+    zeilen = [{"orderReference": f"real:{z['id']}", "ibExecID": "x0", "assetCategory": "STK", "symbol": "SPYI", "conid": "0",
+               "currency": "EUR", "buySell": "BUY", "quantity": "1", "tradePrice": str(preis), "ibCommission": "-3",
+               "dateTime": "20261103;090001"}]
+    e = lauf(j, rm, jetzt=SPAETER.replace(day=6), broker=broker, konfig=_konfig(), flex=lambda: (zeilen, "Flex"))
+    assert e.gestoppt and "Flex meldet 1 Stück" in e.gestoppt and len(j.angenommene()) == 1
+
+
+# --- Zinsen (Jakob 09.11.2026) --------------------------------------------------------------------------------------
+class ZinsAttrappe(KontoAttrappe):
+    def __init__(self, kasse, zinsen, **kw):
+        super().__init__(kasse, **kw)
+        self._zinsen = zinsen
+
+    def aufgelaufene_zinsen(self):
+        return dict(self._zinsen)
+
+
+def test_zinsbuchung_mit_abnahme_der_aufgelaufenen_zinsen(umgebung):
+    from tradingbot.betrieb.tageslauf import kassenabgleich
+    j, rm = umgebung
+    lauf(j, rm)
+    b = lade_konfiguration("betrieb")
+    buecher = list(b["buecher"])
+    kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 225.74}), b)
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 240.10}), b)   # Zinsen laufen auf
+    assert diff == [] and j.zustand("_konto")["aufgelaufene_zinsen"] == {"EUR": 240.10}
+    diff, text = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_240.10}, {"EUR": 0.0}), b)   # Zinsen gebucht
+    assert diff == [] and "Zinsbuchung belegt" in text and "+240.10" in text
+    assert abs(j.zustand("_konto")["kassenbasis"]["EUR"] - 1_000_240.10) < 1e-6
+    assert all(abs(j.kasse(n) - j.startkapital(n)) < 1e-9 for n in buecher)                       # Bücher ohne Zinsen
+    assert j.db.execute("SELECT COUNT(*) FROM ereignisse WHERE text LIKE 'Zinsbuchung belegt%'").fetchone()[0] == 1
+    # Kassenerhöhung ohne passende Abnahme der aufgelaufenen Zinsen → Stopp
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_540.10}, {"EUR": 0.0}), b)
+    assert diff and "unerklärte Buchung" in diff[0] and "passt nicht" in diff[0]
+    # Abnahme vorhanden, aber nicht gleich groß → Stopp
+    kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_240.10}, {"EUR": 100.0}), b)
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_300.10}, {"EUR": 0.0}), b)
+    assert diff and "passt nicht" in diff[0]
+    # Kassenabnahme über 10 € stoppt weiter
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_200.10}, {"EUR": 0.0}), b)
+    assert diff and "-40.00" in diff[0]
+
+
+# --- Verpasste Tage im Technikbuch (Jakob 09.11.2026) ----------------------------------------------------------------
+def _mit_einbruch(ticker, tag, faktor):
+    basis = kurse_attrappe()
+
+    def laden(t, bis, art):
+        k = basis(t, bis, art)
+        if t == ticker and pd.Timestamp(tag) in k.index:
+            k = k.copy()
+            k.loc[pd.Timestamp(tag), ["low", "close"]] = k.loc[pd.Timestamp(tag), ["low", "close"]] * faktor
+        return k
+    return laden
+
+
+def _crossover_gekauft(j, rm):
+    """Crossover-Käufe am 02.11. vorgeschlagen, gesendet und am 03.11. zur Eröffnung ausgeführt."""
+    lauf(j, rm)
+    ids = [z["id"] for z in j.vorschlaege(buch="crossover") if z["status"] == "vorgeschlagen" and z["richtung"] > 0]
+    assert ids
+    freigeben_und_senden(j, ids, BrokerAttrappe(), ABEND, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=AN)
+    for z in j.vorschlaege(buch="crossover"):
+        if z["status"] == "gesendet":
+            k = kurse_attrappe()(z["ticker"], HANDELSTAG, "etf")
+            j.ausfuehrung(f"c-{z['ticker']}", f"crossover:{z['id']}", z["ticker"], 1, z["stueck"],
+                          float(k.loc[str(HANDELSTAG), "open"]), 3.0, "2026-11-03T09:00")
+    return sorted(j.bestand("crossover"))
+
+
+FREITAG = datetime(2026, 11, 6, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))       # Abende 03.–05.11. verpasst
+
+
+def test_verpasste_tage_stop_wird_nachgeholt(umgebung):
+    j, rm = umgebung
+    titel = _crossover_gekauft(j, rm)
+    t = titel[0]
+    e = lauf(j, rm, jetzt=FREITAG, kurse=_mit_einbruch(t, "2026-11-04", 0.8))
+    assert any("Handelstag(e) ohne Lauf seit 02.11.2026" in m for m in e.meldungen)
+    verkauf = [bv for bv, u in e.vorschlaege if bv.vorschlag.buch == "crossover" and bv.vorschlag.richtung < 0]
+    assert [bv.vorschlag.ticker for bv in verkauf] == [t]
+    assert "gerissen am 04.11., nachgeholt" in verkauf[0].kern and verkauf[0].vorschlag.stueck == j.bestand("crossover")[t]
+    # Einstiege verpasster Tage werden nicht nachgeholt; gehaltene Titel werden nicht erneut gekauft
+    assert not any(bv.vorschlag.ticker in titel and bv.vorschlag.richtung > 0 for bv, _ in e.vorschlaege if bv.vorschlag.buch == "crossover")
+
+
+def test_verpasste_tage_ohne_ausstieg_kein_verkauf(umgebung):
+    j, rm = umgebung
+    _crossover_gekauft(j, rm)
+    e = lauf(j, rm, jetzt=FREITAG)
+    assert not any(bv.vorschlag.buch == "crossover" and bv.vorschlag.richtung < 0 for bv, _ in e.vorschlaege)
+    # zweiter Lauf am selben Abend: verpasste Tage weiter ab dem Vorlauf (02.11.)
+    assert j.vorlauf_signaltag("crossover", "2026-11-06") == "2026-11-02"
+
+
+def test_verpasste_handelstage():
+    from tradingbot.betrieb.tageslauf import verpasste_handelstage
+    assert verpasste_handelstage("xetra", "2026-11-03", "2026-11-09") == [pd.Timestamp(d) for d in ("2026-11-04", "2026-11-05", "2026-11-06")]
+    assert verpasste_handelstage("xetra", "2026-11-06", "2026-11-09") == []
+    assert verpasste_handelstage("xetra", None, "2026-11-09") == []

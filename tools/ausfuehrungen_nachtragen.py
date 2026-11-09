@@ -45,7 +45,7 @@ def ausfuehren(journal, b, broker, jetzt) -> int:
     if k.verfallen:
         print("  ohne Abweichung (würde der Tageslauf als verfallen markieren): " + ", ".join(z["id"] for z in k.verfallen))
     nachtrag.nachtragen(journal, buecher, k, positionen, fx, kosten=risk.kosten, kurse_laden=_yahoo_kurse, flex=nachtrag.flex_aus_env(),
-                        gebuehr_je_order=(b.get("nachtrag") or {}).get("gebuehr_je_order"), eroeffnung=_eroeffnung_fn(_yahoo_kurse))
+                        gebuehrenplan=(b.get("nachtrag") or {}).get("gebuehr"), eroeffnung=_eroeffnung_fn(_yahoo_kurse))
     for h in k.hinweise:
         print(f"Hinweis: {h}")
     if k.ohne_beleg:

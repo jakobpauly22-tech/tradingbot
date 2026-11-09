@@ -175,51 +175,92 @@ def zeitfenster_hinweis(jetzt: datetime, vorschlaege) -> list[str]:
 
 def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[str], str]:
     """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
-    (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05)."""
+    (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05).
+
+    Abweichungen (Jakob 04. und 09.11.2026):
+    - Zinsbuchung, belegt: Kasse steigt um d, und die aufgelaufenen Zinsen (AccruedCash) sind seit dem letzten Abgleich um
+      denselben Betrag gefallen (Toleranz wie oben) → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen
+      (wie im Backtest).
+    - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert.
+    - Alles andere über 10 € stoppt."""
     if not hasattr(broker, "kasse_je_waehrung"):
         return [], ""
     ibkr = broker.kasse_je_waehrung()
     if not ibkr:
         return [], "Kassen-Abgleich: IBKR meldet keine Kontokasse (accountValues leer) – nicht geprüft"
+    zinsen = broker.aufgelaufene_zinsen() if hasattr(broker, "aufgelaufene_zinsen") else None
     bot: dict[str, float] = {}
     for n in buecher:
         start = journal.startkapital(n)
         for w, betrag in journal.kasse_je_waehrung(n).items():
             bot[w] = bot.get(w, 0.0) + betrag - (start if w == "EUR" else 0.0)
-    basis = journal.zustand("_konto").get("kassenbasis")
+    konto = journal.zustand("_konto")
+    basis = konto.get("kassenbasis")
     if basis is None:
         basis = {w: ibkr.get(w, 0.0) - bot.get(w, 0.0) for w in sorted(set(ibkr) | set(bot))}
-        journal.zustand_speichern("_konto", {"kassenbasis": basis, "festgehalten": str(pd.Timestamp.now().date())})
+        konto.update({"kassenbasis": basis, "festgehalten": str(pd.Timestamp.now().date())})
+        if zinsen is not None:
+            konto["aufgelaufene_zinsen"] = zinsen
+        journal.zustand_speichern("_konto", konto)
         journal.ereignis("kassenbasis", "Kassenbasis festgehalten: " + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()))
         return [], "Kassen-Abgleich: Kassenbasis erstmals festgehalten (" + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()) + \
             ") – bitte mit dem Startguthaben des Paper-Kontos vergleichen"
     tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
     grenze = float(b.get("sicherheit", {}).get("abgleich_buchung_ohne_buchbezug_max", 10.0))
-    abw, uebernommen = [], []
+    vorher = konto.get("aufgelaufene_zinsen")
+    abw, uebernommen, zinsbuchungen = [], [], []
     for w in sorted(set(ibkr) | set(bot) | set(basis)):
         soll = basis.get(w, 0.0) + bot.get(w, 0.0)
         d = ibkr.get(w, 0.0) - soll
         if abs(d) <= tol:
             continue
-        if abs(d) <= grenze:
+        abnahme = (vorher.get(w, 0.0) - zinsen.get(w, 0.0)) if (vorher is not None and zinsen is not None) else None
+        if d > 0 and abnahme is not None and abs(abnahme - d) <= tol:
+            basis[w] = basis.get(w, 0.0) + d                # belegte Zinsbuchung (Jakob 09.11.2026)
+            zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f})")
+        elif abs(d) <= grenze:
             # Buchung ohne Buchbezug (Zinsen, Kontogebühren; Jakob 04.11.2026): in die Kassenbasis, protokolliert
             basis[w] = basis.get(w, 0.0) + d
             uebernommen.append(f"{w} {d:+,.2f}")
         else:
+            zins = ("aufgelaufene Zinsen: kein Vergleichsstand" if abnahme is None else
+                    f"aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}, Abnahme {abnahme:+,.2f} passt nicht")
             abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {d:+,.2f}, über "
-                       f"{grenze:.0f} € – unerklärte Buchung, bitte im Client Portal klären)")
-    if uebernommen and not abw:
-        konto = journal.zustand("_konto")
-        konto["kassenbasis"] = basis
-        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": str(pd.Timestamp.now().date()), "betraege": uebernommen})
-        journal.zustand_speichern("_konto", konto)
-        journal.ereignis("kassenbasis", "Buchung ohne Buchbezug (Zinsen/Kontogebühren vermutet) in die Kassenbasis: " + ", ".join(uebernommen))
+                       f"{grenze:.0f} € – unerklärte Buchung, bitte im Client Portal klären; {zins})")
     if abw:
         return abw, ""
+    konto["kassenbasis"] = basis
+    heute = str(pd.Timestamp.now().date())
+    if uebernommen:
+        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": heute, "betraege": uebernommen})
+        journal.ereignis("kassenbasis", "Buchung ohne Buchbezug (Zinsen/Kontogebühren vermutet) in die Kassenbasis: " + ", ".join(uebernommen))
+    if zinsbuchungen:
+        konto.setdefault("zinsbuchungen", []).append({"tag": heute, "betraege": zinsbuchungen})
+        journal.ereignis("kassenbasis", "Zinsbuchung belegt (Abnahme der aufgelaufenen Zinsen), in die Kassenbasis, Bücher ohne Zinsen: "
+                         + ", ".join(zinsbuchungen))
+    if zinsen is not None:
+        konto["aufgelaufene_zinsen"] = zinsen
+    journal.zustand_speichern("_konto", konto)
     text = "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" + ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")"
+    if zinsbuchungen:
+        text += "; Zinsbuchung belegt, in die Kassenbasis (Bücher ohne Zinsen): " + ", ".join(zinsbuchungen)
     if uebernommen:
         text += "; Buchung ohne Buchbezug in die Kassenbasis übernommen: " + ", ".join(uebernommen)
     return [], text
+
+
+def verpasste_handelstage(boerse: str, seit, tag) -> list[pd.Timestamp]:
+    """Handelstage strikt zwischen dem Signaltag des letzten Laufs (`seit`) und dem heutigen Signaltag `tag`."""
+    from tradingbot.betrieb.kalender import ist_handelstag
+
+    if seit is None:
+        return []
+    d, ende, tage = pd.Timestamp(seit).date() + timedelta(days=1), pd.Timestamp(tag).date(), []
+    while d < ende:
+        if ist_handelstag(boerse, d):
+            tage.append(pd.Timestamp(d))
+        d += timedelta(days=1)
+    return tage
 
 
 def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, letzte_sitzung, fx, risk, kurse_laden, flex,
@@ -230,6 +271,12 @@ def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, let
     from tradingbot.betrieb import nachtrag
 
     buecher = list(b["buecher"])
+    quelle = nachtrag.flex_aus_env() if flex == "env" else flex
+    # angenommene Gebühren früherer Nachträge mit Flex abgleichen (Jakob 09.11.2026)
+    abgeglichen, stopp = nachtrag.angenommene_abgleichen(journal, quelle, fx, kosten=risk.kosten, eroeffnung=_eroeffnung_fn(kurse_laden))
+    erg.meldungen += abgeglichen
+    if stopp:
+        return "Abgleich angenommener Gebühren mit Flex weicht ab – Tageslauf gestoppt: " + "; ".join(stopp)
     kasse_ibkr = broker.kasse_je_waehrung() if hasattr(broker, "kasse_je_waehrung") else None
     tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
     k = nachtrag.klaeren(journal, buecher, {o.order_ref for o in offen_liste}, positionen, letzte_sitzung,
@@ -237,9 +284,8 @@ def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, let
     if k.verdacht:
         erg.meldungen.append("Ausführung außerhalb des API-Zeitfensters vermutet (IBKR-Position weicht ab, Order nicht mehr offen): "
                              + ", ".join(f"{z['buch']}:{z['id']}" for z in k.verdacht))
-        quelle = nachtrag.flex_aus_env() if flex == "env" else flex
         nachtrag.nachtragen(journal, buecher, k, positionen, fx, kosten=risk.kosten, kurse_laden=kurse_laden, flex=quelle,
-                            gebuehr_je_order=(b.get("nachtrag") or {}).get("gebuehr_je_order"), eroeffnung=_eroeffnung_fn(kurse_laden))
+                            gebuehrenplan=(b.get("nachtrag") or {}).get("gebuehr"), eroeffnung=_eroeffnung_fn(kurse_laden))
         erg.meldungen += [f"Nachtrag: {h}" for h in k.hinweise]
         if k.ohne_beleg:
             return ("Ausführung außerhalb des API-Zeitfensters ohne Beleg – Tageslauf gestoppt, nichts gebucht: " + "; ".join(k.ohne_beleg)
@@ -407,10 +453,17 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.meldungen.append(f"{buch}: noch kein Bestand und keine Order unterwegs – Aufbau wie beim ersten Lauf")
             vor = {}
         frei_buch, _ = kasse_frei(journal, buch, fx)
+        # verpasste Tage (Jakob 09.11.2026): Schlusskurse seit dem letzten Lauf der Reihe nach; Ausstiege werden nachgeholt
+        seit = journal.vorlauf_signaltag(buch, tag) if vor else None
+        verpasst = verpasste_handelstage("xetra", seit, tag)
+        if verpasst and any(x > 0 for x in bestand.values()):
+            erg.meldungen.append(f"{buch}: {len(verpasst)} Handelstag(e) ohne Lauf seit {pd.Timestamp(seit):%d.%m.%Y} geprüft "
+                                 f"({', '.join(f'{d:%d.%m.}' for d in verpasst)}): Ausstiege werden nachgeholt, Einstiege nur mit "
+                                 "Signal am aktuellen Tag")
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
                            reserviert=journal.kasse(buch) - frei_buch,
-                           nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)))
+                           nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)), verpasste_tage=verpasst)
         journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)

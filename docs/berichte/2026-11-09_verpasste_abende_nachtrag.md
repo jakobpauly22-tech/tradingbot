@@ -82,8 +82,40 @@ Alle Kontrakte wurden aufgelöst, es gibt kein Veto. Für die 39 US-Käufe gilt:
 3. **Flex-Abfrage einrichten** (empfohlen, liefert vollwertige Belege mit Ausführungs-ID, Zeit und Platz): Im Client
    Portal des Paper-Kontos unter „Performance & Reports → Flex Queries“ eine Activity-Flex-Query mit dem Abschnitt Trades
    anlegen (Felder unter anderem Order Reference, IB Execution ID, Trade Price, IB Commission, Date/Time, Exchange,
-   Conid, Buy/Sell, Quantity, Asset Category, Zeitraum „Last 7 Days“). Dann den Flex Web Service aktivieren und
-   `IBKR_FLEX_TOKEN` sowie `IBKR_FLEX_QUERY_ID` in die `.env` eintragen. Ob Flex für Paper-Konten freigeschaltet ist,
+   Conid, Buy/Sell, Quantity, Asset Category, Zeitraum mindestens „Last 30 Days“, damit die Nachträge vom 04.11. beim ersten Abruf noch enthalten sind). Dann den Flex Web Service aktivieren und
+   `FLEX_TOKEN` sowie `FLEX_QUERY_ID` in die `.env` eintragen. Ob Flex für Paper-Konten freigeschaltet ist,
    habe ich nicht geprüft.
-4. Für den Weg über die Position steht neu `nachtrag.gebuehr_je_order: 3.0` in `config/betrieb.yaml` (Paper-Festpreis
-   laut deiner Angabe und `docs/BETRIEB.md`). Mit `null` gilt nur noch Flex.
+4. Für den Weg über die Position stand zunächst pauschal `nachtrag.gebuehr_je_order: 3.0` in `config/betrieb.yaml`. Am
+   selben Tag ersetzt durch die Gebühr je Markt und Währung (siehe Nachtrag unten).
+
+## Nachtrag: Entscheidungen Jakob 09.11.2026, umgesetzt
+
+Alle Punkte mit Tests (`tests/betrieb/test_nachtrag.py`, jetzt 15 Fälle). Volle Suite: 971 grün. Details in
+`docs/BETRIEB.md`, Abschnitt „Entscheidungen Jakob 09.11.2026“.
+
+1. **Verpasste Tage:** Das Technikbuch prüft die Schlusskurse seit dem letzten Lauf der Reihe nach. Ausstiege werden
+   nachgeholt und im Vorschlag vermerkt (Beispiel: „Stop … gerissen am 04.11., nachgeholt“). Einstiege verpasster Tage
+   werden verworfen; die Monatsprüfung von Momentum läuft am aktuellen Tag. Heute Abend (Signaltag 09.11.) prüft das
+   Crossover-Buch die Tage 04.–06.11. Der Stop von EUNN.DE vom 06.11. wird damit nachgeholt, egal wo der Schluss am 09.11.
+   liegt.
+2. **Zinsen:** Eine Kassenerhöhung gilt als belegte Zinsbuchung, wenn die aufgelaufenen Zinsen (`AccruedCash`) um
+   denselben Betrag gefallen sind. Sie geht dann in die Kassenbasis, ohne Stopp und ohne Zinsen in den Büchern. Den
+   Vergleichsstand hält jeder stimmende Abgleich fest, erstmals beim Tageslauf heute Abend (zurzeit 225,74 €).
+   Einschränkung: Laufen zwischen dem letzten Abgleich und der Gutschrift schon neue Zinsen auf, ist die Abnahme kleiner
+   als die Gutschrift, und der Lauf stoppt. Das ist sicher, aber dann ist eine Klärung nötig.
+3. **Flex:** Die Variablen heißen jetzt `FLEX_TOKEN` und `FLEX_QUERY_ID` (`.env.example` ergänzt). Die Anleitung steht
+   oben unter „Offene Punkte“, Punkt 3.
+4. **Nachtragsgebühr je Markt und Währung** (`nachtrag.gebuehr`):
+   - Xetra: 3,00 € je Order.
+   - US-Aktien nach IBKR Pro Fixed: 0,005 USD je Aktie, mindestens 1,00 USD, höchstens 1 % des Orderwerts. Quelle:
+     interactivebrokers.com/en/pricing/commissions-stocks.php, geprüft 09.11.2026.
+   - Die Gebühr ist als „angenommen“ markiert, auch bei den fünf Nachträgen vom 04.11. Beim nächsten Flex-Abruf wird
+     sie abgeglichen: Die abgeleitete Zeile wird durch die Flex-Ausführungen ersetzt (Ereignis `nachtrag_abgleich`). Bei
+     abweichender Stückzahl stoppt der Lauf.
+
+**Probelauf (nur lesend) 09.11.2026 10:05** auf einer Kopie des Journals, Signaltag 06.11.:
+- Bestand und Kasse stimmen (EUR 990.709,16), Kassenbasis EUR 1.000.000,00.
+- Crossover hat die verpassten Tage 04. und 05.11. geprüft.
+- Vorschläge wie am Vormittag: Crossover verkauft EUNN (Stop, hier am aktuellen Tag 06.11.) und kauft EUNK; Momentum
+  baut 4 Positionen auf; Fundamental A und B bauen 20 bzw. 19 Positionen auf, jeweils mit Tausch EUR→USD.
+- Kein Veto, alle Kontrakte aufgelöst.

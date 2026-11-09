@@ -317,6 +317,7 @@ def test_kasse_aus_ledger_und_nur_lesen(tmp_path):
     ib.accountValues = lambda: werte
     b = IbkrBroker(lade_konfiguration("betrieb"), tmp_path, modus="paper", ib=ib, nur_lesen=True)
     assert b.kasse_je_waehrung() == {"EUR": 990709.16}
+    assert b.aufgelaufene_zinsen() == {"EUR": 225.74}                  # Beleg für Zinsbuchungen (09.11.2026)
     werte.append(N(tag="CashBalance", currency="EUR", value="1.0"))
     assert b.kasse_je_waehrung() == {"EUR": 1.0}                       # „CashBalance“ hat Vorrang, falls gemeldet
     b.verbinden()
