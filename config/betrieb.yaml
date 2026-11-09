@@ -74,6 +74,14 @@ waehrung:
   # Kasse je Währung, keine darf negativ werden (Risk-Manager Regel 10). Tausch als Market-Order (IDEALPRO), gültig DAY.
   tausch_puffer: 0.02
 
+nachtrag:
+  # Ausführungen außerhalb des API-Zeitfensters (verpasster Abend; betrieb/nachtrag.py, Jakob 09.11.2026). reqExecutions
+  # liefert nur den laufenden Tag. Weg: Flex-Abfrage (IBKR_FLEX_TOKEN, IBKR_FLEX_QUERY_ID in .env), sonst Position mit
+  # Einstand (nur Käufe, Order erklärt die Position allein, Preis innerhalb Tief/Hoch des Ausführungstags). Ohne Beleg stoppt
+  # der Tageslauf. Gebühr für den Weg über die Position: Paper-Festpreis je Order, wie IBKR ihn meldet (docs/BETRIEB.md,
+  # 04.11.2026); IBKR führt den Einstand inklusive Gebühr. Leer (null) = nur Flex.
+  gebuehr_je_order: 3.0
+
 freigabe:
   # Tageslauf abends nach Börsenschluss; Freigabe 18–24 Uhr; Orders werden sofort nach der Freigabe gesendet, gültig für
   # den nächsten Handelstag. Das IB Gateway muss nur während der Freigabe laufen, morgens ist nichts nötig (02.11.2026).

@@ -266,12 +266,15 @@ def test_ibkr_gebuehr_leerwert():
 
 
 def test_tabelle_deckt_universum_ab():
-    """Zuordnungstabelle 04.11.2026: Core, Satellite (außer SXRM), Xetra-Gold, EUR.USD und S&P-500-Aktien."""
+    """Zuordnungstabelle 04.11.2026: Core, Satellite, Xetra-Gold, EUR.USD und S&P-500-Aktien; seit 09.11.2026 IUSM (Ersatz für
+    SXRM) aufgelöst: conId 100292090, IBKR-Symbol BTMA, EUR, Xetra-Platz IBIS2."""
     from tradingbot.broker.ibkr import kontrakttabelle, nicht_aufloesbar
     tab = kontrakttabelle()
     assert int(tab["4GLD.DE"]["con_id"]) == 50784405 and tab["4GLD.DE"]["boerse"] == "IBIS"
     assert int(tab["EUR.USD"]["con_id"]) == 12087792 and tab["EUR.USD"]["boerse"] == "IDEALPRO"
-    assert sum(1 for e in tab.values() if e["art"] == "aktie") > 450 and "SXRM.DE" in nicht_aufloesbar()
+    assert sum(1 for e in tab.values() if e["art"] == "aktie") > 450
+    assert int(tab["IUSM.DE"]["con_id"]) == 100292090 and tab["IUSM.DE"]["waehrung"] == "EUR" and tab["IUSM.DE"]["boerse"] == "IBIS2"
+    assert "IUSM.DE" not in nicht_aufloesbar()
 
 
 def test_nicht_aufloesbar_veto(tmp_path):
@@ -298,3 +301,25 @@ def test_universum_ohne_sxrm_mit_iusm():
     t = lade_konfiguration("technik")
     ticker = {e["ticker"]: e for e in t["universum"]["etfs"]}
     assert "SXRM.DE" not in ticker and ticker["IUSM.DE"]["isin"] == "IE00B1FZS798" and "handelswaehrung" not in ticker["IUSM.DE"]
+
+
+def test_kasse_aus_ledger_und_nur_lesen(tmp_path):
+    """Paper-Konto meldet die Kasse als „$LEDGER-CashBalance“ (09.11.2026); nur_lesen verbindet readonly und sendet nie."""
+    from types import SimpleNamespace as N
+
+    from tradingbot.broker.basis import Auftrag, SendenGesperrt
+    from tradingbot.broker.ibkr import IbkrBroker
+    from tradingbot.konfiguration import lade_konfiguration
+
+    werte = [N(tag="$LEDGER-CashBalance", currency="BASE", value="990709.16"), N(tag="$LEDGER-CashBalance", currency="EUR", value="990709.16"),
+             N(tag="$LEDGER-AccruedCash", currency="EUR", value="225.74"), N(tag="NetLiquidation", currency="EUR", value="1000070.10")]
+    ib = IBAttrappe()
+    ib.accountValues = lambda: werte
+    b = IbkrBroker(lade_konfiguration("betrieb"), tmp_path, modus="paper", ib=ib, nur_lesen=True)
+    assert b.kasse_je_waehrung() == {"EUR": 990709.16}
+    werte.append(N(tag="CashBalance", currency="EUR", value="1.0"))
+    assert b.kasse_je_waehrung() == {"EUR": 1.0}                       # „CashBalance“ hat Vorrang, falls gemeldet
+    b.verbinden()
+    assert ib.verbunden["readonly"] is True
+    with pytest.raises(SendenGesperrt, match="nur lesend"):
+        b.sende(Auftrag("real", "x", "SPYI.DE", 1, 1, 11.0), set())

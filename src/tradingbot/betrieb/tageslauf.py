@@ -222,15 +222,35 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
     return [], text
 
 
-def verfallene_markieren(journal, offene_refs: set[str], letzte_sitzung) -> int:
-    """Gesendete Orders, deren Handelstag vorbei ist, ohne Ausführung und nicht mehr offen → verfallen."""
-    n = 0
-    for z in journal.vorschlaege(status=("gesendet", "unbestaetigt")):
-        if pd.Timestamp(z["signaltag"]) < pd.Timestamp(letzte_sitzung) and f"{z['buch']}:{z['id']}" not in offene_refs:
-            journal.status_setzen(z["id"], "verfallen")
-            journal.ereignis("verfallen", f"Order {z['id']} nicht ausgeführt, verfallen", z["buch"])
-            n += 1
-    return n
+def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, letzte_sitzung, fx, risk, kurse_laden, flex,
+                          erg: Laufergebnis) -> str | None:
+    """Orders unterwegs, deren Handelstag vorbei ist und die bei IBKR nicht mehr offen sind (betrieb/nachtrag.py): ohne
+    Abweichung zur IBKR-Position → verfallen; mit Abweichung → Ausführung außerhalb des API-Zeitfensters, Nachtrag mit
+    Beleg (Flex, sonst Position mit Einstand) und Meldung. Gibt den Stoppgrund zurück, wenn ein Verdacht ohne Beleg bleibt."""
+    from tradingbot.betrieb import nachtrag
+
+    buecher = list(b["buecher"])
+    kasse_ibkr = broker.kasse_je_waehrung() if hasattr(broker, "kasse_je_waehrung") else None
+    tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
+    k = nachtrag.klaeren(journal, buecher, {o.order_ref for o in offen_liste}, positionen, letzte_sitzung,
+                         kasse_ibkr=kasse_ibkr or None, toleranz=tol)
+    if k.verdacht:
+        erg.meldungen.append("Ausführung außerhalb des API-Zeitfensters vermutet (IBKR-Position weicht ab, Order nicht mehr offen): "
+                             + ", ".join(f"{z['buch']}:{z['id']}" for z in k.verdacht))
+        quelle = nachtrag.flex_aus_env() if flex == "env" else flex
+        nachtrag.nachtragen(journal, buecher, k, positionen, fx, kosten=risk.kosten, kurse_laden=kurse_laden, flex=quelle,
+                            gebuehr_je_order=(b.get("nachtrag") or {}).get("gebuehr_je_order"), eroeffnung=_eroeffnung_fn(kurse_laden))
+        erg.meldungen += [f"Nachtrag: {h}" for h in k.hinweise]
+        if k.ohne_beleg:
+            return ("Ausführung außerhalb des API-Zeitfensters ohne Beleg – Tageslauf gestoppt, nichts gebucht: " + "; ".join(k.ohne_beleg)
+                    + ". Weg: Flex-Abfrage einrichten (docs/BETRIEB.md) oder im Client Portal prüfen und mit Jakob klären")
+        erg.meldungen += k.gebucht
+    for z in k.verfallen:
+        journal.status_setzen(z["id"], "verfallen")
+        journal.ereignis("verfallen", f"Order {z['id']} nicht ausgeführt, verfallen (IBKR-Position unverändert)", z["buch"])
+    if k.verfallen:
+        erg.meldungen.append(f"{len(k.verfallen)} nicht ausgeführte Order(s) verfallen")
+    return None
 
 
 def abgleich(journal, buecher: list[str], positionen) -> list[str]:
@@ -281,9 +301,10 @@ def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None
 
 # --- Tageslauf --------------------------------------------------------------------------------------------------------
 def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundamental_bewertung=None, risk: RiskManager | None = None,
-              konfig: dict | None = None, sichern: bool = True) -> Laufergebnis:
+              konfig: dict | None = None, sichern: bool = True, flex="env") -> Laufergebnis:
     """Ein Tageslauf. `kurse_laden(ticker, bis, art) -> DataFrame` (EUR-Kurse) und `fundamental_bewertung(tag)` sind
-    austauschbar (Tests); Standard sind Yahoo-Kurse und engines/fundamental/aktuell.py."""
+    austauschbar (Tests); Standard sind Yahoo-Kurse und engines/fundamental/aktuell.py. `flex`: Beleg-Quelle für
+    Ausführungen außerhalb des API-Zeitfensters („env“ = Flex-Abfrage aus .env, None = keine, sonst Funktion)."""
     from tradingbot.konfiguration import lade_konfiguration
 
     konfig = konfig or {n: lade_konfiguration(n) for n in ("betrieb", "technik", "fundamental", "backtest")}
@@ -313,14 +334,20 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 erg.meldungen += zeilen
             offen_liste = broker.offene_orders()
             offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offen_liste]
-            n = verfallene_markieren(journal, {o.order_ref for o in offen_liste}, xetra)
-            if n:
-                erg.meldungen.append(f"{n} nicht ausgeführte Order(s) verfallen")
-            diff = abgleich(journal, list(b["buecher"]), broker.positionen())
-            kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b)
-            if kasse_text:
-                erg.meldungen.append(kasse_text)
-            diff += kasse_diff
+            positionen = broker.positionen()
+            # Ausführungen außerhalb des API-Zeitfensters (verpasste Abende, Jakob 09.11.2026): erst klären, dann verfallen
+            stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg)
+            if stopp:
+                erg.gestoppt = stopp
+                journal.ereignis("abgleich", erg.gestoppt)
+                erg.meldungen.append(erg.gestoppt)
+                return erg
+            diff = abgleich(journal, list(b["buecher"]), positionen)
+            if not diff:                                     # Kassenbasis erst festhalten, wenn die Bestände stimmen
+                kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b)
+                if kasse_text:
+                    erg.meldungen.append(kasse_text)
+                diff += kasse_diff
             if diff:
                 erg.gestoppt = "Abgleich mit IBKR weicht ab – Tageslauf gestoppt: " + "; ".join(diff)
                 journal.ereignis("abgleich", erg.gestoppt)

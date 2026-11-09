@@ -9,6 +9,8 @@ Aufrufe:
   Tageslauf_Probe.bat           Fenster im Probe-Modus: Probe-Journal (daten/betrieb/probe), jederzeit bedienbar, sendet nie,
                                 setzt nie einen Messbeginn
   .venv\Scripts\python tools\tageslauf.py --probe --ohne-fenster   Probelauf als Bericht auf der Konsole und in daten/betrieb/probe/
+  .venv\Scripts\python tools\tageslauf.py --kopie                   Probelauf aller Bücher auf einer Kopie des echten Journals
+                                (Gateway nur lesend, sendet nie, keine Sicherung; Kopie und Bericht in daten/betrieb/probe/)
 """
 import argparse
 import logging
@@ -29,11 +31,11 @@ from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 BERLIN = ZoneInfo("Europe/Berlin")
 
 
-def broker_oder_none(meldungen: list[str]):
+def broker_oder_none(meldungen: list[str], nur_lesen: bool = False):
     from tradingbot.broker.ibkr import IbkrBroker
 
     try:
-        b = IbkrBroker(lade_konfiguration("betrieb"), PROJEKT_WURZEL)
+        b = IbkrBroker(lade_konfiguration("betrieb"), PROJEKT_WURZEL, nur_lesen=nur_lesen, client_id=94 if nur_lesen else None)
         b.verbinden()
         meldungen.append(f"Gateway verbunden, Konto {konto_kurz(b.konto_id())} (Paper: {b.konto_id().startswith('DU')})")
         return b
@@ -47,10 +49,17 @@ def bericht(erg, journal, betrieb: dict) -> str:
     zeilen += [f"- {m}" for m in erg.meldungen]
     if erg.gestoppt:
         zeilen += ["", f"GESTOPPT: {erg.gestoppt}"]
+    konto = journal.zustand("_konto")
+    if konto.get("kassenbasis") is not None:
+        zeilen += ["", "Kassenbasis (Kontokasse ohne Bot-Bewegungen): " + ", ".join(f"{w} {v:,.2f}" for w, v in konto["kassenbasis"].items())
+                   + f", festgehalten {konto.get('festgehalten', '–')}"]
     for buch, bk in betrieb["buecher"].items():
         vs = [(bv, u) for bv, u in erg.vorschlaege if bv.vorschlag.buch == buch]
         zeilen += ["", f"== {buch} ({bk['art']}, Budget {bk['budget_eur']:,.0f} €, Kasse {journal.kasse(buch):,.2f} €, "
                        f"Freigabe {'einzeln' if bk['freigabe'] == 'einzeln' else 'als Sammelfreigabe'}) =="]
+        bestand = journal.bestand(buch)
+        zeilen.append("  Bestand: " + (", ".join(f"{t} {s:g}" for t, s in sorted(bestand.items())) if bestand else "–")
+                      + "; Kasse je Währung: " + ", ".join(f"{w} {v:,.2f}" for w, v in journal.kasse_je_waehrung(buch).items()))
         if buch in erg.befunde:
             zeilen.append("  Datenprüfung – keine Vorschläge: " + "; ".join(erg.befunde[buch][:5]))
         if not vs:
@@ -73,28 +82,36 @@ def sperrdatei(probe: bool):
         return betriebspfad("probe/tageslauf.sperre" if probe else "tageslauf.sperre")
 
 
-def rechnen(probe: bool):
+def rechnen(probe: bool, kopie: bool = False):
     meldungen = []
-    with betriebsmodus("Probelauf" if probe else "Tageslauf"):
-        journal = Journal(betriebspfad("probe/journal.sqlite" if probe else "journal.sqlite"))
-        broker = broker_oder_none(meldungen)
+    with betriebsmodus("Probelauf (Kopie des echten Journals)" if kopie else "Probelauf" if probe else "Tageslauf"):
+        if kopie:                                     # nur lesend: echtes Journal kopieren, Gateway readonly (09.11.2026)
+            import shutil
+            ziel = betriebspfad(f"probe/kopie_{datetime.now():%Y-%m-%d_%H%M%S}.sqlite")
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(betriebspfad("journal.sqlite"), ziel)
+            meldungen.append(f"Probelauf auf Kopie des echten Journals ({ziel.name}); Gateway nur lesend, nichts gesendet")
+            journal = Journal(ziel)
+        else:
+            journal = Journal(betriebspfad("probe/journal.sqlite" if probe else "journal.sqlite"))
+        broker = broker_oder_none(meldungen, nur_lesen=probe or kopie)
         erg = tageslauf(datetime.now(BERLIN), journal, broker=broker, sichern=not probe)
         gateway = getattr(broker, "gateway_meldungen", [])
         erg.meldungen = meldungen + erg.meldungen + [f"(kein Abbruch) {m}" for m in gateway]
         return erg, journal, broker
 
 
-def ohne_fenster(probe: bool) -> int:
+def ohne_fenster(probe: bool, kopie: bool = False) -> int:
     try:
         with laufsperre(sperrdatei(probe), zweck="Probelauf" if probe else "Tageslauf"):
-            return _ohne_fenster(probe)
+            return _ohne_fenster(probe, kopie)
     except LaufGesperrt as f:
         print(f"ABGEBROCHEN: {f}")
         return 2
 
 
-def _ohne_fenster(probe: bool) -> int:
-    erg, journal, broker = rechnen(probe)
+def _ohne_fenster(probe: bool, kopie: bool = False) -> int:
+    erg, journal, broker = rechnen(probe, kopie)
     text = bericht(erg, journal, lade_konfiguration("betrieb"))
     print(text)
     with betriebsmodus("Probelauf-Bericht" if probe else "Tageslauf-Bericht"):
@@ -151,8 +168,11 @@ def main() -> int:
     a = argparse.ArgumentParser()
     a.add_argument("--probe", action="store_true", help="eigenes Probe-Journal, keine Sicherung, sendet nie")
     a.add_argument("--ohne-fenster", action="store_true")
+    a.add_argument("--kopie", action="store_true", help="Probelauf auf einer Kopie des echten Journals (nur lesend, ohne Fenster)")
     arg = a.parse_args()
     logging.basicConfig(level=logging.WARNING)
+    if arg.kopie:
+        return ohne_fenster(True, kopie=True)
     if arg.ohne_fenster:
         return ohne_fenster(arg.probe)
     return fenster(probe=arg.probe)

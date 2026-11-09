@@ -55,11 +55,11 @@ class Journal:
         spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(ausfuehrungen)")}
         for name, typ in (("waehrung", "TEXT DEFAULT 'EUR'"), ("preis", "REAL"), ("gebuehr", "REAL"), ("gebuehr_waehrung", "TEXT"), ("boerse", "TEXT"),
                           ("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL"),
-                          ("eroeffnung", "REAL")):
+                          ("eroeffnung", "REAL"), ("quelle", "TEXT")):
             if name not in spalten:                                   # ältere Journale ergänzen
                 self.db.execute(f"ALTER TABLE ausfuehrungen ADD COLUMN {name} {typ}")
         t_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(tausche)")}
-        for name, typ in (("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL")):
+        for name, typ in (("gebuehr_ibkr", "REAL"), ("gebuehr_ibkr_waehrung", "TEXT"), ("gebuehr_modell_eur", "REAL"), ("quelle", "TEXT")):
             if name not in t_spalten:
                 self.db.execute(f"ALTER TABLE tausche ADD COLUMN {name} {typ}")
         if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
@@ -295,6 +295,12 @@ class Journal:
             self.status_setzen(vid, "ausgefuehrt")
         self.db.commit()
         return neu
+
+    def quelle_setzen(self, exec_id: str, quelle: str):
+        """Beleg einer nachgetragenen Ausführung (betrieb/nachtrag.py, Jakob 09.11.2026); leer = IBKR-API am Ausführungstag."""
+        self.db.execute("UPDATE ausfuehrungen SET quelle=? WHERE exec_id=?", (quelle, exec_id))
+        self.db.execute("UPDATE tausche SET quelle=? WHERE exec_id=?", (quelle, exec_id))
+        self.db.commit()
 
     def dividende(self, buch, ticker, ex_tag, stueck, betrag_eur) -> bool:
         neu = self.db.execute("INSERT OR IGNORE INTO dividenden VALUES (?,?,?,?,?)", (buch, ticker, str(ex_tag), stueck, betrag_eur)).rowcount > 0

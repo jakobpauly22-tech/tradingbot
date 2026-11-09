@@ -14,7 +14,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
-from tradingbot.broker.basis import (Auftrag, KontraktUnbekannt, OffeneOrder, Position, SendeErgebnis, pruefe_senden,
+from tradingbot.broker.basis import (Auftrag, KontraktUnbekannt, OffeneOrder, Position, SendeErgebnis, SendenGesperrt, pruefe_senden,
                                      pruefe_verbindung)
 
 ANGENOMMEN = {"PreSubmitted", "Submitted", "Filled"}
@@ -112,8 +112,9 @@ def ticker_aus(kontrakt_) -> str:
 
 class IbkrBroker:
     def __init__(self, betrieb: dict, projekt_wurzel: Path, *, host: str | None = None, port: int | None = None,
-                 client_id: int | None = None, modus: str | None = None, ib=None):
+                 client_id: int | None = None, modus: str | None = None, ib=None, nur_lesen: bool = False):
         self.betrieb, self.wurzel = betrieb, Path(projekt_wurzel)
+        self.nur_lesen = nur_lesen                       # Probeläufe und Werkzeuge (09.11.2026): readonly, Senden gesperrt
         self.host = host or os.getenv("IB_HOST", betrieb["ibkr"]["host"])
         self.port = int(port or os.getenv("IB_PORT", betrieb["ibkr"]["port_paper"]))
         self.client_id = int(client_id or os.getenv("IB_CLIENT_ID", "1"))
@@ -145,7 +146,7 @@ class IbkrBroker:
         from ib_async.ib import StartupFetch, StartupFetchALL
 
         pruefe_verbindung(self.host, self.port, self.betrieb)
-        readonly = not self.betrieb["ibkr"].get("senden_freigeschaltet", False)
+        readonly = self.nur_lesen or not self.betrieb["ibkr"].get("senden_freigeschaltet", False)
         self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=10, readonly=readonly,
                         fetchFields=StartupFetchALL & ~StartupFetch.ORDERS_COMPLETE)
 
@@ -169,12 +170,14 @@ class IbkrBroker:
                 if getattr(p.contract, "secType", "STK") != "CASH"]              # Devisenbestände sind Kasse, keine Position
 
     def kasse_je_waehrung(self) -> dict[str, float]:
-        """Kontokasse je Währung laut IBKR (accountValues, Tag „CashBalance“, ohne die Summenzeile BASE)."""
-        kassen = {}
+        """Kontokasse je Währung laut IBKR (accountValues, ohne die Summenzeile BASE). Das Paper-Konto meldet die Kasse als
+        „$LEDGER-CashBalance“ (geprüft 09.11.2026), nicht als „CashBalance“; bis dahin blieb der Kassen-Abgleich ungeprüft.
+        Aufgelaufene, noch nicht gebuchte Zinsen (AccruedCash) zählen nicht."""
+        kassen: dict[str, dict[str, float]] = {"CashBalance": {}, "$LEDGER-CashBalance": {}}
         for w in self.ib.accountValues():
-            if w.tag == "CashBalance" and w.currency and w.currency != "BASE":
-                kassen[w.currency] = kassen.get(w.currency, 0.0) + float(w.value)
-        return kassen
+            if w.tag in kassen and w.currency and w.currency != "BASE":
+                kassen[w.tag][w.currency] = kassen[w.tag].get(w.currency, 0.0) + float(w.value)
+        return kassen["CashBalance"] or kassen["$LEDGER-CashBalance"]
 
     def offene_orders(self) -> list[OffeneOrder]:
         ergebnis = []
@@ -290,6 +293,8 @@ class IbkrBroker:
         Kontrakt qualifizieren. Ergebnis erst nach der Antwort von IBKR (angenommen/abgelehnt/unbestätigt)."""
         from ib_async import LimitOrder, MarketOrder
 
+        if self.nur_lesen:
+            raise SendenGesperrt("Verbindung nur lesend (Probelauf/Werkzeug) – Senden gesperrt")
         pruefe_senden(konto_id=self.konto_id(), port=self.port, modus=self.modus, betrieb=self.betrieb, projekt_wurzel=self.wurzel,
                       auftrag=auftrag, offene=self.offene_orders(), gesendete_refs=gesendete_refs)
         k = self.kontrakt_aufloesen(auftrag.ticker, auftrag.art, auftrag.waehrung)

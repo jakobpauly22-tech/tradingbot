@@ -1,7 +1,7 @@
 # Zuordnung Ticker → IBKR-Kontrakt, erzeugt von tools/kontrakte_pruefen.py (nur lesend). Nicht von Hand ändern;
 # neu erzeugen. Gesendet wird der von IBKR unter SMART qualifizierte Kontrakt (conId); `boerse` = Xetra-Platz bzw.
 # IDEALPRO/SMART. Titel unter `nicht_aufloesbar` bekommen beim Senden ein Veto „Kontrakt unbekannt“.
-stand: '2026-11-04'
+stand: '2026-11-09'
 kontrakte:
   SPYI.DE:
     con_id: 89384965
@@ -91,6 +91,16 @@ kontrakte:
     waehrung: EUR
     name: ISHARES EURO INFL-LKD GOVT
     isin: IE00B0M62X26
+    boerse: IBIS2
+    art: etf
+  IUSM.DE:
+    con_id: 100292090
+    symbol: BTMA
+    lokal: BTMA
+    primaer: AEB
+    waehrung: EUR
+    name: ISHARES USD TREASURY 7-10Y
+    isin: IE00B1FZS798
     boerse: IBIS2
     art: etf
   IUSP.DE:
@@ -4641,5 +4651,4 @@ kontrakte:
     boerse: SMART
     art: aktie
 nicht_aufloesbar:
-  SXRM.DE: 'ISIN IE00B3VWN518: kein eindeutiger Kontrakt in USD mit Xetra-Platz IBIS2 (0 Treffer)'
   KVUE: 0 Treffer (Symbol KVUE, SMART, USD)

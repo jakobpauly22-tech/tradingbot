@@ -67,3 +67,30 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   22:55 und 23:15 Uhr (FX-Tagesschluss). Empfohlen sind 22:05–22:50 Uhr. Das ist ein Hinweis, keine Sperre.
 - **S&P-500-Liste:** Sie wird wöchentlich erneuert (Wikipedia-Cache höchstens 7 Tage alt) und an jedem Quartalsstichtag
   zwingend neu abgerufen. Den Stand zeigt das Protokoll: Abruf der Liste und letzte erfasste Änderung.
+
+## Verpasste Abende: Ausführungen außerhalb des API-Zeitfensters (09.11.2026)
+
+- **Anlass:** Vom 04. bis 08.11.2026 lief kein Tageslauf. Die fünf Orders vom 03.11. wurden am 04.11. ausgeführt, aber
+  `reqExecutions` liefert über das Gateway nur den laufenden Tag (am 09.11. geprüft: 0 Ausführungen, auch mit Zeitfilter
+  ab 01.11.). Der alte Tageslauf hätte die Orders als „verfallen“ markiert (und als Nachkauf erneut vorgeschlagen) und dann
+  am Bestands-Abgleich gestoppt.
+- **Festgelegter Weg** (`betrieb/nachtrag.py`, im Tageslauf vor dem Abgleich): Eine Order unterwegs, deren Handelstag vorbei
+  ist und die bei IBKR nicht mehr offen ist, gilt nur dann als verfallen, wenn die IBKR-Position nicht von den Büchern
+  abweicht (Tausch: USD-Kasse). Weicht sie ab, wird mit Beleg nachgetragen und gemeldet: (a) Flex-Abfrage (Trades;
+  `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID` in `.env`), sonst (b) Position mit Einstand, nur bei Käufen, die die Position
+  allein erklären. Der Preis ergibt sich als Einstand minus Paper-Festpreis je Stück (`config/betrieb.yaml`,
+  `nachtrag.gebuehr_je_order`), plausibilisiert gegen Limit und Tief/Hoch des Ausführungstags. Ohne Beleg stoppt der Lauf,
+  nichts wird gebucht oder verfallen. Quelle je Ausführung in `ausfuehrungen.quelle`, Ereignis `nachtrag` im Journal.
+  Werkzeug ohne Tageslauf: `tools/ausfuehrungen_nachtragen.py` (Trockenlauf auf Kopie, `--buchen` mit Sicherung).
+- **Beleg des Einstands:** IBKR führt den Einstand inklusive Gebühr. Geprüft am 09.11.: Einstand × Stück − 3,00 € ergibt
+  glatte Kurse (IUSA 67,39, SXR1 218,10, IJPA 70,86, IEMA 52,568), und die Kontokasse 990.709,16 € = 1.000.000,00 € −
+  9.290,84 € (Summe Einstand × Stück) passt auf den Cent.
+- **Kassenbasis erst nach stimmendem Bestand:** Der Kassen-Abgleich (und damit das erstmalige Festhalten der Kassenbasis)
+  läuft nur noch, wenn der Bestands-Abgleich stimmt. Sonst hätte die Basis fehlende Käufe verschluckt.
+- **Kontokasse:** Das Paper-Konto meldet die Kasse als `$LEDGER-CashBalance`, nicht als `CashBalance`. Bis 09.11. blieb
+  der Kassen-Abgleich deshalb stillschweigend ungeprüft („IBKR meldet keine Kontokasse“). Aufgelaufene, noch nicht
+  gebuchte Zinsen (`AccruedCash`, am 09.11. 225,74 €) zählen nicht. Werden sie gebucht, gehen sie als Buchung ohne
+  Buchbezug in die Kassenbasis, wenn sie unter 10 € liegen. Bei mehr stoppt der Abgleich (siehe offene Punkte im
+  Bericht vom 09.11.2026).
+- **Probelauf auf einer Kopie des echten Journals:** `tools/tageslauf.py --kopie` (Gateway nur lesend, sendet nie, keine
+  Sicherung).
