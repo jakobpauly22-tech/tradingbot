@@ -214,6 +214,13 @@ class IbkrBroker:
         return werte["AccruedCash"] or werte["$LEDGER-AccruedCash"]
 
     def offene_orders(self) -> list[OffeneOrder]:
+        """Alle offenen Orders des Kontos, auch die anderer Client-IDs (reqAllOpenOrders, reine Abfrage; Korrektur 10.11.2026:
+        die Probe mit Client-ID 94 sah die Orders von Client 1 nicht und hielt sie für verfallen)."""
+        if hasattr(self.ib, "reqAllOpenOrders"):
+            try:
+                self.ib.reqAllOpenOrders()
+            except Exception:  # noqa: BLE001 – Abfrage fehlgeschlagen: wenigstens die eigenen Orders
+                pass
         ergebnis = []
         for t in self.ib.openTrades():
             o = t.order

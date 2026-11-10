@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 import pandas as pd
 
@@ -56,11 +56,44 @@ def _ref(z) -> str:
     return f"{z['buch']}:{z['id']}"
 
 
+ERÖFFNUNG = {"xetra": (time(9, 0), "Europe/Berlin"), "nyse": (time(9, 30), "America/New_York")}
+
+
+def gueltig_fuer(z) -> date | None:
+    """Handelstag, für den eine gesendete Order gilt (Korrektur 10.11.2026): die erste Sitzung des Heimatplatzes, deren
+    Eröffnung nach dem Sendezeitpunkt liegt (Kauf zur Eröffnung, OPG bzw. Eröffnungsauktion). Beispiel: US-Kauf mit
+    NYSE-Signaltag 06.11., gesendet 09.11. 22:07 Uhr (16:07 in New York) → gilt für NYSE 10.11. None ohne Sendezeit."""
+    if not z["aktualisiert"]:
+        return None
+    boerse = "xetra" if z["art"] == "fx" else boerse_von(z["ticker"])
+    eroeffnung, zone = ERÖFFNUNG[boerse]
+    ts = pd.Timestamp(z["aktualisiert"])
+    ts = (ts.tz_localize("Europe/Berlin") if ts.tzinfo is None else ts).tz_convert(zone)
+    d = ts.date()
+    if ist_handelstag(boerse, d) and ts.time() < eroeffnung:
+        return d
+    return naechste_sitzung(boerse, d)
+
+
+def handelstag_vorbei(z, letzte_sitzung, jetzt=None) -> bool:
+    """Ist der Handelstag der Order vorbei? Mit `jetzt`: die Sitzung, für die die Order gilt (`gueltig_fuer`), ist am
+    Heimatplatz abgeschlossen. Ohne `jetzt` (oder ohne Sendezeit) wie bisher: Signaltag vor der letzten Xetra-Sitzung."""
+    from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung
+
+    tag = gueltig_fuer(z) if jetzt is not None else None
+    if tag is None:
+        return pd.Timestamp(z["signaltag"]) < pd.Timestamp(letzte_sitzung)
+    boerse = "xetra" if z["art"] == "fx" else boerse_von(z["ticker"])
+    return letzte_abgeschlossene_sitzung(boerse, jetzt) >= tag
+
+
 def klaeren(journal, buecher: list[str], offene_refs: set[str], positionen, letzte_sitzung, *, kasse_ibkr: dict | None = None,
-            toleranz: float = 0.05) -> Klaerung:
-    """Schritt 1: Orders unterwegs, deren Handelstag vorbei ist und die nicht mehr offen sind → verfallen oder Verdacht."""
+            toleranz: float = 0.05, jetzt=None) -> Klaerung:
+    """Schritt 1: Orders unterwegs, deren Handelstag vorbei ist und die nicht mehr offen sind → verfallen oder Verdacht.
+    Eine Order, deren Handelstag noch läuft oder bevorsteht, bleibt unterwegs, auch wenn sie in `offene_refs` fehlt
+    (z. B. andere Client-ID; Korrektur 10.11.2026)."""
     k = Klaerung()
-    vorbei = [z for z in journal.unterwegs() if pd.Timestamp(z["signaltag"]) < pd.Timestamp(letzte_sitzung) and _ref(z) not in offene_refs]
+    vorbei = [z for z in journal.unterwegs() if handelstag_vorbei(z, letzte_sitzung, jetzt) and _ref(z) not in offene_refs]
     if not vorbei:
         return k
     soll: dict[str, float] = {}

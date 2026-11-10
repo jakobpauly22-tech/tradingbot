@@ -508,7 +508,17 @@ def test_nachkauf_fundamental_bis_zum_stichtag(umgebung):
     abgelehnt = {z["ticker"] for z in j.vorschlaege(buch="fundamental_a") if z["status"] == "abgelehnt"}
     assert len(abgelehnt) == 2 and "ziel" in j.zustand("fundamental_a")
     naechster = datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))       # kein Quartalsstichtag
+    # solange Orders unterwegs sind, gilt das Buch als aufgebaut (Jakob 10.11.2026): kein Nachkauf
     e = lauf(j, rm, jetzt=naechster)
+    assert not any(bv.vorschlag.buch == "fundamental_a" for bv, _ in e.vorschlaege)
+    # die 5 angenommenen Käufe sind ausgeführt und werden eingelesen → Nachkauf der 2 abgelehnten
+    gesendet = [z for z in j.vorschlaege(buch="fundamental_a") if z["status"] == "gesendet"]
+    fills = [{"exec_id": f"f{i}", "order_ref": f"fundamental_a:{z['id']}", "ticker": z["ticker"], "richtung": 1, "stueck": z["stueck"],
+              "preis": 80.0, "waehrung": "USD", "gebuehr": 1.0, "gebuehr_waehrung": "USD", "zeit": "2026-11-03T14:30:00+00:00"}
+             for i, z in enumerate(gesendet)]
+    positionen = [Position("DU1", z["ticker"], z["stueck"], 80.2) for z in gesendet]
+    e = lauf(j, rm, jetzt=naechster, broker=BrokerAttrappe(fills=fills, positionen=positionen))
+    assert e.gestoppt is None, e.gestoppt
     neu = {bv.vorschlag.ticker for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx"}
     assert neu == abgelehnt
     assert any("fundamental_a: Nachkauf 2 Titel" in m for m in e.meldungen)

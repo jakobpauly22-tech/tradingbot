@@ -305,7 +305,7 @@ def verpasste_handelstage(boerse: str, seit, tag) -> list[pd.Timestamp]:
 
 
 def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, letzte_sitzung, fx, risk, kurse_laden, flex,
-                          erg: Laufergebnis) -> str | None:
+                          erg: Laufergebnis, jetzt=None) -> str | None:
     """Orders unterwegs, deren Handelstag vorbei ist und die bei IBKR nicht mehr offen sind (betrieb/nachtrag.py): ohne
     Abweichung zur IBKR-Position → verfallen; mit Abweichung → Ausführung außerhalb des API-Zeitfensters, Nachtrag mit
     Beleg (Flex, sonst Position mit Einstand) und Meldung. Gibt den Stoppgrund zurück, wenn ein Verdacht ohne Beleg bleibt."""
@@ -321,7 +321,7 @@ def ausfuehrungen_klaeren(journal, b: dict, offen_liste, positionen, broker, let
     kasse_ibkr = broker.kasse_je_waehrung() if hasattr(broker, "kasse_je_waehrung") else None
     tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
     k = nachtrag.klaeren(journal, buecher, {o.order_ref for o in offen_liste}, positionen, letzte_sitzung,
-                         kasse_ibkr=kasse_ibkr or None, toleranz=tol)
+                         kasse_ibkr=kasse_ibkr or None, toleranz=tol, jetzt=jetzt)
     if k.verdacht:
         erg.meldungen.append("Ausführung außerhalb des API-Zeitfensters vermutet (IBKR-Position weicht ab, Order nicht mehr offen): "
                              + ", ".join(f"{z['buch']}:{z['id']}" for z in k.verdacht))
@@ -424,7 +424,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offen_liste]
             positionen = broker.positionen()
             # Ausführungen außerhalb des API-Zeitfensters (verpasste Abende, Jakob 09.11.2026): erst klären, dann verfallen
-            stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg)
+            stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg, jetzt)
             if stopp:
                 erg.gestoppt = stopp
                 journal.ereignis("abgleich", erg.gestoppt)
@@ -520,10 +520,17 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         return journal.nachkauf_kandidaten(n, seit) if seit else set()
 
     nachkauf_fb = {n: _nachkauf(n) for n in fb}
-    braucht = [n for n in fb if (not journal.bestand(n) and not journal.unterwegs(n)) or quartalsstichtag(nyse) or nachkauf_fb[n]]
+    # Bücher mit Orders unterwegs gelten als aufgebaut (Jakob 10.11.2026): weder Aufbau noch Nachkauf, solange etwas
+    # unterwegs ist; nur der Quartalsstichtag rechnet trotzdem (Titel unterwegs bleiben dabei gesperrt).
+    braucht = [n for n in fb if quartalsstichtag(nyse) or (not journal.unterwegs(n) and (not journal.bestand(n) or nachkauf_fb[n]))]
+    for n in fb:
+        if n not in braucht and journal.unterwegs(n):
+            erg.meldungen.append(f"{n}: {len(journal.unterwegs(n))} Order(s) unterwegs – Buch gilt als aufgebaut, keine neuen Käufe")
     kurse_usd: dict[str, float] = {}
     for n in fb:
         bestand = journal.bestand(n)
+        if not bestand and n not in braucht:
+            werte_buch[n] = journal.kasse(n)                 # nur Kasse (Orders unterwegs), Buchwert trotzdem speichern
         if bestand and n not in braucht:
             k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
             kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
@@ -794,11 +801,11 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
             meldungen.append(f"{z['id']}: von IBKR ABGELEHNT (Order {antwort.order_id}) – {antwort.text}{opg}")
             continue
         if antwort.status == "unbestaetigt":
-            journal.status_setzen(z["id"], "unbestaetigt", order_id=antwort.order_id, meldung=antwort.text)
+            journal.status_setzen(z["id"], "unbestaetigt", order_id=antwort.order_id, meldung=antwort.text, jetzt=jetzt)
             journal.ereignis("unbestaetigt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])
             meldungen.append(f"{z['id']}: UNBESTÄTIGT (Order {antwort.order_id}) – {antwort.text}; bitte im Gateway/Client Portal prüfen")
         else:
-            journal.status_setzen(z["id"], "gesendet", order_id=antwort.order_id, meldung=antwort.text or None)
+            journal.status_setzen(z["id"], "gesendet", order_id=antwort.order_id, meldung=antwort.text or None, jetzt=jetzt)
             if buch_freigeschaltet(b, z["buch"]):
                 journal.messbeginn_setzen(z["buch"], jetzt, "erste von IBKR angenommene Order")
         risk.verbuchen(v, k)
