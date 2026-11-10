@@ -175,6 +175,17 @@ class Freigabefenster:
         if not messagebox.askyesno("Freigabe bestätigen", f"{len(ids)} Vorschläge freigeben" + ("" if self.probe else " und senden") + "?"
                                    + (f"\n\n{hinweis}" if hinweis else "")):
             return
-        meldungen = self.senden_fn(ids)
+        if getattr(self, "_sendet", False):                # kein zweites Senden, solange eines läuft
+            return
+        self._sendet = True
+        try:
+            meldungen = self.senden_fn(ids)
+        except Exception as f:  # noqa: BLE001 – eine Ablehnung oder ein Fehler darf das Fenster nie beenden (10.11.2026)
+            meldungen = [f"Senden abgebrochen ({type(f).__name__}: {f}) – Journal und offene Orders prüfen, Tageslauf neu starten"]
+            messagebox.showerror("Senden abgebrochen", meldungen[0])
+        finally:
+            self._sendet = False
         self.protokoll.insert("end", "\n".join(meldungen) + "\n")
         self.protokoll.see("end")
+        if any(m.startswith("Read-Only im Gateway ist aktiv") or "Read-Only im Gateway ist aktiv" in m for m in meldungen):
+            messagebox.showwarning("Read-Only im Gateway", "Read-Only im Gateway ist aktiv – bitte ausschalten und Tageslauf neu starten.")

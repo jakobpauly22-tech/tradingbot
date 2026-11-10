@@ -15,8 +15,11 @@ Die übrigen Bücher schaltet Jakob erst frei, wenn er am nächsten Abend die Au
 4. **Read-Only im Gateway erst unmittelbar vor der ersten Freigabe ausschalten** (Gateway: Konfiguration → API →
    Einstellungen → „Read-Only API“ abwählen → Übernehmen). Das Fenster bleibt dabei offen. Vor dem Senden verbindet
    sich der Bot neu, liest die Ausführungen ein und gleicht erneut ab.
-5. **„Freigeben und senden“** drücken und bestätigen. Das Protokoll zeigt je Order „gesendet (Order …)“ oder den Grund
-   der Ablehnung.
+5. **„Freigeben und senden“** drücken und bestätigen. Vor dem Senden prüft der Bot den Schreibzugriff (seit 10.11.2026).
+   Ist Read-Only noch an, wird **nichts** an IBKR übergeben, auch kein Tausch, und es erscheint „Read-Only im Gateway ist
+   aktiv – bitte ausschalten und Tageslauf neu starten“. Die Freigaben bleiben bis 24 Uhr gültig. Das Protokoll zeigt je
+   Order „von IBKR angenommen (Order …)“ oder den Grund der Ablehnung. Während des Sendens bleibt das Fenster bedienbar;
+   **nicht schließen**, bis „Verbindung zum Gateway getrennt“ im Protokoll steht.
 6. **Nach dem Senden** Read-Only im Gateway wieder einschalten. Das Fenster schließen.
 
 ## Was technisch dahintersteht

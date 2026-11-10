@@ -594,12 +594,25 @@ def kontrakte_pruefen(urteile, nach_id, broker, b, meldungen) -> list:
 
 
 # --- Freigabe und Senden ----------------------------------------------------------------------------------------------
+READ_ONLY_MELDUNG = "Read-Only im Gateway ist aktiv – bitte ausschalten und Tageslauf neu starten"
+
+
+def ist_read_only_ablehnung(text: str | None) -> bool:
+    """IBKR-Ablehnung wegen Read-Only (Fehler 321, „schreibgeschützten Modus“)."""
+    t = text or ""
+    return "321" in t and ("schreibgesch" in t or "read-only" in t.lower() or "read only" in t.lower())
+
+
 def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, risk: RiskManager | None = None,
-                         konfig_betrieb: dict | None = None, kurse_laden=None, probe: bool = False) -> list[str]:
+                         konfig_betrieb: dict | None = None, kurse_laden=None, probe: bool = False, fortschritt=None) -> list[str]:
     """Gibt frei und sendet. Gibt Meldungen zurück; nie eine Ausnahme bis zur Oberfläche (sauberer Abbruch).
 
     Probe-Modus (03.11.2026): Freigabe jederzeit, nichts wird gesendet, kein Messbeginn. Messbeginn auch im echten
-    Journal nur, wenn das Senden freigeschaltet ist."""
+    Journal nur, wenn das Senden freigeschaltet ist.
+
+    Vorfall 09.11.2026: Senden mit Read-Only im Gateway; die Wartezeiten auf die Ablehnungen froren das Fenster ein, Windows
+    schloss es mitten im Senden. Seitdem: Schreibzugriff vor jedem Senden prüfen, bei Read-Only nichts an IBKR übergeben;
+    `fortschritt()` wird zwischen den Orders aufgerufen (Fenster bleibt bedienbar); jede Ausnahme wird zur Meldung."""
     from tradingbot.konfiguration import lade_konfiguration
 
     b = konfig_betrieb or lade_konfiguration("betrieb")
@@ -626,7 +639,10 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     if not messbeginn:
         meldungen.append("Senden ist ausgeschaltet: Freigaben zählen nicht als Messbeginn")
     try:
-        meldungen = _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen)
+        meldungen = _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt)
+    except Exception as f:  # noqa: BLE001 – nie bis zur Oberfläche (Absturz 09.11.2026)
+        journal.ereignis("senden_abbruch", f"{type(f).__name__}: {f}")
+        meldungen.append(f"Senden abgebrochen ({type(f).__name__}: {f}) – Journal und offene Orders prüfen, Tageslauf neu starten")
     finally:                                                 # Verbindung nach Freigabe/Senden trennen (Jakob 04.11.2026)
         try:
             if broker is not None and broker.verbunden():
@@ -642,8 +658,12 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     return meldungen
 
 
-def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str]:
+def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt=None) -> list[str]:
     """Senden nach der Freigabe (unverändert aus freigeben_und_senden ausgelagert, damit danach gesichert wird)."""
+    def weiter():
+        if fortschritt is not None:
+            fortschritt()
+
     try:
         if not broker.verbunden():
             broker.verbinden()
@@ -651,6 +671,16 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
             raise ConnectionError("nicht verbunden")
     except Exception as f:  # noqa: BLE001
         return meldungen + [f"Gateway nicht verbunden ({type(f).__name__}) – nichts gesendet. Freigaben bleiben bis 24 Uhr; Gateway starten und erneut senden."]
+    # Schreibzugriff vor jedem Senden prüfen (Jakob 10.11.2026): bei Read-Only nichts an IBKR übergeben, auch keinen Tausch
+    if hasattr(broker, "schreibzugriff"):
+        ok, grund = broker.schreibzugriff()
+        weiter()
+        if not ok:
+            journal.ereignis("read_only", f"Senden verweigert: {grund}")
+            return meldungen + [f"{READ_ONLY_MELDUNG} ({grund}). Nichts gesendet; Freigaben bleiben bis 24 Uhr gültig."]
+        meldungen.append(grund)
+    if hasattr(broker, "waehrend_warten"):
+        broker.waehrend_warten = fortschritt
     kurse_laden = kurse_laden or _yahoo_kurse
     fx = {"USD": float(kurse_laden("EURUSD=X", jetzt.date(), "fx")["close"].iloc[-1])}
     zeilen: list[str] = []
@@ -670,6 +700,7 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
     stand = {}                                                                     # Kasse je Buch und Währung im Durchgang
     reihenfolge = lambda z: (z["buch"], 1 if z["art"] == "fx" else (0 if z["richtung"] < 0 else 2))   # noqa: E731 – Verkäufe, Tausch, Käufe
     for z in sorted(freigegeben, key=reihenfolge):
+        weiter()
         if z["buch"] in betroffen:
             continue
         letzte = journal.buchwerte(z["buch"])
@@ -702,6 +733,12 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen) -> list[str
             continue
         if isinstance(antwort, str):                                   # ältere Adapter/Attrappen: Order-ID = angenommen
             antwort = SendeErgebnis(antwort, "angenommen")
+        if ist_read_only_ablehnung(antwort.text):
+            # Read-Only erst während des Sendens (Prüfung davor bestanden): abbrechen, nichts weiter übergeben
+            journal.status_setzen(z["id"], "abgelehnt", order_id=antwort.order_id, meldung=antwort.text)
+            journal.ereignis("abgelehnt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])
+            return meldungen + [f"{z['id']}: von IBKR ABGELEHNT – {antwort.text}", f"{READ_ONLY_MELDUNG}. Senden abgebrochen, "
+                                "die übrigen Freigaben wurden nicht übergeben."]
         if antwort.status == "abgelehnt":
             journal.status_setzen(z["id"], "abgelehnt", order_id=antwort.order_id, meldung=antwort.text)
             journal.ereignis("abgelehnt", f"{z['id']} (Order {antwort.order_id}): {antwort.text}", z["buch"])

@@ -114,3 +114,33 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   die fünf Nachträge vom 09.11. ebenso). Beim nächsten Flex-Abruf werden sie abgeglichen: Die abgeleitete Zeile wird
   durch die Flex-Ausführungen ersetzt, alt und neu stehen im Ereignis `nachtrag_abgleich`. Weicht die Stückzahl ab, stoppt
   der Lauf. Fehlt eine Order in der Flex-Abfrage, bleibt sie „angenommen“ (Zeitraum der Abfrage weit genug wählen).
+
+## Read-Only-Vorfall 09.11.2026 und Prüfung vor dem Senden (10.11.2026)
+
+- **Ablauf laut Journal, Freigabeprotokoll und Windows-Ereignisanzeige:**
+  - 22:06:48: Freigabe mit Read-Only im Gateway. Die ersten beiden Orders (Crossover: Verkauf EUNN.DE, Kauf EUNK.DE)
+    bekamen 22:07:05–21 Fehler 321 („Die API befindet sich im schreibgeschützten Modus“, Status ValidationError) und
+    gelangten nie zu IBKR.
+  - Ab 22:07:22: Die nächsten Orders (Tausch EUR→USD fundamental_a und _b, 20 + 17 US-Käufe) nahm IBKR sofort an
+    (PreSubmitted, permId 192793080–117).
+  - 22:07:36: Windows schloss das Fenster („Application Hang“). Das Senden lief im Fenster-Thread, und allein die
+    Wartezeiten auf die beiden Ablehnungen (je 8 s) froren es ein. WMT und WST wurden deshalb erst im zweiten Lauf um
+    22:08 gesendet, zusammen mit den 4 Momentum-Orders.
+- **Festgehalten (Jakob 10.11.2026): Das Gateway parkt unter Read-Only blockierte Orders und sendet sie beim Abschalten
+  nach.** Darauf, dass Read-Only das Senden blockiert, ist also kein Verlass; deshalb prüft der Bot vor dem Senden selbst.
+  Anmerkung aus dem Abgleich: Die beiden Crossover-Orders mit Fehler 321 wurden nicht nachgesendet. Die Orders, die bei
+  IBKR angekommen sind, hat der Bot nach seinem Protokoll erst ab 22:07:22 übergeben und IBKR sofort bestätigt. Ein
+  Parken lässt sich aus den Protokollen nicht belegen, aber auch nicht ausschließen. Die Folgerung gilt unabhängig davon.
+- **Prüfung vor jedem Senden** (`IbkrBroker.schreibzugriff`): eine reine Abfrage ohne Order (`reqCompletedOrders`). Unter
+  Read-Only antwortet das Gateway sofort mit Fehler 321 (geprüft 10.11.2026). Fehler 321 oder keine Antwort in 3 s
+  bedeutet: kein `placeOrder`, auch kein Tausch, und die Meldung „Read-Only im Gateway ist aktiv – bitte ausschalten und
+  Tageslauf neu starten“. Kommt trotzdem während des Sendens eine 321-Ablehnung, bricht der Bot sofort ab und übergibt
+  keine weitere Order. `ValidationError` zählt als „abgelehnt“, nicht mehr als „unbestätigt“.
+- **Fenster:** Zwischen den Orders und während des Wartens auf IBKR verarbeitet das Fenster seine Ereignisse
+  (kein „Keine Rückmeldung“ mehr). Ein zweites Senden ist gesperrt, solange eines läuft. Jede Ausnahme beim Senden wird
+  zur Meldung (Ereignis `senden_abbruch`) und beendet das Fenster nie.
+- **Korrektur des Journals** (`tools/journal_korrektur_20261110.py`, nichts storniert):
+  - Die beiden Crossover-Orders sind von „unbestaetigt“ auf „abgelehnt“ gesetzt.
+  - Der Crossover-Strategiezustand ist auf den Stand nach dem Lauf vom 03.11. zurückgesetzt. Der Tageslauf am 10.11.
+    prüft damit die Tage ab 04.11. und schlägt den nachgeholten EUNN-Stop und EUNK neu vor.
+  - Alle 41 bei IBKR angekommenen Orders standen schon korrekt als „gesendet“ mit Order-ID im Journal.

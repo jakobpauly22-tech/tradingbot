@@ -41,7 +41,8 @@ def auf_stufe(preis: float, stufe: float, richtung: int) -> float:
     n = preis / stufe
     n = math.floor(n + 1e-9) if richtung > 0 else math.ceil(n - 1e-9)
     return round(n * stufe, 6)
-ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive"}
+ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive", "ValidationError"}   # ValidationError: z. B. 321 Read-Only (09.11.2026)
+READ_ONLY_CODE = 321                 # „Die API befindet sich im schreibgeschützten Modus“
 
 
 @lru_cache(maxsize=1)
@@ -126,6 +127,7 @@ class IbkrBroker:
             ib = IB()
         self.ib = ib
         self.gateway_meldungen: list[str] = []          # Fehlermeldungen des Gateways (z. B. Read-Only-Ablehnungen) fürs Protokoll
+        self.waehrend_warten = None                       # Rückruf beim Warten auf IBKR (Fenster bedienbar halten, 10.11.2026)
         ereignis = getattr(ib, "errorEvent", None)
         if ereignis is not None:
             ereignis += self._gateway_fehler
@@ -149,6 +151,29 @@ class IbkrBroker:
         readonly = self.nur_lesen or not self.betrieb["ibkr"].get("senden_freigeschaltet", False)
         self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=10, readonly=readonly,
                         fetchFields=StartupFetchALL & ~StartupFetch.ORDERS_COMPLETE)
+
+    def schreibzugriff(self, wartezeit: float = 3.0) -> tuple[bool, str]:
+        """Prüft vor dem Senden, ob das Gateway Schreibzugriffe annimmt, ohne eine Order zu übergeben (Jakob 10.11.2026).
+
+        Probe ist `reqCompletedOrders` (reine Abfrage, keine Order): Im Read-Only-Modus antwortet das Gateway sofort mit
+        Fehler 321 („Die API befindet sich im schreibgeschützten Modus“) und nie mit dem Listenende (geprüft 10.11.2026).
+        Ergebnis: (True, …) nur bei vollständiger Antwort; Fehler 321 oder keine Antwort → (False, Grund)."""
+        vorher = len(self.gateway_meldungen)
+        alt = getattr(self.ib, "RequestTimeout", 0)
+        self.ib.RequestTimeout = wartezeit
+        try:
+            self.ib.reqCompletedOrders(apiOnly=True)
+            antwort = True
+        except Exception:  # noqa: BLE001 – TimeoutError (keine Antwort) oder Abbruch
+            antwort = False
+        finally:
+            self.ib.RequestTimeout = alt
+        neu = self.gateway_meldungen[vorher:]
+        if any(m.startswith(f"Gateway-Meldung {READ_ONLY_CODE}:") for m in neu):
+            return False, "Read-Only im Gateway ist aktiv (Fehler 321 auf eine reine Abfrage)"
+        if not antwort:
+            return False, f"Gateway hat die Schreibprüfung nicht in {wartezeit:.0f} s beantwortet – nicht gesendet"
+        return True, "Schreibzugriff im Gateway geprüft"
 
     def trennen(self) -> None:
         self.ib.disconnect()
@@ -288,6 +313,8 @@ class IbkrBroker:
             if status in ANGENOMMEN or status in ABGELEHNT or time.monotonic() >= ende:
                 break
             self.ib.sleep(0.2)
+            if self.waehrend_warten is not None:
+                self.waehrend_warten()
         texte = [f"{e.errorCode}: {e.message}" if getattr(e, "errorCode", 0) else e.message for e in getattr(trade, "log", []) if e.message]
         oid = str(trade.order.orderId)
         cid = int(getattr(trade.contract, "conId", 0) or 0)

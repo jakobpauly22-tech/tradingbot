@@ -153,7 +153,8 @@ def _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise) 
             if probe:
                 return freigeben_und_senden(journal, ids, None, datetime.now(BERLIN), probe=True)
             from tradingbot.broker.ibkr import IbkrBroker
-            return freigeben_und_senden(journal, ids, broker or IbkrBroker(betrieb, PROJEKT_WURZEL), datetime.now(BERLIN))
+            return freigeben_und_senden(journal, ids, broker or IbkrBroker(betrieb, PROJEKT_WURZEL), datetime.now(BERLIN),
+                                        fortschritt=wurzel.update)          # Fenster bleibt während des Sendens bedienbar
 
     Freigabefenster(wurzel, erg, journal, betrieb, probe=probe, senden_fn=senden_fn)
     wurzel.mainloop()
