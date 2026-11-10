@@ -9,6 +9,8 @@ Aufrufe:
   Tageslauf_Probe.bat           Fenster im Probe-Modus: Probe-Journal (daten/betrieb/probe), jederzeit bedienbar, sendet nie,
                                 setzt nie einen Messbeginn
   .venv\Scripts\python tools\tageslauf.py --probe --ohne-fenster   Probelauf als Bericht auf der Konsole und in daten/betrieb/probe/
+  Tageslauf_neu.bat             neue Oberfläche (--neu), echtes Journal; Tageslauf_Probe_neu.bat: neue Oberfläche auf einer
+                                Kopie des echten Journals (--neu --kopie), sendet nie
   .venv\Scripts\python tools\tageslauf.py --kopie                   Probelauf aller Bücher auf einer Kopie des echten Journals
                                 (Gateway nur lesend, sendet nie, keine Sicherung; Kopie und Bericht in daten/betrieb/probe/)
 """
@@ -123,7 +125,9 @@ def _ohne_fenster(probe: bool, kopie: bool = False) -> int:
     return 0
 
 
-def fenster(probe: bool = False) -> int:
+def fenster(probe: bool = False, neu: bool = False, kopie: bool = False) -> int:
+    """`neu`: neue Oberfläche (betrieb/oberflaeche_neu.py, 10.11.2026); die alte bleibt Reserve, bis Jakob umstellt.
+    `kopie`: Probe-Fenster auf einer Kopie des echten Journals (Gateway nur lesend, sendet nie)."""
     import tkinter as tk
     from tkinter import messagebox
 
@@ -134,6 +138,8 @@ def fenster(probe: bool = False) -> int:
     hinweise: list[str] = []
     try:
         with laufsperre(sperrdatei(probe), zweck="Probefenster" if probe else "Tageslauf-Fenster", meldungen=hinweise):
+            if neu:
+                return _fenster_neu(tk, messagebox, betrieb, wurzel, probe, kopie, hinweise)
             return _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise)
     except LaufGesperrt as f:
         messagebox.showerror("Tageslauf läuft schon", str(f))
@@ -164,14 +170,60 @@ def _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise) 
     return 0
 
 
+def _fenster_neu(tk, messagebox, betrieb, wurzel, probe, kopie, hinweise) -> int:
+    from tradingbot.betrieb import ansicht
+    from tradingbot.betrieb.oberflaeche_neu import Tagesfenster
+    from tradingbot.broker.ibkr import IbkrBroker
+
+    try:
+        erg, journal, broker = rechnen(probe=probe, kopie=kopie)
+        erg.meldungen = hinweise + erg.meldungen
+    except Exception:  # noqa: BLE001
+        messagebox.showerror("Tageslauf fehlgeschlagen", traceback.format_exc()[-1500:])
+        return 1
+    zustand = {"broker": broker}
+
+    def status_fn():
+        """Gateway und Schreibzugriff prüfen (beim Start und per Knopf); in Probe und Kopie nur lesend verbunden."""
+        if zustand["broker"] is None:
+            try:
+                zustand["broker"] = IbkrBroker(betrieb, PROJEKT_WURZEL, nur_lesen=probe, client_id=94 if probe else None)
+            except Exception:  # noqa: BLE001
+                return ansicht.gateway_status(None)
+        return ansicht.gateway_status(zustand["broker"])
+
+    def senden_fn(ids):
+        with betriebsmodus("Probe-Freigabe" if probe else "Freigabe"):
+            if probe:
+                return freigeben_und_senden(journal, ids, None, datetime.now(BERLIN), probe=True)
+            b = zustand["broker"] or IbkrBroker(betrieb, PROJEKT_WURZEL)
+            zustand["broker"] = b
+            return freigeben_und_senden(journal, ids, b, datetime.now(BERLIN), fortschritt=wurzel.update)
+
+    gateway = status_fn() if broker is not None else ansicht.gateway_status(None)
+    Tagesfenster(wurzel, erg, journal, betrieb, probe=probe, senden_fn=senden_fn, status_fn=status_fn, gateway=gateway,
+                 jetzt_fn=lambda: datetime.now(BERLIN).replace(tzinfo=None))
+    wurzel.mainloop()
+    if zustand["broker"]:
+        try:
+            zustand["broker"].trennen()
+        except Exception:  # noqa: BLE001
+            pass
+    journal.schliessen()
+    return 0
+
+
 def main() -> int:
     load_dotenv(PROJEKT_WURZEL / ".env")
     a = argparse.ArgumentParser()
     a.add_argument("--probe", action="store_true", help="eigenes Probe-Journal, keine Sicherung, sendet nie")
     a.add_argument("--ohne-fenster", action="store_true")
     a.add_argument("--kopie", action="store_true", help="Probelauf auf einer Kopie des echten Journals (nur lesend, ohne Fenster)")
+    a.add_argument("--neu", action="store_true", help="neue Oberfläche (10.11.2026); mit --kopie als Probe-Fenster auf einer Kopie")
     arg = a.parse_args()
     logging.basicConfig(level=logging.WARNING)
+    if arg.neu:
+        return fenster(probe=arg.probe or arg.kopie, neu=True, kopie=arg.kopie)
     if arg.kopie:
         return ohne_fenster(True, kopie=True)
     if arg.ohne_fenster:

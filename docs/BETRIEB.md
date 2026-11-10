@@ -155,3 +155,36 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   - Der Crossover-Strategiezustand ist auf den Stand nach dem Lauf vom 03.11. zurückgesetzt. Der Tageslauf am 10.11.
     prüft damit die Tage ab 04.11. und schlägt den nachgeholten EUNN-Stop und EUNK neu vor.
   - Alle 41 bei IBKR angekommenen Orders standen schon korrekt als „gesendet“ mit Order-ID im Journal.
+
+## Neue Oberfläche des Tageslaufs (Jakob 10.11.2026)
+
+- **Variante A: Tkinter mit ttk**, Theme sv-ttk 2.6.1 (reines Python/Tcl, unter Python 3.15/Tk 9.0 geprüft; Extra
+  `oberflaeche` in `pyproject.toml`, ohne das Paket ein eingebautes Theme). **Eine spätere Weboberfläche wäre nur zur
+  Anzeige; Senden bleibt ausschließlich in Tkinter.**
+- **Start:**
+  - `Tageslauf_neu.bat` (`tools/tageslauf.py --neu`): echtes Journal.
+  - `Tageslauf_Probe_neu.bat` (`--neu --kopie`): Probe auf einer Kopie des echten Journals, Gateway nur lesend, sendet
+    nie.
+  - Die alte Oberfläche (`Tageslauf.bat`, `betrieb/oberflaeche.py`) bleibt Reserve. Umgestellt wird erst nach einem
+    sauberen Probelauf und einem echten Abend mit der neuen Oberfläche.
+- **Nur Darstellung:** Die Daten kommen aus `betrieb/ansicht.py` (nur lesend). Freigabe und Senden laufen unverändert
+  über `freigeben_und_senden`. Wählbar ist wie bisher: ohne Veto, in freigeschalteten Büchern (Probe: alle), Realbuch
+  einzeln, Skalierungsbücher als Sammelfreigabe. Neu im Laufergebnis, nur zur Anzeige: Signaltage (Xetra/NYSE), letzte
+  Schlusskurse in EUR, SPYI-Reihe.
+- **Kopfzeile mit Ampel:**
+  - Gateway, Schreibzugriff (Read-Only) und Freigabefenster.
+  - Uhrzeit US/FX, alle 30 s neu.
+  - Letzter Tageslauf: gelb bei verpassten Handelstagen.
+  - Datenstand der Schlusskurse und Senden je Buch.
+  - Im Probe-Modus ein oranges Band.
+  - Gateway und Schreibzugriff werden **nur beim Start und per „Status prüfen“** geprüft (reine Abfrage ohne Order).
+    Bei Read-Only ist „Freigeben und senden“ gesperrt, bis „Status prüfen“ grün zeigt. Vor dem Senden prüft der Bot
+    zusätzlich selbst.
+- **Übersicht je Buch:**
+  - Buchwert wie gebucht und mit Modellgebühr; Kasse je Währung mit reserviertem Anteil.
+  - Positionen einklappbar, mit Ø Kaufkurs, Kurs und Wert; offene Orders.
+  - **Entwicklung seit Messbeginn:** Buch als TWR (`kennzahlen.performance.zeitgewichtete_rendite`) gegen SPYI Kauf und
+    Halten ab dem Schlusskurs am Messbeginn, ohne Kosten, Bruchstücke, mit denselben Einzahlungen wie das Buch (zurzeit
+    nur das Startkapital; weitere Einzahlungen führt das Journal noch nicht).
+- **Vorschläge:** Tabelle mit Filter je Buch und Detailbereich.
+- **Protokoll:** eigener Reiter, Meldungen farbig (ok, Hinweis, Fehler), Filter „nur Hinweise und Fehler“.

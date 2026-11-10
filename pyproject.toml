@@ -25,6 +25,9 @@ dev = ["pytest>=9.0"]
 #   .venv\Scripts\python -m pip install --no-deps ib_async==2.1.0
 # Abhängigkeiten von ib_async 2.1.0: aeventkit (>=2.1,<3; braucht numpy), nest_asyncio, tzdata (hier >=2025.2).
 broker = ["aeventkit>=2.1.0,<3.0.0", "nest-asyncio>=1.6.0", "numpy", "tzdata>=2025.2"]
+# Neue Oberfläche des Tageslaufs (10.11.2026): Theme Sun Valley, reines Python/Tcl, MIT. Ohne das Paket nutzt die
+# Oberfläche ein eingebautes ttk-Theme.  .venv\Scripts\python -m pip install -e ".[oberflaeche]"
+oberflaeche = ["sv-ttk==2.6.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

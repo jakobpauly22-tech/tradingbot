@@ -41,6 +41,11 @@ class Laufergebnis:
     befunde: dict[str, list[str]] = field(default_factory=dict)       # Buch → Datenbefunde (Buch ohne Vorschläge)
     meldungen: list[str] = field(default_factory=list)
     gestoppt: str | None = None
+    # nur zur Anzeige (betrieb/ansicht.py, neue Oberfläche 10.11.2026); ändern nichts am Ablauf
+    xetra: object = None                                              # Signaltag Xetra (letzte abgeschlossene Sitzung)
+    nyse: object = None                                               # Signaltag NYSE
+    kurse_eur: dict[str, float] = field(default_factory=dict)         # letzter Schluss je Titel in EUR
+    spyi: object = None                                               # Schlusskurse SPYI in EUR (Vergleich je Buch)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -395,6 +400,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     kurse_laden = kurse_laden or _yahoo_kurse
     erg = Laufergebnis(jetzt)
     xetra, nyse = letzte_abgeschlossene_sitzung("xetra", jetzt), letzte_abgeschlossene_sitzung("nyse", jetzt)
+    erg.xetra, erg.nyse = xetra, nyse
     tag = pd.Timestamp(xetra)
     aufschlag = float(b["orders"]["kauf"]["aufschlag_vortagesschluss"])
     max_sprung = float(b["datenpruefung"]["max_tagessprung"])
@@ -460,6 +466,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     # Realbuch
     etf = b["core"]["etf"]
     k_real = {etf: kurse_laden(etf, tag.date(), "etf")}
+    erg.spyi = k_real[etf]["close"]
+    erg.kurse_eur[etf] = float(k_real[etf]["close"].iloc[-1])
     werte_buch = {}
     if pruefen("real", k_real, xetra):
         kurs = float(k_real[etf]["close"].iloc[-1])
@@ -474,6 +482,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     waehrung = {e["ticker"]: e.get("handelswaehrung", "EUR") for e in etfs}
     orderkurs = {t: float(k.attrs.get("orderkurs", k["close"].iloc[-1])) for t, k in k_tech.items()}
     technik_ok = pruefen("technik", k_tech, xetra)
+    erg.kurse_eur.update({t: float(k["close"].iloc[-1]) for t, k in k_tech.items()})
     for buch in ("crossover", "momentum"):
         if buch not in b["buecher"]:
             continue
@@ -519,6 +528,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
             kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
             werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
+            erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
     if fundamental_bewertung is None and fb:
         try:
             from tradingbot.daten.universum import universum_aktualisieren
@@ -550,6 +560,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue
             werte_buch[n] = journal.kasse(n) + sum(s * preise[t] / eurusd for t, s in bestand.items())
+            erg.kurse_eur.update({t: preise[t] / eurusd for t in bestand})
             journal.zustand_speichern(n, z)
             erg.meldungen.append(f"{n}: {grund}, {len(v)} Vorschläge")
             roh += v
