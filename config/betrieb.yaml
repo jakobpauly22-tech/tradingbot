@@ -3,6 +3,7 @@
 
 core:
   etf: SPYI.DE                         # SPDR MSCI ACWI IMI, gleich dem Hauptbenchmark
+  name: SPDR MSCI All Country World Investable Market   # Anzeige in der Oberfläche
   isin: IE00B3YLTY66                   # für die Kontraktzuordnung bei IBKR (config/kontrakte.yaml)
   ganze_stuecke: true                  # Rest unter einem Anteil bleibt Kasse und wird mit dem nächsten Betrag investiert
 

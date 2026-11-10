@@ -23,8 +23,15 @@ from tkinter import messagebox, ttk
 from tradingbot.betrieb import ansicht
 
 FARBEN_MELDUNG = {"ok": "#2e7d32", "hinweis": "#b26a00", "fehler": "#c62828", "info": "#333333"}
-SPALTEN = (("wahl", "", 34), ("buch", "Buch", 110), ("art", "Art", 70), ("stueck", "Stück", 60), ("titel", "Titel", 80),
-           ("limit", "Limit", 110), ("wert", "Wert €", 90), ("kurz", "Kurz-These", 330), ("veto", "Veto", 160), ("status", "Status", 90))
+# Farben gezielt und ruhig (Jakob 10.11.2026): Aktion als Schriftfarbe, Status als Hintergrund der Zeile (ttk.Treeview kann
+# einzelne Zellen nicht färben), Veto hellrot hinterlegt.
+FARBE_AKTION = {"KAUF": "#2e7d32", "VERKAUF": "#c62828", "TAUSCH": "#1565c0"}
+FARBE_STATUS = {"veto": "#fde7e9", "freigegeben": "#fff8e1", "gesendet": "#e3f2fd", "unbestaetigt": "#fff3e0", "ausgefuehrt": "#e8f5e9",
+                "abgelehnt": "#eeeeee", "verfallen": "#eeeeee", "abgelaufen": "#eeeeee", "ersetzt": "#eeeeee"}
+FARBE_AMPEL = {"gruen": "#2e7d32", "gelb": "#f9a825", "rot": "#c62828", None: "#9e9e9e"}
+ORANGE_TEXT = "#b26a00"
+SPALTEN = (("wahl", "", 34), ("buch", "Buch", 105), ("art", "Art", 70), ("stueck", "Stück", 55), ("titel", "Titel", 260),
+           ("limit", "Limit", 110), ("wert", "Wert €", 90), ("kurz", "Kurz-These", 260), ("veto", "Veto", 140), ("status", "Status", 110))
 
 
 def theme_setzen(wurzel) -> str:
@@ -184,6 +191,7 @@ class Tagesfenster:
         self.uebersicht_canvas = canvas
         self.positionen_rahmen: dict[str, ttk.Frame] = {}
         self.positionen_knoepfe: dict[str, ttk.Button] = {}
+        self.differenz_labels: dict[str, tk.Label] = {}
         try:
             karten = ansicht.buchuebersicht(self.journal, self.betrieb, self.erg)
         except Exception as f:  # noqa: BLE001 – Anzeige darf nie den Lauf blockieren
@@ -209,7 +217,12 @@ class Tagesfenster:
             z = ttk.Frame(rahmen)
             z.pack(fill="x")
             ttk.Label(z, text=f"{name}:", width=12, font=("Segoe UI", 9, "bold")).pack(side="left")
-            ttk.Label(z, text=text).pack(side="left")
+            ttk.Label(z, text=text.split(", Differenz")[0] if name == "Entwicklung" else text).pack(side="left")
+            if name == "Entwicklung" and k.rendite is not None and k.rendite_spyi is not None:
+                diff = k.rendite - k.rendite_spyi
+                self.differenz_labels[k.buch] = tk.Label(z, text=f"Differenz {diff * 100:+.2f} Pp.", font=("Segoe UI", 9, "bold"),
+                                                         fg="#2e7d32" if diff >= 0 else "#c62828")
+                self.differenz_labels[k.buch].pack(side="left", padx=6)
         # Positionen (einklappbar, Jakob 10.11.2026)
         kopf = ttk.Frame(rahmen)
         kopf.pack(fill="x", pady=(4, 0))
@@ -266,32 +279,62 @@ class Tagesfenster:
         auswahl.bind("<<ComboboxSelected>>", lambda e: self._tabelle_fuellen())
         ttk.Label(oben, text="Klick auf ☐ oder Leertaste wählt aus. Realbuch einzeln, Skalierungsbücher als Sammelfreigabe "
                              "(ganzes Buch).").pack(side="left", padx=12)
-        teil = ttk.PanedWindow(self.seite_vorschlaege, orient="horizontal")
-        teil.pack(fill="both", expand=True)
-        links = ttk.Frame(teil)
+        self.teilung = ttk.PanedWindow(self.seite_vorschlaege, orient="horizontal")
+        self.teilung.pack(fill="both", expand=True)
+        links = ttk.Frame(self.teilung)
         self.tabelle = ttk.Treeview(links, columns=[c for c, _, _ in SPALTEN], show="headings", selectmode="browse")
         for c, h, b in SPALTEN:
             self.tabelle.heading(c, text=h)
-            self.tabelle.column(c, width=b, anchor="e" if c in ("stueck", "wert") else "w", stretch=c == "kurz")
-        self.tabelle.tag_configure("veto", foreground=ansicht.ROT)
+            self.tabelle.column(c, width=b, minwidth=30 if c == "wahl" else 50, anchor="e" if c in ("stueck", "wert") else "w",
+                                stretch=c in ("titel", "kurz"))
+        for art, farbe in FARBE_AKTION.items():
+            self.tabelle.tag_configure(f"art_{art}", foreground=farbe)
         self.tabelle.tag_configure("gesperrt", foreground=ansicht.GRAU)
-        self.tabelle.tag_configure("gewaehlt", background="#e3f2fd")
+        for st, farbe in FARBE_STATUS.items():
+            self.tabelle.tag_configure(f"st_{st}", background=farbe)
+        self.tabelle.tag_configure("gewaehlt", font=("Segoe UI", 9, "bold"))
         rollen = ttk.Scrollbar(links, orient="vertical", command=self.tabelle.yview)
-        self.tabelle.configure(yscrollcommand=rollen.set)
+        quer = ttk.Scrollbar(links, orient="horizontal", command=self.tabelle.xview)
+        self.tabelle.configure(yscrollcommand=rollen.set, xscrollcommand=quer.set)
+        quer.pack(side="bottom", fill="x")
         rollen.pack(side="right", fill="y")
         self.tabelle.pack(side="left", fill="both", expand=True)
-        teil.add(links, weight=3)
-        rechts = ttk.Frame(teil, padding=(6, 0))
-        ttk.Label(rechts, text="Details", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        self.detail = tk.Text(rechts, wrap="word", width=50, height=20, font=("Segoe UI", 9), relief="flat", background="#fafafa")
-        self.detail.pack(fill="both", expand=True)
-        self.detail.configure(state="disabled")
-        teil.add(rechts, weight=2)
+        self.teilung.add(links, weight=3)
+        # Detailbereich: verschiebbar, Standard ca. 40 %, scrollbar
+        rechts = ttk.Frame(self.teilung)
+        self.detail_canvas = tk.Canvas(rechts, highlightthickness=0, background="#ffffff")
+        d_rollen = ttk.Scrollbar(rechts, orient="vertical", command=self.detail_canvas.yview)
+        self.detail_canvas.configure(yscrollcommand=d_rollen.set)
+        d_rollen.pack(side="right", fill="y")
+        self.detail_canvas.pack(side="left", fill="both", expand=True)
+        self.detail_rahmen = tk.Frame(self.detail_canvas, background="#ffffff", padx=10, pady=8)
+        did = self.detail_canvas.create_window((0, 0), window=self.detail_rahmen, anchor="nw")
+        self.detail_rahmen.bind("<Configure>", lambda e: self.detail_canvas.configure(scrollregion=self.detail_canvas.bbox("all")))
+        self.detail_canvas.bind("<Configure>", lambda e: (self.detail_canvas.itemconfigure(did, width=e.width), self._umbruch(e.width)))
+        self.teilung.add(rechts, weight=2)
+        self._sash_gesetzt = False
+        self.teilung.bind("<Configure>", self._sash_setzen)
         self.tabelle.bind("<<TreeviewSelect>>", lambda e: self._detail_zeigen())
         self.tabelle.bind("<Button-1>", self._klick)
         self.tabelle.bind("<space>", lambda e: self.umschalten(self.tabelle.focus()) if self.tabelle.focus() else None)
         self._status_journal = {}
+        self._umbruch_breite = 480
         self._tabelle_fuellen()
+        self._detail_zeigen()
+
+    def _sash_setzen(self, ereignis):
+        """Detailbereich anfangs ca. 40 % der Breite; danach verschiebt Jakob ihn selbst."""
+        if not self._sash_gesetzt and ereignis.width > 200:
+            self._sash_gesetzt = True
+            self.teilung.sashpos(0, int(ereignis.width * 0.6))
+
+    def _umbruch(self, breite):
+        self._umbruch_breite = max(250, breite - 40)
+        for w in getattr(self, "_umbruch_widgets", []):
+            try:
+                w.configure(wraplength=self._umbruch_breite)
+            except tk.TclError:
+                pass
 
     def _journal_status(self) -> dict[str, str]:
         try:
@@ -301,15 +344,26 @@ class Tagesfenster:
 
     def _tabelle_fuellen(self):
         self._status_journal = self._journal_status()
+        auswahl = self.tabelle.selection()
         self.tabelle.delete(*self.tabelle.get_children())
         f = self.filter.get()
         for z in self.zeilen.values():
             if f != "alle" and z.buch != f:
                 continue
-            tags = (["veto"] if z.veto else []) + (["gesperrt"] if z.gesperrt else []) + (["gewaehlt"] if z.id in self.gewaehlt else [])
+            status = self._status_journal.get(z.id, "veto" if z.veto else "")
+            if z.veto:
+                status = "veto"
+            tags = ["gesperrt" if z.gesperrt else f"art_{z.art}"]
+            if status in FARBE_STATUS:
+                tags.append(f"st_{status}")
+            if z.id in self.gewaehlt:
+                tags.append("gewaehlt")
             wahl = ("☑" if z.id in self.gewaehlt else "☐") if z.waehlbar else "–"
             self.tabelle.insert("", "end", iid=z.id, tags=tags, values=(
-                wahl, z.buch, z.art, z.stueck, z.titel, z.limit, f"{z.wert:,.2f}", z.kurz, z.veto, self._status_journal.get(z.id, "")))
+                wahl, z.buch, z.art, z.stueck, z.titel, z.limit, f"{z.wert:,.2f}", z.kurz, z.veto, status))
+        for i in auswahl:
+            if self.tabelle.exists(i):
+                self.tabelle.selection_set(i)
         self._zaehlen()
 
     def _klick(self, ereignis):
@@ -333,13 +387,113 @@ class Tagesfenster:
             self.tabelle.selection_set(vid)
             self.tabelle.focus(vid)
 
+    # Detailbereich, gegliedert (Jakob 10.11.2026)
+    def _abschnitt(self, titel: str, farbe: str = "#333333"):
+        tk.Label(self.detail_rahmen, text=titel, font=("Segoe UI", 10, "bold"), fg=farbe, bg="#ffffff", anchor="w").pack(fill="x", pady=(10, 2))
+
+    def _text(self, text: str, farbe: str = "#222222", fett: bool = False, einzug: int = 0):
+        w = tk.Label(self.detail_rahmen, text=text, fg=farbe, bg="#ffffff", anchor="w", justify="left", wraplength=self._umbruch_breite,
+                     font=("Segoe UI", 9, "bold" if fett else "normal"), padx=einzug)
+        w.pack(fill="x")
+        self._umbruch_widgets.append(w)
+        return w
+
     def _detail_zeigen(self):
+        for w in self.detail_rahmen.winfo_children():
+            w.destroy()
+        self._umbruch_widgets = []
+        self.detail_abschnitte: list[str] = []
         auswahl = self.tabelle.selection()
-        text = self.zeilen[auswahl[0]].details if auswahl and auswahl[0] in self.zeilen else ""
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
-        self.detail.insert("end", text)
-        self.detail.configure(state="disabled")
+        z = self.zeilen.get(auswahl[0]) if auswahl else None
+        if z is None:
+            self._text("Vorschlag in der Tabelle anklicken, um die Details zu sehen.", ansicht.GRAU)
+            return
+        g = z.gliederung
+        # Kopf
+        tk.Label(self.detail_rahmen, text=g["titel"], font=("Segoe UI", 13, "bold"), bg="#ffffff", anchor="w").pack(fill="x")
+        self._text(g["kopf"], FARBE_AKTION.get(g["art"], "#222222"), fett=True)
+        self.detail_abschnitte.append("Kopf")
+        if g["veto"]:
+            self._abschnitt("Veto", "#c62828")
+            for x in g["veto"]:
+                self._text(f"• {x}", "#c62828")
+            self.detail_abschnitte.append("Veto")
+        if g["gesperrt"]:
+            self._text("Buch zum Senden nicht freigeschaltet – nicht freigebbar", ansicht.GRAU)
+        # Warum
+        self._abschnitt("Warum")
+        self._text(g["warum"])
+        self.detail_abschnitte.append("Warum")
+        # Kennzahlen als Tabelle
+        if g["kennzahlen"] or g["zahlen"]:
+            self._abschnitt("Kennzahlen")
+            self.detail_abschnitte.append("Kennzahlen")
+            tabelle = tk.Frame(self.detail_rahmen, bg="#ffffff")
+            tabelle.pack(fill="x")
+            if g["kennzahlen"]:
+                for spalte, (kopf, breite) in enumerate((("Kennzahl", 0), ("Wert", 0), ("Branchenmedian", 0), ("", 0))):
+                    tk.Label(tabelle, text=kopf, font=("Segoe UI", 9, "bold"), bg="#f5f5f5", anchor="w", padx=4).grid(row=0, column=spalte, sticky="ew")
+                for zeile, (name, wert, median, urteil) in enumerate(g["kennzahlen"], start=1):
+                    for spalte, text in enumerate((name, wert, median)):
+                        tk.Label(tabelle, text=text, bg="#ffffff", anchor="w" if spalte == 0 else "e", padx=4,
+                                 font=("Segoe UI", 9)).grid(row=zeile, column=spalte, sticky="ew")
+                    zeichen, farbe = ("✓", "#2e7d32") if urteil is True else ("✗", "#c62828") if urteil is False else ("", "#222222")
+                    tk.Label(tabelle, text=zeichen, fg=farbe, bg="#ffffff", font=("Segoe UI", 10, "bold"), padx=4).grid(row=zeile, column=3)
+                tabelle.columnconfigure(0, weight=1)
+            for x in g["zahlen"]:
+                self._text(f"• {x}")
+        # Filter als Ampel
+        if g["filter"]:
+            self._abschnitt("Filter")
+            self.detail_abschnitte.append("Filter")
+            for name, text, farbe in g["filter"]:
+                zeile = tk.Frame(self.detail_rahmen, bg="#ffffff")
+                zeile.pack(fill="x")
+                tk.Label(zeile, text="●", fg=FARBE_AMPEL.get(farbe, "#9e9e9e"), bg="#ffffff", font=("Segoe UI", 12)).pack(side="left")
+                tk.Label(zeile, text=f"{name}: {text}", bg="#ffffff", font=("Segoe UI", 9)).pack(side="left")
+        # Was dagegen spricht
+        self._abschnitt("Was dagegen spricht", ORANGE_TEXT)
+        self.detail_abschnitte.append("Was dagegen spricht")
+        for x in (g["dagegen"] or ["nichts Besonderes"]):
+            self._text(f"• {x}", ORANGE_TEXT)
+        # Widerlegt, wenn
+        if g["widerlegt"]:
+            self._abschnitt("Widerlegt, wenn")
+            self._text(g["widerlegt"])
+            self.detail_abschnitte.append("Widerlegt, wenn")
+        # Technisches, eingeklappt
+        if g["technisch"]:
+            rahmen = tk.Frame(self.detail_rahmen, bg="#ffffff")
+            knopf = ttk.Button(self.detail_rahmen, text="▸ Technisches")
+            knopf.pack(anchor="w", pady=(12, 2))
+            for x in g["technisch"]:
+                tk.Label(rahmen, text=x, fg="#555555", bg="#ffffff", anchor="w", justify="left", wraplength=self._umbruch_breite,
+                         font=("Consolas", 8)).pack(fill="x")
+
+            def umschalten():
+                if rahmen.winfo_manager():
+                    rahmen.pack_forget()
+                    knopf.configure(text="▸ Technisches")
+                else:
+                    rahmen.pack(fill="x", after=knopf)
+                    knopf.configure(text="▾ Technisches")
+            knopf.configure(command=umschalten)
+            self.technisch_rahmen, self.technisch_knopf = rahmen, knopf
+            self.detail_abschnitte.append("Technisches")
+        self.detail_canvas.yview_moveto(0)
+
+    def detail_text(self) -> str:
+        """Sichtbarer Text des Detailbereichs (für Tests)."""
+        texte = []
+
+        def sammeln(w):
+            for c in w.winfo_children():
+                if isinstance(c, tk.Label) and c.winfo_manager():
+                    texte.append(c.cget("text"))
+                if c.winfo_manager():
+                    sammeln(c)
+        sammeln(self.detail_rahmen)
+        return "\n".join(texte)
 
     def ausgewaehlt(self) -> list[str]:
         return sorted(self.gewaehlt)

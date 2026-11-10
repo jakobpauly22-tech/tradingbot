@@ -6,9 +6,12 @@ unverändert über `tageslauf.freigeben_und_senden`. Ohne Fenster testbar (tests
 """
 from __future__ import annotations
 
+import gzip
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 
 import pandas as pd
 
@@ -55,12 +58,10 @@ def gateway_status(broker) -> dict:
 
 
 def senden_erlaubt(gateway: dict, probe: bool, gestoppt: str | None = None) -> tuple[bool, str]:
-    """Senden-Knopf (Jakob 10.11.2026): bei Read-Only gesperrt, bis „Status prüfen“ grün zeigt. Im Probe-Modus immer frei
-    (sendet nie). Ein gestoppter Lauf sperrt wie bisher."""
+    """Senden-Knopf (Jakob 10.11.2026): bei Read-Only gesperrt, bis „Status prüfen“ grün zeigt. Der Probe-Modus sperrt
+    genauso (damit die Sperre testbar ist), auch wenn er nie sendet. Ein gestoppter Lauf sperrt wie bisher."""
     if gestoppt:
         return False, "Tageslauf gestoppt – erst Ursache klären"
-    if probe:
-        return True, ""
     if not gateway.get("verbunden"):
         return False, "Gateway nicht verbunden – Gateway starten, dann „Status prüfen“"
     if gateway.get("schreiben") is not True:
@@ -240,6 +241,135 @@ def buchuebersicht(journal, betrieb: dict, erg) -> list[BuchKarte]:
     return karten
 
 
+# --- Namen (Jakob 10.11.2026: „Domino's Pizza (DPZ)“, „iShares Core MSCI Japan (EUNN)“) ---------------------------------
+_RECHTSFORM = re.compile(r"(,?\s+(Inc\.?|Incorporated|Corporation|Corp\.?|Co\.?|Company|Ltd\.?|Limited|plc|PLC|N\.V\.|S\.A\.|AG|SE))+$")
+_ANTEILSKLASSE = re.compile(r"\s*\((Acc|Dist)\)$")
+
+
+def kuerzel(ticker: str) -> str:
+    return ticker[:-3] if ticker.endswith(".DE") else ticker
+
+
+def _ohne_rechtsform(name: str) -> str:
+    return _RECHTSFORM.sub("", name.strip()).strip(" ,")
+
+
+@lru_cache(maxsize=1)
+def _namenstabelle() -> dict[str, str]:
+    """Ticker → Name aus lokalen Quellen, ohne Netz: ETF-/ETC-Namen aus config/technik.yaml und config/betrieb.yaml; US-Aktien
+    aus dem Yahoo-Namenscache (daten/cache/namen, richtige Schreibweise), ersatzweise SEC company_tickers (Großbuchstaben)
+    und der IBKR-Name aus config/kontrakte.yaml. Rechtsform und Anteilsklasse werden weggelassen."""
+    from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
+
+    namen: dict[str, str] = {}
+    try:
+        from tradingbot.broker.ibkr import kontrakttabelle
+
+        for t, e in kontrakttabelle().items():
+            if e.get("name"):
+                namen[t] = _ohne_rechtsform(str(e["name"]).title())
+    except Exception:  # noqa: BLE001
+        pass
+    sec = PROJEKT_WURZEL / "daten" / "cache" / "sec" / "company_tickers.json.gz"
+    if sec.exists():
+        try:
+            for e in json.loads(gzip.decompress(sec.read_bytes())).values():
+                namen[str(e["ticker"]).replace(".", "-")] = _ohne_rechtsform(str(e["title"]).title())
+        except Exception:  # noqa: BLE001
+            pass
+    yahoo = PROJEKT_WURZEL / "daten" / "cache" / "namen" / "yahoo.json"
+    if yahoo.exists():
+        try:
+            namen.update({t: _ohne_rechtsform(n) for t, n in json.loads(yahoo.read_text(encoding="utf-8")).items() if n})
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        for e in lade_konfiguration("technik")["universum"]["etfs"]:
+            namen[e["ticker"]] = _ANTEILSKLASSE.sub("", e["name"])
+        core = lade_konfiguration("betrieb")["core"]
+        if core.get("name"):
+            namen[core["etf"]] = core["name"]
+    except Exception:  # noqa: BLE001
+        pass
+    namen["EUR.USD"] = "Tausch Euro in US-Dollar"
+    return namen
+
+
+def anzeigename(ticker: str) -> str:
+    """„Vollständiger Name (Kürzel)“; ohne bekannten Namen nur das Kürzel."""
+    name = _namenstabelle().get(ticker)
+    return f"{name} ({kuerzel(ticker)})" if name else kuerzel(ticker)
+
+
+# --- Gegliederte Details (Jakob 10.11.2026) --------------------------------------------------------------------------------
+def _abschnitte(details: str) -> tuple[list[str], list[str], str, list[str]]:
+    """Zerlegt den Detailtext (betrieb/buecher.details_text) in Zahlen, Dagegen, Widerlegt und Technisches (z. B. IBKR-Kontrakt)."""
+    zahlen, dagegen, widerlegt, technik, teil = [], [], "", [], None
+    for zeile in (details or "").splitlines():
+        s = zeile.strip()
+        if s == "Zahlen:":
+            teil = "zahlen"
+        elif s == "Was dagegen spricht:":
+            teil = "dagegen"
+        elif s.startswith("Widerlegt, wenn:"):
+            widerlegt, teil = s.removeprefix("Widerlegt, wenn:").strip(), None
+        elif s.startswith("•") and teil == "zahlen":
+            zahlen.append(s.lstrip("• ").strip())
+        elif s.startswith("•") and teil == "dagegen":
+            d = s.lstrip("• ").strip()
+            if d != "nichts Besonderes":
+                dagegen.append(d)
+        elif s:
+            technik.append(s)
+    return zahlen, dagegen, widerlegt, technik
+
+
+def _eur(x, n=2) -> str:
+    return "–" if x is None else f"{x:,.{n}f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _proz(x) -> str:
+    return "–" if x is None else f"{x:+.1%}".replace(".", ",")
+
+
+def gliederung(bv, u, *, gesperrt: bool = False) -> dict:
+    """Detailbereich: Kopf, Warum, Kennzahlen (Kennzahl | Wert | Branchenmedian | Urteil), Filter-Ampel, Was dagegen spricht,
+    Widerlegt, wenn, Technisches (eingeklappt). Technik-Vorschläge: Kurs, SMA50, SMA200, Abstand, Stop, max. Verlust in €."""
+    v = bv.vorschlag
+    art = "TAUSCH" if v.art == "fx" else ("KAUF" if v.richtung > 0 else "VERKAUF")
+    zahlen, dagegen, widerlegt, technik = _abschnitte(bv.details)
+    daten = getattr(bv, "daten", None) or {}
+    limit = f"Limit {bv.limit_order:,.2f} {bv.waehrung}" if bv.limit_order else "ohne Limit"
+    kopf = f"{v.buch} · {art} {v.stueck:g} {'EUR' if v.art == 'fx' else 'Stück'} · {limit} · ≈ {_eur(float(v.orderwert))}"
+    saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", v.these or "") if s.strip()]
+    warum = bv.kern or (saetze[0] if saetze else "")
+    if saetze and saetze[0] not in warum and len(saetze[0]) < 220:
+        warum = f"{warum} {saetze[0]}".strip()
+    kennzahlen: list[tuple[str, str, str, bool | None]] = []
+    filter_: list[tuple[str, str, str | None]] = []
+    if daten.get("typ") == "fundamental":
+        kennzahlen = list(daten["kennzahlen"])
+        filter_ = [(n, t, f) for n, (t, f) in daten["filter"].items()]
+    elif daten.get("typ") == "technik":
+        kennzahlen = [("Kurs (Schluss)", _eur(daten.get("kurs")), "", None),
+                      ("SMA50", _eur(daten.get("sma50")), "", None),
+                      ("SMA200", _eur(daten.get("sma200")), "", None),
+                      ("Abstand SMA50 zu SMA200", _proz(daten.get("abstand")), "", None if daten.get("abstand") is None else daten["abstand"] > 0)]
+        if "mom" in daten:
+            kennzahlen.append(("Momentum 12−1", _proz(daten.get("mom")), "", None if daten.get("mom") is None else daten["mom"] > 0))
+        if "stop" in daten:
+            kennzahlen += [("Stop (2 × ATR)", _eur(daten.get("stop")), "", None),
+                           ("Max. Verlust bis Stop", f"{_eur(daten.get('max_verlust'))} ({daten.get('max_verlust_anteil', 0):.2%} des Buchs)".replace(".", ","), "",
+                            None if daten.get("max_verlust_anteil") is None else daten["max_verlust_anteil"] <= 0.0101)]
+        if "bestand_wert" in daten:
+            kennzahlen.append(("Bestand (Wert)", _eur(daten.get("bestand_wert")), "", None))
+        zahlen = []
+    hinweise = [f"Risk-Manager: {h}" for h in (u.hinweise or [])]
+    return {"titel": anzeigename(v.ticker), "art": art, "kopf": kopf, "veto": [] if u.frei else list(u.gruende),
+            "gesperrt": gesperrt, "warum": warum, "kennzahlen": kennzahlen, "zahlen": zahlen, "filter": filter_,
+            "dagegen": dagegen + hinweise, "widerlegt": widerlegt, "technisch": technik + ([f"These: {v.these}"] if v.these else [])}
+
+
 # --- Vorschlagstabelle ---------------------------------------------------------------------------------------------------
 @dataclass
 class Zeile:
@@ -256,6 +386,7 @@ class Zeile:
     gesperrt: bool                  # Buch nicht zum Senden freigeschaltet
     freigabe: str                   # einzeln | sammel
     details: str
+    gliederung: dict = field(default_factory=dict)
 
 
 def vorschlagszeilen(erg, betrieb: dict, *, probe: bool) -> list[Zeile]:
@@ -278,9 +409,9 @@ def vorschlagszeilen(erg, betrieb: dict, *, probe: bool) -> list[Zeile]:
             teile += ["", "VETO: " + "; ".join(u.gruende)]
         if gesperrt:
             teile += ["", "Buch zum Senden nicht freigeschaltet – nicht freigebbar"]
-        zeilen.append(Zeile(v.id, v.buch, art, v.stueck, v.ticker, limit, float(v.orderwert), kern,
+        zeilen.append(Zeile(v.id, v.buch, art, v.stueck, anzeigename(v.ticker), limit, float(v.orderwert), kern,
                             "; ".join(u.gruende) if not u.frei else "", u.frei and not gesperrt, gesperrt,
-                            bk.get("freigabe", "einzeln"), "\n".join(teile)))
+                            bk.get("freigabe", "einzeln"), "\n".join(teile), gliederung(bv, u, gesperrt=gesperrt)))
     return zeilen
 
 

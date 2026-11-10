@@ -188,3 +188,45 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
     nur das Startkapital; weitere Einzahlungen führt das Journal noch nicht).
 - **Vorschläge:** Tabelle mit Filter je Buch und Detailbereich.
 - **Protokoll:** eigener Reiter, Meldungen farbig (ok, Hinweis, Fehler), Filter „nur Hinweise und Fehler“.
+
+### Nach dem ersten Probelauf (10.11.2026)
+
+- **Orders unterwegs (Logikfehler im Probelauf 10:04, galt für beide Oberflächen):** Der Probelauf hat die 39 US-Käufe
+  von fundamental_a und fundamental_b als verfallen markiert und neu vorgeschlagen, dazu einen Tausch. Die Ursachen:
+  - Die Probe-Verbindung (Client-ID 94) sah die offenen Orders von Client 1 nicht.
+  - „Handelstag vorbei“ wurde am Signaltag gemessen (NYSE 06.11.), nicht an der Sitzung, für die die Order gilt (10.11.).
+
+  Behoben:
+  - Eine Order gilt für die erste Eröffnung ihres Heimatplatzes nach dem Senden (`nachtrag.gueltig_fuer`).
+  - Offene Orders werden über `reqAllOpenOrders` für alle Client-IDs gelesen.
+  - **Fundamental-Bücher mit Orders unterwegs gelten als aufgebaut** (Jakob): kein Aufbau, kein Nachkauf, kein Tausch;
+    nur der Quartalsstichtag rechnet trotzdem.
+  - Folge: Läuft der Tageslauf vor dem NYSE-Schluss, gelten nicht ausgeführte US-Käufe bis zum nächsten Abend als
+    unterwegs.
+
+  Test: `tests/betrieb/test_unterwegs.py`.
+- **Probe sperrt wie der echte Lauf:** Bei Read-Only (oder ohne Gateway) ist „Freigeben“ auch im Probe-Modus gesperrt,
+  bis „Status prüfen“ grün zeigt. Die Probe sendet trotzdem nie.
+- **Titel:** „Name (Kürzel)“. Die Namen kommen aus lokalen Quellen, ohne Netz:
+  - ETFs und ETCs: `config/technik.yaml` (ohne „(Acc)/(Dist)“); Core: `config/betrieb.yaml` (`core.name`).
+  - US-Aktien: zuerst der Yahoo-Namenscache (`daten/cache/namen/yahoo.json`, richtige Schreibweise, z. B. „Domino's
+    Pizza“), dann SEC `company_tickers` und der IBKR-Name aus `config/kontrakte.yaml`. SEC und IBKR schreiben in
+    Großbuchstaben ohne Apostroph („DOMINOS PIZZA INC“) und dienen nur als Ersatz.
+  - Die Rechtsform (Inc., Corporation, Ltd. …) wird weggelassen.
+- **Detailbereich:** rechts, verschiebbar, anfangs etwa 40 % der Breite, scrollbar. Gegliedert in:
+  - Kopf (Name, Buch, Aktion, Stück, Limit, Wert).
+  - Warum.
+  - Kennzahlen als Tabelle (Kennzahl, Wert, Branchenmedian, ✓/✗ farbig). Accruals und KGV sind besser, wenn sie unter
+    dem Branchenmedian liegen; EBIT/EV, wenn darüber.
+  - Filter als Ampel: Piotroski ≥ 7 grün, 4–6 gelb, ≤ 3 rot; Altman nach Zone; Beneish über −1,78 rot.
+  - Was dagegen spricht (orange), mit den Hinweisen des Risk-Managers.
+  - Widerlegt, wenn.
+  - Technisches (conId, Routing, These) eingeklappt.
+
+  Bei Technik-Vorschlägen: Kurs, SMA50, SMA200, Abstand, Momentum, Stop und maximaler Verlust in €. Die Werte kommen aus
+  dem neuen Anzeigefeld `BuchVorschlag.daten`; die Rechnung bleibt unverändert.
+- **Farben:**
+  - Aktion als Schriftfarbe: Kauf grün, Verkauf rot, Tausch blau.
+  - Status als Hintergrund der Zeile, weil `ttk.Treeview` keine einzelnen Zellen färben kann: Veto hellrot, freigegeben
+    hellgelb, gesendet hellblau, ausgeführt hellgrün, abgelehnt/verfallen grau.
+  - Abweichung zu SPYI grün oder rot. Alles andere neutral.

@@ -15,7 +15,7 @@ Jeder Vorschlag trägt eine Investment-These: Grund, Signal und was die These wi
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -32,6 +32,7 @@ class BuchVorschlag:
     limit_order: float | None     # Limit in der Handelswährung
     kern: str = ""                # Kernaussage in einem Satz (Kurzzeile)
     details: str = ""             # Detail-These mit Zahlen, „Was dagegen spricht“, „Widerlegt, wenn“
+    daten: dict = field(default_factory=dict)   # nur Anzeige (neue Oberfläche, 10.11.2026): Kennzahlen, Filter, Technikwerte
 
 
 def _pz(x) -> str:
@@ -239,6 +240,9 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                 these = f"{regel}: Ausstieg {t} – {grund}."
                 bv = _verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f)
                 bv.kern = f"Ausstieg: {grund}."
+                bv.daten = {"typ": "technik", "kurs": kurs_eur, "sma50": float(z["sma_schnell"]), "sma200": float(z["sma_langsam"]),
+                            "abstand": (float(z["sma_schnell"]) / float(z["sma_langsam"]) - 1) if z["sma_langsam"] else None,
+                            "bestand_wert": bestand[t] * kurs_eur}
                 bv.details = details_text([f"Schluss {_z(kurs_eur)} €, SMA50 {_z(z['sma_schnell'])} €, SMA200 {_z(z['sma_langsam'])} €",
                                            f"Bestand {bestand[t]:g} Stück ≈ {_z(bestand[t] * kurs_eur)} €"], [],
                                           "– (Ausstiege sind immer erlaubt)")
@@ -272,6 +276,9 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                     dagegen.append("Kurs unter SMA200 (kurzfristig schwächer als das 12−1-Signal)")
                 if regel == "crossover" and not math.isnan(z["mom"]) and z["mom"] < 0:
                     dagegen.append(f"Momentum 12−1 negativ ({_pz(z['mom'])})")
+                bv.daten = {"typ": "technik", "kurs": kurs_eur, "sma50": float(z["sma_schnell"]), "sma200": float(z["sma_langsam"]),
+                            "abstand": None if math.isnan(abstand) else abstand, "mom": None if math.isnan(z["mom"]) else float(z["mom"]),
+                            "atr": float(z["atr"]), "stop": stop, "max_verlust": n * (limit_eur - stop), "max_verlust_anteil": n * (limit_eur - stop) / wert}
                 bv.details = details_text(zahlen, dagegen, "der Schluss unter dem Stop liegt oder das Signal erlischt"
                                           + (" (SMA50 unter SMA200)." if regel == "crossover" else " (12−1 ≤ 0 bei der Monatsprüfung)."))
                 vorschlaege.append(bv)
@@ -323,6 +330,42 @@ def details_fundamental(ticker, z, med, variante, rang, kurs_usd, n, limit_eur, 
         dagegen.append(f"Bewertung zählt in Buch B nicht (Bewertungsrang {z['bewertung']:.2f})")
     return details_text([x for x in zahlen if x], dagegen,
                         "ein Filter die Aktie ausschließt (Piotroski ≤ 3, Altman, Beneish) oder ihr Rang am nächsten Quartalsstichtag über 30 liegt.")
+def kennzahlen_fundamental(z, med, variante, rang) -> dict:
+    """Nur Anzeige (neue Oberfläche, 10.11.2026): Kennzahlen mit Branchenmedian und Urteil, Filter als Ampel.
+    Urteil ✓/✗: Accruals und KGV niedriger als der Branchenmedian sind gut, EBIT/EV höher ist gut. Filter wie im Risk-Manager:
+    Piotroski ≤ 3 raus (4–6 gelb, ≥ 7 grün), Altman nach Zone (sicher/grau/gefahr), Beneish > −1,78 Warnhinweis."""
+    m = (lambda c: None if med is None or c not in med.index or (isinstance(med[c], float) and math.isnan(med[c])) else float(med[c]))
+    ep, ev, acc = _wert(z, "ep"), _wert(z, "ebit_ev"), _wert(z, "accruals")
+    kgv = (1 / ep) if ep and ep > 0 else None
+    kgv_med = (1 / m("ep")) if m("ep") and m("ep") > 0 else None
+
+    def urteil(wert, median, besser):
+        if wert is None or median is None:
+            return None
+        return wert <= median if besser == "niedrig" else wert >= median
+    kennzahlen = [("Rang (gefiltertes S&P 500)", f"{rang}", "", None),
+                  ("Gesamtscore", f"{z['gesamt']:.2f}", "", None),
+                  ("Qualität", f"{z['qualitaet']:.2f}", "", None),
+                  ("Bewertung" + (" (zählt in B nicht)" if variante == "B" else ""), f"{z['bewertung']:.2f}", "", None),
+                  ("Accruals (niedriger besser)", _pz(acc), _pz(m("accruals")), urteil(acc, m("accruals"), "niedrig")),
+                  ("KGV (niedriger besser)", _z(kgv, 1), _z(kgv_med, 1), urteil(kgv, kgv_med, "niedrig")),
+                  ("EBIT/EV (höher besser)", _pz(ev), _pz(m("ebit_ev")), urteil(ev, m("ebit_ev"), "hoch"))]
+    mw = _wert(z, "marktwert_usd")
+    if mw:
+        kennzahlen.append(("Marktkapitalisierung", f"{_z(mw / 1e9, 1)} Mrd. USD", "", None))
+    pio = _wert(z, "piotroski_filter")
+    zone = _wert(z, "altman_zone")
+    ben = _wert(z, "beneish")
+    filter_ = {
+        "Piotroski": (f"{_z(pio, 0)} von 9" if pio is not None else "–",
+                      None if pio is None else ("gruen" if pio >= 7 else "gelb" if pio > 3 else "rot")),
+        "Altman": (f"{_wert(z, 'altman_variante') or ''} {_z(_wert(z, 'altman'))} ({zone or 'nicht berechenbar'})".strip(),
+                   {"sicher": "gruen", "grau": "gelb", "gefahr": "rot"}.get(zone)),
+        "Beneish": (f"{_z(ben)} (Grenze −1,78)" if ben is not None else "–", None if ben is None else ("gruen" if ben <= -1.78 else "rot")),
+    }
+    return {"typ": "fundamental", "kennzahlen": kennzahlen, "filter": filter_, "sic": _wert(z, "sic")}
+
+
 def quartalsstichtag(tag) -> bool:
     """Erster NYSE-Handelstag eines Quartals (Rebalancing wie im Backtest)."""
     t = pd.Timestamp(tag)
@@ -384,8 +427,9 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
             bv = _kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD")
             bv.kern = (f"Rang {gruende[t].get('rang')}: " + (f"Qualität {z['qualitaet']:.2f} (Buch B: nur Qualitätshälfte zählt)." if variante == "B"
                        else f"Qualität {z['qualitaet']:.2f} und Bewertung {z['bewertung']:.2f} im oberen Bereich der Branche."))
-            bv.details = details_fundamental(t, z, median.loc[z["gruppe"]] if z.get("gruppe") in median.index else None, variante,
-                                             gruende[t].get("rang"), kurse_usd[t], n, limit_eur, w * wert)
+            med = median.loc[z["gruppe"]] if z.get("gruppe") in median.index else None
+            bv.details = details_fundamental(t, z, med, variante, gruende[t].get("rang"), kurse_usd[t], n, limit_eur, w * wert)
+            bv.daten = kennzahlen_fundamental(z, med, variante, gruende[t].get("rang"))
             vorschlaege.append(bv)
             frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     grund = "Aufbau" if not aufgebaut else "Quartalsstichtag"
@@ -420,6 +464,8 @@ def _fundamental_nachkauf(buch, variante, tag, rangliste, kurse_usd, eurusd, kas
         bv.kern = f"Nachkauf: Rang {rang} am Stichtag {zustand.get('letzter_signaltag')}, Kauf abgelehnt oder verfallen."
         bv.details = (details_fundamental(t, zeilen.loc[t], None, variante, rang, kurse_usd[t], n, limit_eur, w * wert)
                       if t in zeilen.index else f"Zahlen:\n  • Kurs {_z(kurse_usd[t])} USD, {n} Stück ≈ {_z(n * limit_eur)} €")
+        if t in zeilen.index:
+            bv.daten = kennzahlen_fundamental(zeilen.loc[t], None, variante, rang)
         vorschlaege.append(bv)
         frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     grund = f"Nachkauf {len(vorschlaege)} Titel (abgelehnt/verfallen)" + (f"; ohne Kurs: {', '.join(fehlt)}" if fehlt else "")

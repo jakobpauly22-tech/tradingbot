@@ -67,7 +67,9 @@ def test_ampel_ohne_gateway_probe_und_stopp(journal):
     assert not ansicht.senden_erlaubt(aus, False)[0]
     probe = ansicht.ampel(erg_mit(), journal, betrieb(), probe=True, gateway=aus, jetzt=datetime(2026, 11, 10, 10, 0))
     assert lampe(probe, "Modus").farbe == ansicht.ORANGE and lampe(probe, "Freigabefenster").text == "Probe: jederzeit"
-    assert ansicht.senden_erlaubt(aus, True) == (True, "")
+    # Probe sperrt wie der echte Lauf (Jakob 10.11.2026), damit die Sperre testbar ist
+    assert not ansicht.senden_erlaubt(aus, True)[0] and ansicht.senden_erlaubt(READ_ONLY, True) == (False, ansicht.READ_ONLY_HINWEIS)
+    assert ansicht.senden_erlaubt(FREI, True) == (True, "")
     assert not ansicht.senden_erlaubt(FREI, False, gestoppt="Abgleich weicht ab")[0]
 
 
@@ -202,3 +204,51 @@ def test_gateway_status():
 def test_rendite_ohne_buchwerte():
     einz = pd.Series({pd.Timestamp("2026-11-09"): 10_000.0})
     assert ansicht.rendite_seit_messbeginn(pd.Series(dtype=float), einz) == 0.0
+
+
+
+# --- Namen und gegliederte Details (Jakob 10.11.2026) ---------------------------------------------------------------------
+def test_anzeigename():
+    assert ansicht.anzeigename("EUNN.DE") == "iShares Core MSCI Japan IMI (EUNN)"          # ETF-Name aus config/technik.yaml
+    assert ansicht.anzeigename("SPYI.DE").endswith("(SPYI)") and ansicht.anzeigename("SPYI.DE").startswith("SPDR")
+    assert ansicht.anzeigename("XYZ999") == "XYZ999"
+    assert ansicht._ohne_rechtsform("Domino's Pizza, Inc.") == "Domino's Pizza"
+    assert ansicht._ohne_rechtsform("Brown-Forman Corporation") == "Brown-Forman"
+    assert ansicht._ohne_rechtsform("Transocean Ltd.") == "Transocean"
+
+
+def _fundamental_zeile():
+    return pd.Series({"gesamt": 0.81, "qualitaet": 0.9, "bewertung": 0.7, "accruals": -0.05, "ep": 0.05, "ebit_ev": 0.09,
+                      "piotroski_filter": 8, "altman_zone": "grau", "altman": 2.1, "altman_variante": "Z''", "beneish": -1.5,
+                      "marktwert_usd": 12e9, "sic": 5812})
+
+
+def test_gliederung_fundamental():
+    from tradingbot.betrieb.buecher import kennzahlen_fundamental
+    med = pd.Series({"accruals": -0.02, "ep": 0.04, "ebit_ev": 0.10})
+    bv, u = vorschlag(1, "fundamental_a", "DPZ", "aktie", waehrung="USD")
+    bv.daten = kennzahlen_fundamental(_fundamental_zeile(), med, "A", 3)
+    bv.details = ("Zahlen:\n  • Kurs 340 USD\nWas dagegen spricht:\n  • Median-Ersatz für: ebit_ev\nWiderlegt, wenn: Rang über 30\n"
+                  "IBKR-Kontrakt: conId 29831612, Symbol DPZ, Routing SMART/NASDAQ, USD")
+    u = Urteil(True, [], ["hätte gesperrt: Monatslimit"])
+    g = ansicht.gliederung(bv, u)
+    k = {name: (wert, median, urteil) for name, wert, median, urteil in g["kennzahlen"]}
+    assert k["Accruals (niedriger besser)"][2] is True and k["KGV (niedriger besser)"] == ("20,0", "25,0", True)
+    assert k["EBIT/EV (höher besser)"][2] is False
+    assert {n: f for n, _, f in g["filter"]} == {"Piotroski": "gruen", "Altman": "gelb", "Beneish": "rot"}
+    assert g["dagegen"] == ["Median-Ersatz für: ebit_ev", "Risk-Manager: hätte gesperrt: Monatslimit"]
+    assert g["widerlegt"] == "Rang über 30" and g["technisch"][0].startswith("IBKR-Kontrakt: conId 29831612")
+    assert g["art"] == "KAUF" and "fundamental_a · KAUF 3 Stück · Limit 102.00 USD" in g["kopf"]
+
+
+def test_gliederung_technik():
+    bv, u = vorschlag(1, "crossover", "EUNK.DE")
+    bv.daten = {"typ": "technik", "kurs": 107.06, "sma50": 104.21, "sma200": 101.40, "abstand": 0.0277, "mom": 0.138, "atr": 1.12,
+                "stop": 104.82, "max_verlust": 47.08, "max_verlust_anteil": 0.0047}
+    bv.details = "Zahlen:\n  • Schluss 107,06 €\nWas dagegen spricht:\n  • nichts Besonderes\nWiderlegt, wenn: Schluss unter dem Stop"
+    g = ansicht.gliederung(bv, u)
+    k = {name: (wert, urteil) for name, wert, _, urteil in g["kennzahlen"]}
+    assert k["Kurs (Schluss)"][0] == "107,06 €" and k["SMA50"][0] == "104,21 €" and k["SMA200"][0] == "101,40 €"
+    assert k["Abstand SMA50 zu SMA200"] == ("+2,8%", True) and k["Stop (2 × ATR)"][0] == "104,82 €"
+    assert k["Max. Verlust bis Stop"][0].startswith("47,08 €") and k["Max. Verlust bis Stop"][1] is True
+    assert g["dagegen"] == [] and g["zahlen"] == []
