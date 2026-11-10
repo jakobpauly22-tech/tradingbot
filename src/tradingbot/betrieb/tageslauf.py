@@ -176,13 +176,24 @@ def zeitfenster_hinweis(jetzt: datetime, vorschlaege) -> list[str]:
 ZINS_PUFFER_EUR = 1.0               # Zuschlag auf die geschätzten neuen Zinsen (Jakob 10.11.2026)
 
 
-def zinsbuchung_belegt(d: float, vorher: float, jetzt: float, tageszins: float, tage: int, toleranz: float) -> bool:
-    """Belegte Zinsbuchung (Jakob 10.11.2026): Die aufgelaufenen Zinsen sind gesunken, und die Kassenerhöhung `d` liegt
-    zwischen dem letzten Zinsstand und letztem Zinsstand + geschätztem Tageszins × Tage seit dem letzten Lauf + 1 €.
+def zinsbilanz(d: float, vorher: float, jetzt: float) -> float:
+    """Zinsbilanz seit dem letzten Lauf = Gutschrift + aktueller Zinsstand − letzter Zinsstand: die seit dem letzten Lauf
+    neu entstandenen Zinsen, egal welcher Teil davon schon gutgeschrieben ist (Jakob 10.11.2026)."""
+    return d + jetzt - vorher
 
-    Hintergrund: Zwischen Lauf und Gutschrift laufen weiter Zinsen auf, die IBKR mitbucht; die Gutschrift ist dann größer
-    als der zuletzt gesehene Stand. Untergrenze mit `toleranz` (Rundung)."""
-    return d > 0 and jetzt < vorher - 1e-9 and vorher - toleranz <= d <= vorher + max(tageszins, 0.0) * max(tage, 0) + ZINS_PUFFER_EUR
+
+def zinsbilanz_grenze(tageszins: float, tage: int) -> float:
+    """Obergrenze der Zinsbilanz: geschätzter Tageszins × Kalendertage seit dem letzten Lauf + 1 €."""
+    return max(tageszins, 0.0) * max(tage, 0) + ZINS_PUFFER_EUR
+
+
+def zinsbuchung_belegt(d: float, vorher: float, jetzt: float, tageszins: float, tage: int, toleranz: float) -> bool:
+    """Belegte Zinsbuchung (Jakob 10.11.2026, Zinsbilanz): Die aufgelaufenen Zinsen sind gesunken, und
+    Gutschrift + aktueller Zinsstand − letzter Zinsstand liegt zwischen −`toleranz` (0,05 €) und Tageszins × Tage + 1 €.
+
+    Deckt beide Fälle: Gutschrift inklusive neuer Tage (Gutschrift > letzter Stand) und Gutschrift nur des Vormonats,
+    während der letzte Lauf schon Tage des neuen Monats enthielt (Gutschrift < letzter Stand, Rest im neuen Stand)."""
+    return d > 0 and jetzt < vorher - 1e-9 and -toleranz - 1e-9 <= zinsbilanz(d, vorher, jetzt) <= zinsbilanz_grenze(tageszins, tage) + 1e-9
 
 
 def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> tuple[list[str], str]:
@@ -191,9 +202,9 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
 
     Abweichungen (Jakob 04. und 09.11.2026):
     - Zinsbuchung, belegt (`zinsbuchung_belegt`, Jakob 09. und 10.11.2026): Die aufgelaufenen Zinsen (AccruedCash) sind
-      gesunken, und die Erhöhung liegt zwischen dem letzten Zinsstand und letztem Zinsstand + Tageszins × Tage seit dem
-      letzten Lauf + 1 €. Tageszins geschätzt aus der Veränderung der aufgelaufenen Zinsen zwischen zwei Läufen
-      (Kalendertage). → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen (wie im Backtest).
+      gesunken, und die Zinsbilanz (Gutschrift + aktueller Zinsstand − letzter Zinsstand) liegt zwischen −0,05 € und
+      Tageszins × Tage seit dem letzten Lauf + 1 €. Tageszins geschätzt aus der Veränderung der aufgelaufenen Zinsen
+      zwischen zwei Läufen (Kalendertage). → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen (wie im Backtest).
     - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert.
     - Alles andere über 10 € stoppt."""
     if not hasattr(broker, "kasse_je_waehrung"):
@@ -231,11 +242,12 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
         if abs(d) <= tol:
             continue
         abnahme = (vorher.get(w, 0.0) - zinsen.get(w, 0.0)) if (vorher is not None and zinsen is not None) else None
-        obergrenze = None if vorher is None else vorher.get(w, 0.0) + max(tageszins.get(w, 0.0), 0.0) * max(tage, 0) + ZINS_PUFFER_EUR
+        grenze_bilanz = zinsbilanz_grenze(tageszins.get(w, 0.0), tage)
+        bilanz = None if abnahme is None else zinsbilanz(d, vorher.get(w, 0.0), zinsen.get(w, 0.0))
         if abnahme is not None and zinsbuchung_belegt(d, vorher.get(w, 0.0), zinsen.get(w, 0.0), tageszins.get(w, 0.0), tage, tol):
             basis[w] = basis.get(w, 0.0) + d                # belegte Zinsbuchung (Jakob 09./10.11.2026)
-            zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}; zulässig "
-                                 f"{vorher.get(w, 0.0):,.2f} bis {obergrenze:,.2f} bei Tageszins {tageszins.get(w, 0.0):,.2f} × {tage} Tage + 1 €)")
+            zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}; Zinsbilanz "
+                                 f"{bilanz:+,.2f}, zulässig −0,05 bis {grenze_bilanz:,.2f} bei Tageszins {tageszins.get(w, 0.0):,.2f} × {tage} Tage + 1 €)")
         elif abs(d) <= grenze:
             # Buchung ohne Buchbezug (Zinsen, Kontogebühren; Jakob 04.11.2026): in die Kassenbasis, protokolliert
             basis[w] = basis.get(w, 0.0) + d
@@ -243,7 +255,7 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
         else:
             zins = ("aufgelaufene Zinsen: kein Vergleichsstand" if abnahme is None else
                     f"aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}, Erhöhung passt nicht als Zinsbuchung "
-                    f"(zulässig {vorher.get(w, 0.0):,.2f} bis {obergrenze:,.2f} bei gesunkenen Zinsen)")
+                    f"(Zinsbilanz {bilanz:+,.2f}, zulässig −0,05 bis {grenze_bilanz:,.2f} bei gesunkenen Zinsen)")
             abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {d:+,.2f}, über "
                        f"{grenze:.0f} € – unerklärte Buchung, bitte im Client Portal klären; {zins})")
     if abw:
