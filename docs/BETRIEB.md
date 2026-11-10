@@ -102,10 +102,18 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   wie im Backtest zur nächsten Gelegenheit nachgeholt; der Vorschlag nennt den Tag („Stop 69.04 gerissen am 06.11.,
   nachgeholt“). Einstiege verpasster Tage werden verworfen, gekauft wird nur, wenn das Signal am aktuellen Tag gilt (auch
   die Monatsprüfung von Momentum läuft am aktuellen Tag). Fundamental- und Realbuch haben keine Tagesausstiege.
-- **Zinsen:** Steigt die Kontokasse um einen Betrag, um den die aufgelaufenen Zinsen (`AccruedCash`) seit dem letzten
-  Abgleich gefallen sind (Toleranz 0,05), ist das eine belegte Zinsbuchung: in die Kassenbasis, Ereignis und Protokoll,
-  kein Stopp. Die Bücher erhalten keine Zinsen (wie im Backtest). Andere Abweichungen über 10 € stoppen weiter. Der Stand
-  der aufgelaufenen Zinsen wird bei jedem stimmenden Abgleich im Zustand `_konto` festgehalten.
+- **Zinsen (Jakob 09.11., erweitert 10.11.2026):** Eine Kassenerhöhung ist eine belegte Zinsbuchung, wenn die
+  aufgelaufenen Zinsen (`AccruedCash`) gesunken sind und die Erhöhung zwischen dem letzten Zinsstand und letztem
+  Zinsstand + geschätztem Tageszins × Kalendertage seit dem letzten Lauf + 1 € liegt (Untergrenze mit Toleranz 0,05).
+  So zählen auch Zinsen, die zwischen dem letzten Lauf und der Gutschrift neu aufgelaufen sind und IBKR mitbucht.
+  - Der Tageszins wird aus der Veränderung der aufgelaufenen Zinsen zwischen zwei Läufen ohne Gutschrift geschätzt.
+    Ohne Schätzung gilt nur der Zuschlag von 1 €.
+  - Belegte Zinsbuchungen gehen in die Kassenbasis, mit Ereignis und Protokoll, ohne Stopp. Die Bücher erhalten keine
+    Zinsen (wie im Backtest).
+  - Andere Abweichungen über 10 € stoppen weiter.
+  - Zinsstand, Datum (`zinsstand_tag`) und Tageszins hält jeder stimmende Abgleich im Zustand `_konto` fest.
+  - Einschränkung: Bucht IBKR weniger als den zuletzt gesehenen Stand (etwa nur den Vormonat, wenn der letzte Lauf schon
+    Tage des neuen Monats enthielt), liegt die Erhöhung unter der Untergrenze, und der Lauf stoppt.
 - **Flex:** Token und Abfrage-ID nur in der `.env` als `FLEX_TOKEN` und `FLEX_QUERY_ID` (richtet Jakob ein).
 - **Gebühr beim Nachtrag über die Position**, je Markt und Währung (`nachtrag.gebuehr`): Xetra EUR 3,00 € je Order
   (Paper-Festpreis); US-Aktien nach IBKR Pro Fixed, 0,005 USD je Aktie, mindestens 1,00 USD, höchstens 1 % des

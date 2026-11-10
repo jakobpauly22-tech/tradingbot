@@ -215,7 +215,7 @@ def test_zinsbuchung_mit_abnahme_der_aufgelaufenen_zinsen(umgebung):
     # Kassenerhöhung ohne passende Abnahme der aufgelaufenen Zinsen → Stopp
     diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_540.10}, {"EUR": 0.0}), b)
     assert diff and "unerklärte Buchung" in diff[0] and "passt nicht" in diff[0]
-    # Abnahme vorhanden, aber nicht gleich groß → Stopp
+    # Erhöhung kleiner als der letzte Zinsstand → Stopp
     kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_240.10}, {"EUR": 100.0}), b)
     diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_300.10}, {"EUR": 0.0}), b)
     assert diff and "passt nicht" in diff[0]
@@ -281,3 +281,47 @@ def test_verpasste_handelstage():
     assert verpasste_handelstage("xetra", "2026-11-03", "2026-11-09") == [pd.Timestamp(d) for d in ("2026-11-04", "2026-11-05", "2026-11-06")]
     assert verpasste_handelstage("xetra", "2026-11-06", "2026-11-09") == []
     assert verpasste_handelstage("xetra", None, "2026-11-09") == []
+
+
+def test_zinsbuchung_mit_neuen_zinsen_zwischen_lauf_und_gutschrift(umgebung):
+    """Jakob 10.11.2026: Zwischen dem letzten Lauf und der Gutschrift laufen weiter Zinsen auf, IBKR bucht sie mit. Belegt,
+    wenn die aufgelaufenen Zinsen gesunken sind und die Erhöhung zwischen letztem Zinsstand und letztem Zinsstand +
+    Tageszins × Tage + 1 € liegt; Tageszins aus zwei Läufen geschätzt."""
+    from tradingbot.betrieb.tageslauf import kassenabgleich, zinsbuchung_belegt
+    j, rm = umgebung
+    lauf(j, rm)
+    b = lade_konfiguration("betrieb")
+    buecher = list(b["buecher"])
+    kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 225.74}), b, heute="2026-11-27")
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 248.24}), b, heute="2026-11-30")
+    assert diff == [] and abs(j.zustand("_konto")["tageszins"]["EUR"] - 7.5) < 1e-9          # (248,24 − 225,74) / 3 Tage
+    # Läufe am 01. und 02.12. verpasst; Gutschrift am 02.12. über 263,24 (= 248,24 + 2 × 7,50), danach neu aufgelaufen 7,50
+    diff, text = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_263.24}, {"EUR": 7.50}), b, heute="2026-12-02")
+    assert diff == [] and "Zinsbuchung belegt" in text and "+263.24" in text
+    assert abs(j.zustand("_konto")["kassenbasis"]["EUR"] - 1_000_263.24) < 1e-6
+    assert all(abs(j.kasse(n) - j.startkapital(n)) < 1e-9 for n in buecher)                  # Bücher ohne Zinsen
+    assert j.zustand("_konto")["zinsstand_tag"] == "2026-12-02" and j.zustand("_konto")["aufgelaufene_zinsen"] == {"EUR": 7.5}
+    assert abs(j.zustand("_konto")["tageszins"]["EUR"] - 7.5) < 1e-9                         # bei Gutschrift unverändert
+
+    # Grenzen der Regel: 248,24 bis 248,24 + 7,50 × 2 + 1 = 264,24
+    assert zinsbuchung_belegt(248.24, 248.24, 7.5, 7.5, 2, 0.05)
+    assert zinsbuchung_belegt(264.24, 248.24, 7.5, 7.5, 2, 0.05)
+    assert not zinsbuchung_belegt(264.30, 248.24, 7.5, 7.5, 2, 0.05)                         # über der Obergrenze
+    assert not zinsbuchung_belegt(240.00, 248.24, 7.5, 7.5, 2, 0.05)                         # unter dem letzten Zinsstand
+    assert not zinsbuchung_belegt(250.00, 248.24, 260.0, 7.5, 2, 0.05)                       # Zinsen nicht gesunken
+    assert zinsbuchung_belegt(248.90, 248.24, 0.0, 0.0, 5, 0.05)                             # ohne Schätzung: nur + 1 €
+    assert not zinsbuchung_belegt(249.30, 248.24, 0.0, 0.0, 5, 0.05)
+
+
+def test_zinsbuchung_zu_gross_stoppt(umgebung):
+    from tradingbot.betrieb.tageslauf import kassenabgleich
+    j, rm = umgebung
+    lauf(j, rm)
+    b = lade_konfiguration("betrieb")
+    buecher = list(b["buecher"])
+    kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 225.74}), b, heute="2026-11-27")
+    kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_000.0}, {"EUR": 248.24}), b, heute="2026-11-30")
+    # Gutschrift 300 € nach zwei Tagen: Obergrenze 264,24 → unerklärt, Stopp (andere Abweichungen über 10 € stoppen weiter)
+    diff, _ = kassenabgleich(j, buecher, ZinsAttrappe({"EUR": 1_000_300.0}, {"EUR": 0.0}), b, heute="2026-12-02")
+    assert diff and "unerklärte Buchung" in diff[0] and "zulässig 248.24 bis 264.24" in diff[0]
+    assert abs(j.zustand("_konto")["kassenbasis"]["EUR"] - 1_000_000.0) < 1e-6               # nichts übernommen

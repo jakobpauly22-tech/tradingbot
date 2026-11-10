@@ -173,14 +173,27 @@ def zeitfenster_hinweis(jetzt: datetime, vorschlaege) -> list[str]:
     return hinweise
 
 
-def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[str], str]:
+ZINS_PUFFER_EUR = 1.0               # Zuschlag auf die geschätzten neuen Zinsen (Jakob 10.11.2026)
+
+
+def zinsbuchung_belegt(d: float, vorher: float, jetzt: float, tageszins: float, tage: int, toleranz: float) -> bool:
+    """Belegte Zinsbuchung (Jakob 10.11.2026): Die aufgelaufenen Zinsen sind gesunken, und die Kassenerhöhung `d` liegt
+    zwischen dem letzten Zinsstand und letztem Zinsstand + geschätztem Tageszins × Tage seit dem letzten Lauf + 1 €.
+
+    Hintergrund: Zwischen Lauf und Gutschrift laufen weiter Zinsen auf, die IBKR mitbucht; die Gutschrift ist dann größer
+    als der zuletzt gesehene Stand. Untergrenze mit `toleranz` (Rundung)."""
+    return d > 0 and jetzt < vorher - 1e-9 and vorher - toleranz <= d <= vorher + max(tageszins, 0.0) * max(tage, 0) + ZINS_PUFFER_EUR
+
+
+def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> tuple[list[str], str]:
     """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
     (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05).
 
     Abweichungen (Jakob 04. und 09.11.2026):
-    - Zinsbuchung, belegt: Kasse steigt um d, und die aufgelaufenen Zinsen (AccruedCash) sind seit dem letzten Abgleich um
-      denselben Betrag gefallen (Toleranz wie oben) → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen
-      (wie im Backtest).
+    - Zinsbuchung, belegt (`zinsbuchung_belegt`, Jakob 09. und 10.11.2026): Die aufgelaufenen Zinsen (AccruedCash) sind
+      gesunken, und die Erhöhung liegt zwischen dem letzten Zinsstand und letztem Zinsstand + Tageszins × Tage seit dem
+      letzten Lauf + 1 €. Tageszins geschätzt aus der Veränderung der aufgelaufenen Zinsen zwischen zwei Läufen
+      (Kalendertage). → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen (wie im Backtest).
     - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert.
     - Alles andere über 10 € stoppt."""
     if not hasattr(broker, "kasse_je_waehrung"):
@@ -189,6 +202,7 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
     if not ibkr:
         return [], "Kassen-Abgleich: IBKR meldet keine Kontokasse (accountValues leer) – nicht geprüft"
     zinsen = broker.aufgelaufene_zinsen() if hasattr(broker, "aufgelaufene_zinsen") else None
+    heute = pd.Timestamp(heute if heute is not None else pd.Timestamp.now()).normalize()
     bot: dict[str, float] = {}
     for n in buecher:
         start = journal.startkapital(n)
@@ -198,9 +212,9 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
     basis = konto.get("kassenbasis")
     if basis is None:
         basis = {w: ibkr.get(w, 0.0) - bot.get(w, 0.0) for w in sorted(set(ibkr) | set(bot))}
-        konto.update({"kassenbasis": basis, "festgehalten": str(pd.Timestamp.now().date())})
+        konto.update({"kassenbasis": basis, "festgehalten": str(heute.date())})
         if zinsen is not None:
-            konto["aufgelaufene_zinsen"] = zinsen
+            konto["aufgelaufene_zinsen"], konto["zinsstand_tag"] = zinsen, str(heute.date())
         journal.zustand_speichern("_konto", konto)
         journal.ereignis("kassenbasis", "Kassenbasis festgehalten: " + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()))
         return [], "Kassen-Abgleich: Kassenbasis erstmals festgehalten (" + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()) + \
@@ -208,6 +222,8 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
     tol = float(b.get("sicherheit", {}).get("abgleich_kasse_toleranz", 0.05))
     grenze = float(b.get("sicherheit", {}).get("abgleich_buchung_ohne_buchbezug_max", 10.0))
     vorher = konto.get("aufgelaufene_zinsen")
+    tage = (heute - pd.Timestamp(konto["zinsstand_tag"])).days if konto.get("zinsstand_tag") else 0
+    tageszins = konto.get("tageszins") or {}
     abw, uebernommen, zinsbuchungen = [], [], []
     for w in sorted(set(ibkr) | set(bot) | set(basis)):
         soll = basis.get(w, 0.0) + bot.get(w, 0.0)
@@ -215,31 +231,39 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict) -> tuple[list[s
         if abs(d) <= tol:
             continue
         abnahme = (vorher.get(w, 0.0) - zinsen.get(w, 0.0)) if (vorher is not None and zinsen is not None) else None
-        if d > 0 and abnahme is not None and abs(abnahme - d) <= tol:
-            basis[w] = basis.get(w, 0.0) + d                # belegte Zinsbuchung (Jakob 09.11.2026)
-            zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f})")
+        obergrenze = None if vorher is None else vorher.get(w, 0.0) + max(tageszins.get(w, 0.0), 0.0) * max(tage, 0) + ZINS_PUFFER_EUR
+        if abnahme is not None and zinsbuchung_belegt(d, vorher.get(w, 0.0), zinsen.get(w, 0.0), tageszins.get(w, 0.0), tage, tol):
+            basis[w] = basis.get(w, 0.0) + d                # belegte Zinsbuchung (Jakob 09./10.11.2026)
+            zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}; zulässig "
+                                 f"{vorher.get(w, 0.0):,.2f} bis {obergrenze:,.2f} bei Tageszins {tageszins.get(w, 0.0):,.2f} × {tage} Tage + 1 €)")
         elif abs(d) <= grenze:
             # Buchung ohne Buchbezug (Zinsen, Kontogebühren; Jakob 04.11.2026): in die Kassenbasis, protokolliert
             basis[w] = basis.get(w, 0.0) + d
             uebernommen.append(f"{w} {d:+,.2f}")
         else:
             zins = ("aufgelaufene Zinsen: kein Vergleichsstand" if abnahme is None else
-                    f"aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}, Abnahme {abnahme:+,.2f} passt nicht")
+                    f"aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}, Erhöhung passt nicht als Zinsbuchung "
+                    f"(zulässig {vorher.get(w, 0.0):,.2f} bis {obergrenze:,.2f} bei gesunkenen Zinsen)")
             abw.append(f"Kasse {w}: Bücher + Basis {soll:,.2f}, IBKR {ibkr.get(w, 0.0):,.2f} (Abweichung {d:+,.2f}, über "
                        f"{grenze:.0f} € – unerklärte Buchung, bitte im Client Portal klären; {zins})")
     if abw:
         return abw, ""
     konto["kassenbasis"] = basis
-    heute = str(pd.Timestamp.now().date())
+    heute_text = str(heute.date())
     if uebernommen:
-        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": heute, "betraege": uebernommen})
+        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": heute_text, "betraege": uebernommen})
         journal.ereignis("kassenbasis", "Buchung ohne Buchbezug (Zinsen/Kontogebühren vermutet) in die Kassenbasis: " + ", ".join(uebernommen))
     if zinsbuchungen:
-        konto.setdefault("zinsbuchungen", []).append({"tag": heute, "betraege": zinsbuchungen})
+        konto.setdefault("zinsbuchungen", []).append({"tag": heute_text, "betraege": zinsbuchungen})
         journal.ereignis("kassenbasis", "Zinsbuchung belegt (Abnahme der aufgelaufenen Zinsen), in die Kassenbasis, Bücher ohne Zinsen: "
                          + ", ".join(zinsbuchungen))
     if zinsen is not None:
-        konto["aufgelaufene_zinsen"] = zinsen
+        if vorher is not None and tage > 0:                # Tageszins aus zwei Läufen ohne Gutschrift dazwischen
+            for w, z in zinsen.items():
+                if z > vorher.get(w, 0.0) + 1e-9:
+                    tageszins[w] = (z - vorher.get(w, 0.0)) / tage
+            konto["tageszins"] = tageszins
+        konto["aufgelaufene_zinsen"], konto["zinsstand_tag"] = zinsen, str(heute.date())
     journal.zustand_speichern("_konto", konto)
     text = "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" + ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")"
     if zinsbuchungen:
@@ -390,7 +414,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 return erg
             diff = abgleich(journal, list(b["buecher"]), positionen)
             if not diff:                                     # Kassenbasis erst festhalten, wenn die Bestände stimmen
-                kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b)
+                kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b, heute=jetzt.date())
                 if kasse_text:
                     erg.meldungen.append(kasse_text)
                 diff += kasse_diff
