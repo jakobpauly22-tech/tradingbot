@@ -46,6 +46,7 @@ class Laufergebnis:
     nyse: object = None                                               # Signaltag NYSE
     kurse_eur: dict[str, float] = field(default_factory=dict)         # letzter Schluss je Titel in EUR
     spyi: object = None                                               # Schlusskurse SPYI in EUR (Vergleich je Buch)
+    fx: dict[str, float] = field(default_factory=dict)                # Devisenkurse des Laufs (Fremdwährung je EUR)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -409,6 +410,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     journal.abgelaufene_markieren(jetzt)
     eurusd = float(kurse_laden("EURUSD=X", tag.date(), "fx")["close"].iloc[-1])
     fx = {"USD": eurusd}
+    erg.fx = dict(fx)
 
     offene = []
     if broker is not None:

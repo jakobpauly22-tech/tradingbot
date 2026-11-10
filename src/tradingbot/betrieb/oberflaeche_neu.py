@@ -30,6 +30,10 @@ FARBE_STATUS = {"veto": "#fde7e9", "freigegeben": "#fff8e1", "gesendet": "#e3f2f
                 "abgelehnt": "#eeeeee", "verfallen": "#eeeeee", "abgelaufen": "#eeeeee", "ersetzt": "#eeeeee"}
 FARBE_AMPEL = {"gruen": "#2e7d32", "gelb": "#f9a825", "rot": "#c62828", None: "#9e9e9e"}
 ORANGE_TEXT = "#b26a00"
+# Positionstabelle (Jakob 10.11.2026); Gewinn/Verlust färbt die Zeile grün bzw. rot (Treeview färbt keine Einzelzellen)
+POSITIONSSPALTEN = (("titel", "Titel", 250), ("stueck", "Stück", 60), ("kauf", "Ø Kaufkurs", 120), ("kurs", "Kurs", 110),
+                    ("wert", "Wert €", 100), ("gv", "G/V €", 90), ("gvp", "G/V %", 70), ("anteil", "Anteil am Buch", 100),
+                    ("gekauft", "gekauft am", 90))
 SPALTEN = (("wahl", "", 34), ("buch", "Buch", 105), ("art", "Art", 70), ("stueck", "Stück", 55), ("titel", "Titel", 260),
            ("limit", "Limit", 110), ("wert", "Wert €", 90), ("kurz", "Kurz-These", 260), ("veto", "Veto", 140), ("status", "Status", 110))
 
@@ -192,6 +196,7 @@ class Tagesfenster:
         self.positionen_rahmen: dict[str, ttk.Frame] = {}
         self.positionen_knoepfe: dict[str, ttk.Button] = {}
         self.differenz_labels: dict[str, tk.Label] = {}
+        self.positionen_tabellen: dict[str, ttk.Treeview] = {}
         try:
             karten = ansicht.buchuebersicht(self.journal, self.betrieb, self.erg)
         except Exception as f:  # noqa: BLE001 – Anzeige darf nie den Lauf blockieren
@@ -234,16 +239,24 @@ class Tagesfenster:
             ttk.Label(kopf, text=f"{len(k.offene)} offene Order(s)", foreground="#b26a00").pack(side="left", padx=8)
         self.positionen_rahmen[k.buch], self.positionen_knoepfe[k.buch] = tabelle_rahmen, knopf
         if k.positionen:
-            t = ttk.Treeview(tabelle_rahmen, columns=("titel", "stueck", "kauf", "kurs", "wert"), show="headings",
-                             height=min(len(k.positionen), 22))
-            for c, h, b in (("titel", "Titel", 100), ("stueck", "Stück", 70), ("kauf", "Ø Kaufkurs", 130), ("kurs", "Kurs €", 100),
-                            ("wert", "Wert €", 110)):
+            spalten = POSITIONSSPALTEN + ((("stop", "Stop", 90),) if k.technik else ())
+            t = ttk.Treeview(tabelle_rahmen, columns=[c for c, _, _ in spalten], show="headings", height=min(len(k.positionen), 22))
+            for c, h, b in spalten:
                 t.heading(c, text=h)
-                t.column(c, width=b, anchor="e" if c != "titel" else "w")
+                t.column(c, width=b, anchor="w" if c in ("titel", "gekauft") else "e", stretch=c == "titel")
+            t.tag_configure("gewinn", foreground="#2e7d32")
+            t.tag_configure("verlust", foreground="#c62828")
             for p in k.positionen:
-                t.insert("", "end", values=(p.ticker, f"{p.stueck:g}", "–" if p.kaufkurs is None else f"{p.kaufkurs:,.4f} {p.waehrung}",
-                                            "–" if p.kurs_eur is None else f"{p.kurs_eur:,.2f}", "–" if p.wert_eur is None else f"{p.wert_eur:,.2f}"))
+                werte = [p.name or p.ticker, f"{p.stueck:g}", "–" if p.kaufkurs is None else f"{p.kaufkurs:,.4f} {p.waehrung}",
+                         "–" if p.kurs is None else f"{p.kurs:,.2f} {p.waehrung}", "–" if p.wert_eur is None else f"{p.wert_eur:,.2f}",
+                         "–" if p.gv_eur is None else f"{p.gv_eur:+,.2f}", "–" if p.gv_proz is None else f"{p.gv_proz:+.2%}",
+                         "–" if p.anteil is None else f"{p.anteil:.1%}", p.gekauft_am or "–"]
+                if k.technik:
+                    werte.append("–" if p.stop is None else f"{p.stop:,.2f} €")
+                tag = () if p.gv_eur is None or abs(p.gv_eur) < 0.005 else (("gewinn",) if p.gv_eur > 0 else ("verlust",))
+                t.insert("", "end", iid=p.ticker, values=werte, tags=tag)
             t.pack(fill="x")
+            self.positionen_tabellen[k.buch] = t
         if k.offene:
             ttk.Label(tabelle_rahmen, text="Offene Orders", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
             o = ttk.Treeview(tabelle_rahmen, columns=("order", "art", "titel", "stueck", "limit", "status"), show="headings",

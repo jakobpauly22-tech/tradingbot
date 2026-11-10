@@ -155,7 +155,7 @@ def test_uebersicht_positionen_einklappbar(wurzel, journal):
     wurzel.update()
     assert rahmen.winfo_manager() == "pack" and f.positionen_knoepfe["fundamental_a"].cget("text").startswith("▾")
     tabelle = rahmen.winfo_children()[0]
-    assert len(tabelle.get_children()) == 20 and "55.0000 USD" in tabelle.item(tabelle.get_children()[0])["values"][2]
+    assert len(tabelle.get_children()) == 20 and "74.0000 USD" in tabelle.item(tabelle.get_children()[0])["values"][2]   # Wert absteigend
     f.positionen_umschalten("fundamental_a")
     assert rahmen.winfo_manager() == ""
 
@@ -248,3 +248,25 @@ def test_differenz_zu_spyi_farbig(wurzel, journal):
     f = fenster(wurzel, journal, erg=e)
     assert f.differenz_labels["crossover"].cget("fg") == "#2e7d32" and "+1.00 Pp." in f.differenz_labels["crossover"].cget("text")
     assert f.differenz_labels["real"].cget("fg") == "#c62828"
+
+
+
+def test_positionstabelle_spalten_farben_sortierung(wurzel, journal):
+    """Positionstabelle (Jakob 10.11.2026): Name (Kürzel), Kurs in Handelswährung, G/V € und % grün/rot, Anteil, gekauft am,
+    Stop nur in Technik-Büchern, nach Wert absteigend."""
+    from test_ansicht import _positionen_journal
+    e = _positionen_journal(journal)
+    f = fenster(wurzel, journal, erg=e)
+    t = f.positionen_tabellen["crossover"]
+    assert list(t["columns"]) == ["titel", "stueck", "kauf", "kurs", "wert", "gv", "gvp", "anteil", "gekauft", "stop"]
+    assert [t.heading(c, "text") for c in t["columns"]][4:] == ["Wert €", "G/V €", "G/V %", "Anteil am Buch", "gekauft am", "Stop"]
+    assert t.get_children() == ("IUSA.DE", "SXR1.DE")                                      # Wert absteigend
+    iusa = t.item("IUSA.DE")["values"]
+    assert str(iusa[0]).endswith("(IUSA)") and iusa[3] == "68.00 EUR" and iusa[5] == "+18.96" and iusa[8] == "2026-11-04"
+    assert t.item("IUSA.DE", "tags") == ("gewinn",) and t.item("SXR1.DE", "tags") == ("gewinn",)
+    assert t.item("SXR1.DE")["values"][9] == "214.48 €" and t.item("IUSA.DE")["values"][9] == "–"
+    a = f.positionen_tabellen["fundamental_a"]
+    assert "stop" not in a["columns"]                                                       # Stop nur Technik
+    dpz = a.item("DPZ")["values"]
+    assert dpz[3] == "356.50 USD" and dpz[4] == "310.00" and dpz[5] == "+9.00" and a.item("DPZ", "tags") == ("gewinn",)
+    assert a.item("BBY", "tags") == ("verlust",) and str(a.item("BBY")["values"][5]).startswith("-")

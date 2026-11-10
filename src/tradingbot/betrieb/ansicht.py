@@ -146,6 +146,14 @@ class Position:
     waehrung: str
     kurs_eur: float | None
     wert_eur: float | None
+    name: str = ""                  # „Name (Kürzel)“
+    kurs: float | None = None       # letzter Schluss in der Handelswährung
+    einstand_eur: float | None = None   # Kaufkosten der gehaltenen Stücke in EUR inkl. gebuchter Gebühren (Durchschnitt)
+    gv_eur: float | None = None     # Gewinn/Verlust in EUR (Wert − Einstand)
+    gv_proz: float | None = None
+    anteil: float | None = None     # Anteil am Buchwert (Kasse + Positionen zu den Kursen des Laufs)
+    gekauft_am: str | None = None   # erster Kauf (Ausführungstag)
+    stop: float | None = None       # Stop laut Strategiezustand (nur Technik-Bücher)
 
 
 @dataclass
@@ -163,6 +171,7 @@ class BuchKarte:
     rendite_spyi: float | None      # SPYI Kauf und Halten, gleiche Einzahlungen, TWR
     positionen: list[Position] = field(default_factory=list)
     offene: list[dict] = field(default_factory=list)
+    technik: bool = False           # Satellite-Buch (Stop-Spalte)
 
 
 def einzahlungen(journal, buch: str) -> pd.Series:
@@ -210,10 +219,52 @@ def rendite_spyi(spyi: pd.Series | None, einz: pd.Series, bis) -> float | None:
     return float(zeitgewichtete_rendite(reihe, einz.reindex(reihe.index).fillna(0.0)).iloc[-1] - 1)
 
 
-def _kaufkurse(journal, buch: str) -> dict[str, tuple[float, str]]:
-    zeilen = journal.db.execute("SELECT ticker, waehrung, SUM(stueck * COALESCE(preis, preis_eur)) w, SUM(stueck) s FROM ausfuehrungen "
-                                "WHERE buch=? AND richtung>0 GROUP BY ticker, waehrung", (buch,)).fetchall()
-    return {z["ticker"]: (z["w"] / z["s"] if z["s"] else None, z["waehrung"] or "EUR") for z in zeilen}
+def _kaufkurse(journal, buch: str) -> dict[str, dict]:
+    """Je Titel aus den Käufen: Ø Kaufkurs (Handelswährung, ohne Gebühren), Ø Kosten je Stück in EUR inkl. gebuchter Gebühr,
+    Währung und Tag des ersten Kaufs."""
+    zeilen = journal.db.execute("SELECT ticker, MAX(waehrung) waehrung, SUM(stueck * COALESCE(preis, preis_eur)) w, SUM(stueck) s, "
+                                "SUM(stueck * preis_eur + gebuehr_eur) k, MIN(zeit) erst FROM ausfuehrungen "
+                                "WHERE buch=? AND richtung>0 GROUP BY ticker", (buch,)).fetchall()
+    erg = {}
+    for z in zeilen:
+        tag = None
+        if z["erst"]:
+            ts = pd.Timestamp(str(z["erst"]))
+            tag = (ts.tz_convert("Europe/Berlin") if ts.tzinfo is not None else ts).date().isoformat()
+        erg[z["ticker"]] = {"kaufkurs": z["w"] / z["s"] if z["s"] else None, "kosten_je_stueck_eur": z["k"] / z["s"] if z["s"] else None,
+                            "waehrung": z["waehrung"] or "EUR", "erst": tag}
+    return erg
+
+
+def _stops(journal, buch: str) -> dict[str, float]:
+    """Stops laut Strategiezustand des Technik-Buchs (gesetzt, sobald der Kauf eingelesen ist)."""
+    z = journal.zustand(buch) or {}
+    pos = (z.get("nach") or z).get("positionen") or {}
+    return {t: float(p["stop"]) for t, p in pos.items() if p.get("stop") is not None}
+
+
+def positionen_je_buch(journal, buch: str, erg, *, technik: bool) -> list[Position]:
+    """Positionstabelle (Jakob 10.11.2026): Name (Kürzel), Stück, Ø Kaufkurs, Kurs (Handelswährung), Wert €, Gewinn/Verlust €
+    und %, Anteil am Buch, gekauft am, Stop (nur Technik). Einstand = Ø Kosten je Stück inkl. Gebühr × Stück. Sortiert nach
+    Wert absteigend."""
+    kauf = _kaufkurse(journal, buch)
+    stops = _stops(journal, buch) if technik else {}
+    roh = []
+    for t, s in journal.bestand(buch).items():
+        info = kauf.get(t, {})
+        w = info.get("waehrung", "EUR")
+        k_eur = erg.kurse_eur.get(t)
+        fx = 1.0 if w == "EUR" else (getattr(erg, "fx", {}) or {}).get(w)
+        kurs = None if k_eur is None or fx is None else k_eur * fx
+        wert = None if k_eur is None else s * k_eur
+        einstand = None if info.get("kosten_je_stueck_eur") is None else s * info["kosten_je_stueck_eur"]
+        gv = None if wert is None or einstand is None else wert - einstand
+        roh.append(Position(t, s, info.get("kaufkurs"), w, k_eur, wert, anzeigename(t), kurs, einstand, gv,
+                            None if gv is None or not einstand else gv / einstand, None, info.get("erst"), stops.get(t)))
+    buchwert = journal.kasse(buch) + sum(p.wert_eur or 0.0 for p in roh)
+    for p in roh:
+        p.anteil = None if p.wert_eur is None or buchwert <= 0 else p.wert_eur / buchwert
+    return sorted(roh, key=lambda p: -(p.wert_eur if p.wert_eur is not None else float("-inf")))
 
 
 def buchuebersicht(journal, betrieb: dict, erg) -> list[BuchKarte]:
@@ -224,11 +275,8 @@ def buchuebersicht(journal, betrieb: dict, erg) -> list[BuchKarte]:
         werte = journal.buchwerte(buch)
         kasse = journal.kasse_je_waehrung(buch)
         reserviert = {w: b for w, b in journal.reserviert(buch).items() if w != "EUR_gesamt" and b > 1e-9}
-        kauf = _kaufkurse(journal, buch)
-        positionen = []
-        for t, s in sorted(journal.bestand(buch).items()):
-            k = erg.kurse_eur.get(t)
-            positionen.append(Position(t, s, *(kauf.get(t, (None, "EUR"))), k, None if k is None else s * k))
+        technik = bk.get("rolle") == "satellite"
+        positionen = positionen_je_buch(journal, buch, erg, technik=technik)
         offene = [{"id": z["id"], "ticker": z["ticker"], "art": "TAUSCH" if z["art"] == "fx" else ("KAUF" if z["richtung"] > 0 else "VERKAUF"),
                    "stueck": z["stueck"], "limit": z["limit_preis"], "waehrung": z["waehrung"], "order_id": z["order_id"], "status": z["status"]}
                   for z in journal.unterwegs(buch)]
@@ -237,7 +285,8 @@ def buchuebersicht(journal, betrieb: dict, erg) -> list[BuchKarte]:
             buch, bk["art"], float(bk["budget_eur"]), journal.messbeginn(buch),
             None if letzter is None else letzter["wert"], None if letzter is None else letzter["wert_modell"],
             None if letzter is None else letzter["tag"], kasse, reserviert,
-            rendite_seit_messbeginn(werte, einz), None if bis is None else rendite_spyi(erg.spyi, einz, bis), positionen, offene))
+            rendite_seit_messbeginn(werte, einz), None if bis is None else rendite_spyi(erg.spyi, einz, bis), positionen, offene,
+            technik))
     return karten
 
 

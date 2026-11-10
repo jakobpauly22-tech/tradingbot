@@ -252,3 +252,39 @@ def test_gliederung_technik():
     assert k["Abstand SMA50 zu SMA200"] == ("+2,8%", True) and k["Stop (2 × ATR)"][0] == "104,82 €"
     assert k["Max. Verlust bis Stop"][0].startswith("47,08 €") and k["Max. Verlust bis Stop"][1] is True
     assert g["dagegen"] == [] and g["zahlen"] == []
+
+
+
+def _positionen_journal(journal):
+    journal.messbeginn_setzen("crossover", "2026-11-03")
+    journal.ausfuehrung("c1", "crossover:a", "SXR1.DE", 1, 10, 218.10, 3.0, "2026-11-04")
+    journal.ausfuehrung("c2", "crossover:b", "IUSA.DE", 1, 36, 67.39, 3.0, "2026-11-04")
+    journal.zustand_speichern("crossover", {"signaltag": "2026-11-09", "nach": {"positionen": {
+        "SXR1.DE": {"regel": "crossover", "signal_tag": "2026-11-03", "kauf_tag": "2026-11-04", "stop": 214.48, "atr_signal": 1.7},
+        "IUSA.DE": {"regel": "crossover", "signal_tag": "2026-11-03", "kauf_tag": None, "stop": None, "atr_signal": 0.6}}}})
+    journal.ausfuehrung("f1", "fundamental_a:a", "DPZ", 1, 1, 300.0, 1.0, "2026-11-10 14:30:00+00:00", waehrung="USD", preis=340.0)
+    journal.ausfuehrung("f2", "fundamental_a:b", "BBY", 1, 5, 90.0, 1.0, "2026-11-10 14:30:00+00:00", waehrung="USD", preis=102.0)
+    e = erg_mit()
+    e.kurse_eur = {"SXR1.DE": 220.0, "IUSA.DE": 68.0, "DPZ": 310.0, "BBY": 88.0}
+    e.fx = {"USD": 1.15}
+    return e
+
+
+def test_positionen_je_buch(journal):
+    e = _positionen_journal(journal)
+    karten = {k.buch: k for k in ansicht.buchuebersicht(journal, betrieb(), e)}
+    c = karten["crossover"]
+    assert c.technik and not karten["fundamental_a"].technik
+    assert [p.ticker for p in c.positionen] == ["IUSA.DE", "SXR1.DE"]                      # Wert absteigend
+    iusa, sxr1 = c.positionen
+    assert iusa.name == "iShares Core S&P 500 (IUSA)" and iusa.kurs == pytest.approx(68.0) and iusa.waehrung == "EUR"
+    assert iusa.einstand_eur == pytest.approx(36 * 67.39 + 3.0) and iusa.gv_eur == pytest.approx(36 * 68.0 - (36 * 67.39 + 3.0))
+    assert iusa.gv_proz == pytest.approx(iusa.gv_eur / iusa.einstand_eur)
+    buchwert = journal.kasse("crossover") + 36 * 68.0 + 10 * 220.0
+    assert iusa.anteil == pytest.approx(36 * 68.0 / buchwert) and iusa.gekauft_am == "2026-11-04"
+    assert sxr1.stop == pytest.approx(214.48) and iusa.stop is None
+    dpz = next(p for p in karten["fundamental_a"].positionen if p.ticker == "DPZ")
+    assert dpz.kurs == pytest.approx(310.0 * 1.15) and dpz.waehrung == "USD" and dpz.kaufkurs == pytest.approx(340.0)
+    assert dpz.gv_eur == pytest.approx(9.0) and dpz.stop is None and dpz.gekauft_am == "2026-11-10"
+    bby = next(p for p in karten["fundamental_a"].positionen if p.ticker == "BBY")
+    assert bby.gv_eur == pytest.approx(5 * 88.0 - (5 * 90.0 + 1.0)) and bby.gv_eur < 0
