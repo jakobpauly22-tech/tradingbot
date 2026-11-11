@@ -353,20 +353,34 @@ class Journal:
         self.db.commit()
         return n
 
+    def signaltag_gesendet(self, buch: str, tag) -> bool:
+        """Hat eine Order des Buchs vom Signaltag `tag` IBKR erreicht (gesendet, unbestätigt, ausgeführt, verfallen)?"""
+        return self.db.execute("SELECT 1 FROM vorschlaege WHERE buch=? AND signaltag=? AND status IN "
+                               "('gesendet','unbestaetigt','ausgefuehrt','verfallen') LIMIT 1",
+                               (buch, str(pd.Timestamp(tag).date()))).fetchone() is not None
+
+    def _wiederholung(self, buch: str, tag, z: dict) -> bool:
+        """Erneuter Lauf am selben Signaltag, dessen Entscheidung noch offen ist (noch keine Order des Tages bei IBKR).
+        Korrektur 11.11.2026 (Probelauf 10.11., 11:06): Nach dem Senden ist der Signaltag entschieden; ein erneuter Lauf
+        startet vom Stand NACH dem Tag. Sonst sähe er den Stand vor dem Tag zusammen mit den inzwischen ausgeführten Käufen
+        und legte Restkasse an (Momentum: zweite Monatsprüfung) – das tut der Backtest nicht."""
+        return z["signaltag"] == str(pd.Timestamp(tag).date()) and not self.signaltag_gesendet(buch, tag)
+
     def zustand_fuer_signaltag(self, buch: str, tag) -> dict:
         """Strategiezustand als Ausgangspunkt für einen Lauf am Signaltag `tag`: bei erneutem Lauf am selben Signaltag der
-        Stand VOR diesem Tag (wiederholbar, kein Aufaddieren), sonst der Stand nach dem letzten Lauf."""
+        Stand VOR diesem Tag (wiederholbar, kein Aufaddieren), solange keine Order des Tages gesendet ist; sonst der Stand
+        nach dem letzten Lauf."""
         z = self.zustand(buch)
         if "signaltag" not in z:
             return z                                     # ältere Form: flacher Zustand
-        return z["vor"] if z["signaltag"] == str(pd.Timestamp(tag).date()) else z["nach"]
+        return z["vor"] if self._wiederholung(buch, tag, z) else z["nach"]
 
     def vorlauf_signaltag(self, buch: str, tag) -> str | None:
         """Signaltag des Laufs, aus dem der Ausgangszustand für `tag` stammt (verpasste Tage dazwischen, Jakob 09.11.2026)."""
         z = self.zustand(buch)
         if "signaltag" not in z:
             return None
-        return z.get("vor_signaltag") if z["signaltag"] == str(pd.Timestamp(tag).date()) else z["signaltag"]
+        return z.get("vor_signaltag") if self._wiederholung(buch, tag, z) else z["signaltag"]
 
     def zustand_nach_lauf(self, buch: str, tag, vor: dict, nach: dict):
         alt = self.zustand(buch)

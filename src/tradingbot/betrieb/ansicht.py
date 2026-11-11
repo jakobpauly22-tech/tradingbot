@@ -381,6 +381,39 @@ def _proz(x) -> str:
     return "–" if x is None else f"{x:+.1%}".replace(".", ",")
 
 
+def _datum(iso) -> str:
+    return "–" if not iso else f"{pd.Timestamp(iso):%d.%m.%Y}"
+
+
+def kennzahlen_verkauf(daten: dict) -> list[tuple[str, str, str, bool | None]]:
+    """Kennzahlen eines Technik-Verkaufs (Jakob 11.11.2026). Urteil bezogen auf die Aktion: True (✓) = spricht für den
+    Verkauf, False (✗) = spricht dagegen, None = ohne Urteil."""
+    def _neg(x):                                   # Trend bzw. Momentum ≤ 0 spricht für den Verkauf
+        return None if x is None else x <= 0
+
+    aus = _datum(daten.get("ausloese_tag"))
+    k: list[tuple[str, str, str, bool | None]] = [
+        ("Auslöser", f"{daten.get('grund') or '–'} am {aus}" + (" (nachgeholt)" if daten.get("nachgeholt") else ""), "", None)]
+    stop, schluss_a, kurs = daten.get("stop_kurs"), daten.get("schluss_ausloese"), daten.get("kurs")
+    if daten.get("ausstieg") == "stop" and stop is not None:
+        k += [("Stop (2 × ATR)", _eur(stop), "", None),
+              (f"Schluss am Auslösetag ({aus})", _eur(schluss_a), "", None if schluss_a is None else schluss_a <= stop),
+              ("Kurs (Schluss heute)", _eur(kurs), "", None if kurs is None else kurs <= stop)]
+    else:
+        k.append(("Kurs (Schluss heute)", _eur(kurs), "", None))
+    k += [("SMA50", _eur(daten.get("sma50")), "", None), ("SMA200", _eur(daten.get("sma200")), "", None)]
+    if daten.get("nachgeholt") and daten.get("ausstieg") == "signal":
+        if daten.get("regel") == "crossover":
+            k.append(("Abstand SMA50 zu SMA200 am Auslösetag", _proz(daten.get("abstand_ausloese")), "", _neg(daten.get("abstand_ausloese"))))
+        else:
+            k.append(("Momentum 12−1 am Auslösetag", _proz(daten.get("mom_ausloese")), "", _neg(daten.get("mom_ausloese"))))
+    k += [("Abstand SMA50 zu SMA200", _proz(daten.get("abstand")), "", _neg(daten.get("abstand"))),
+          ("Momentum 12−1", _proz(daten.get("mom")), "", _neg(daten.get("mom")))]
+    if "bestand_wert" in daten:
+        k.append(("Bestand (Wert)", _eur(daten.get("bestand_wert")), "", None))
+    return k
+
+
 def gliederung(bv, u, *, gesperrt: bool = False) -> dict:
     """Detailbereich: Kopf, Warum, Kennzahlen (Kennzahl | Wert | Branchenmedian | Urteil), Filter-Ampel, Was dagegen spricht,
     Widerlegt, wenn, Technisches (eingeklappt). Technik-Vorschläge: Kurs, SMA50, SMA200, Abstand, Stop, max. Verlust in €."""
@@ -399,6 +432,9 @@ def gliederung(bv, u, *, gesperrt: bool = False) -> dict:
     if daten.get("typ") == "fundamental":
         kennzahlen = list(daten["kennzahlen"])
         filter_ = [(n, t, f) for n, (t, f) in daten["filter"].items()]
+    elif daten.get("typ") == "technik" and daten.get("aktion") == "verkauf":
+        kennzahlen = kennzahlen_verkauf(daten)
+        zahlen = []
     elif daten.get("typ") == "technik":
         kennzahlen = [("Kurs (Schluss)", _eur(daten.get("kurs")), "", None),
                       ("SMA50", _eur(daten.get("sma50")), "", None),

@@ -255,6 +255,32 @@ def test_gliederung_technik():
 
 
 
+def test_gliederung_technik_verkauf_urteil_bezogen_auf_aktion():
+    """Verkauf (Jakob 11.11.2026): Auslöser mit Stop, Schluss am Auslösetag und Datum; ✓ = spricht für den Verkauf."""
+    from tradingbot.betrieb.buecher import details_text
+    bv, u = vorschlag(1, "crossover", "EUNN.DE", richtung=-1)
+    bv.daten = {"typ": "technik", "aktion": "verkauf", "ausstieg": "stop", "grund": "Stop 69.04", "regel": "crossover",
+                "ausloese_tag": "2026-11-06", "nachgeholt": True, "kurs": 70.27, "sma50": 68.5, "sma200": 66.0,
+                "abstand": 0.0379, "mom": 0.12, "stop_kurs": 69.04, "schluss_ausloese": 68.80, "bestand_wert": 2108.1}
+    bv.details = details_text(["Auslöser: Stop 69.04 am 06.11.2026 (nachgeholt)"],
+                              ["Kurs liegt inzwischen wieder über dem Stop (70,27 > 69,04 €); Verkauf folgt der Regel "
+                               "'verpasste Stops nachholen'", "Trend intakt (SMA50 > SMA200, Abstand 3,8%)"], "– (Ausstiege sind immer erlaubt)")
+    g = ansicht.gliederung(bv, u)
+    k = {name: (wert, urteil) for name, wert, _, urteil in g["kennzahlen"]}
+    assert g["art"] == "VERKAUF" and k["Auslöser"][0] == "Stop 69.04 am 06.11.2026 (nachgeholt)"
+    assert k["Stop (2 × ATR)"][0] == "69,04 €"
+    assert k["Schluss am Auslösetag (06.11.2026)"] == ("68,80 €", True)        # unter dem Stop: spricht für den Verkauf
+    assert k["Kurs (Schluss heute)"] == ("70,27 €", False)                     # wieder über dem Stop: spricht dagegen
+    assert k["Abstand SMA50 zu SMA200"] == ("+3,8%", False) and k["Momentum 12−1"][1] is False
+    assert g["dagegen"][0].startswith("Kurs liegt inzwischen wieder über dem Stop (70,27 > 69,04 €)")
+    # Signalende Momentum: 12−1 ≤ 0 spricht für den Verkauf
+    bv.daten = {"typ": "technik", "aktion": "verkauf", "ausstieg": "signal", "grund": "12−1 ≤ 0", "regel": "momentum",
+                "ausloese_tag": "2026-12-01", "nachgeholt": False, "kurs": 50.0, "sma50": 49.0, "sma200": 51.0,
+                "abstand": -0.039, "mom": -0.02}
+    k = {name: (wert, urteil) for name, wert, _, urteil in ansicht.gliederung(bv, u)["kennzahlen"]}
+    assert k["Momentum 12−1"] == ("-2,0%", True) and k["Abstand SMA50 zu SMA200"][1] is True and "Stop (2 × ATR)" not in k
+
+
 def _positionen_journal(journal):
     journal.messbeginn_setzen("crossover", "2026-11-03")
     journal.ausfuehrung("c1", "crossover:a", "SXR1.DE", 1, 10, 218.10, 3.0, "2026-11-04")

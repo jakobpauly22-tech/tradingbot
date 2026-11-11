@@ -114,11 +114,16 @@ def einlesen(journal, broker, fx: dict[str, float], *, kosten=None, protokoll: l
                 abw = "" if ibkr_eur is None else f", Abweichung IBKR − Modell {ibkr_eur - modell_eur:+.2f} €"
                 geb = (f"Gebühr IBKR {ibkr:.2f} {ibkr_w} (gebucht), Modell {modell_eur:.2f} €{abw}" if ibkr is not None
                        else f"Gebühr IBKR nicht gemeldet – vorläufig Modell {modell_eur:.2f} € gebucht")
-                eroe = (f"; Eröffnung {eroeffnung_kurs:.4f}, Abweichung {a['preis'] / eroeffnung_kurs - 1:+.2%}" if eroeffnung_kurs
-                        else "; Eröffnungskurs nicht verfügbar")
+                eroe = (f"; Eröffnung {eroeffnung_kurs:.4f}, Abweichung {a['preis'] / eroeffnung_kurs - 1:+.2%} {PAPER_SIMULATION}"
+                        if eroeffnung_kurs else "; Eröffnungskurs nicht verfügbar")
                 protokoll.append(f"Ausführung {a['order_ref'].split(':')[0]} {'KAUF' if a['richtung'] > 0 else 'VERKAUF'} {a['stueck']:g} × "
                                  f"{a['ticker']} @ {a['preis']:.4f} {a['waehrung']} am {a.get('boerse') or '–'} um {a['zeit']}: {geb}{eroe}")
     return sorted(set(neu))
+
+
+# Kennzeichnung der Abweichung zum Eröffnungskurs (Jakob 11.11.2026): IBKR simuliert Ausführungen im Paper-Konto, der Preis
+# kommt nicht aus der echten Eröffnungsauktion – die Abweichung ist nur eingeschränkt aussagekräftig.
+PAPER_SIMULATION = "(Paper-Simulation: IBKR simuliert Paper-Ausführungen, nur eingeschränkt aussagekräftig)"
 
 
 def _eroeffnung_fn(kurse_laden):

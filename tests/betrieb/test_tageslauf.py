@@ -182,6 +182,8 @@ def test_ausfuehrung_einlesen_und_abgleich_ok(umgebung):
     e = lauf(j, rm, jetzt=naechster, broker=BrokerAttrappe(fills=[fill], positionen=[Position("DU1", "SPYI.DE", z["stueck"], 150.0)]))
     assert e.gestoppt is None and any("Neue Ausführungen" in m for m in e.meldungen)
     assert j.bestand("real") == {"SPYI.DE": z["stueck"]}
+    # Abweichung zum Eröffnungskurs als Paper-Simulation gekennzeichnet (Jakob 11.11.2026)
+    assert any("Eröffnung" in m and "Abweichung" in m and "Paper-Simulation" in m for m in e.meldungen)
 
 
 def test_probe_freigabe_jederzeit_ohne_senden_ohne_messbeginn(umgebung):
@@ -591,3 +593,34 @@ def test_hinweis_bei_freigabe_und_im_lauf(umgebung):
     an = {**AN, "buecher": {n: {**bk, "senden_freigeschaltet": True} for n, bk in AN["buecher"].items()}}
     m = freigeben_und_senden(j, fx, BrokerAttrappe(), ABEND.replace(hour=23, minute=0), risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
     assert any("FX-Tagesschluss" in x for x in m)
+
+
+def test_wiederholter_signaltag_nach_ausfuehrung_keine_restkasse_momentum(umgebung):
+    """Probelauf 10.11.2026 11:06 (Signaltag noch 09.11.): nach Senden und Ausführung der Aufbau-Käufe startete der erneute
+    Lauf vom Stand VOR dem Signaltag und legte Restkasse an („KAUF 15 × EUNK“). Im Backtest bleibt Restkasse bis zur nächsten
+    Monatsprüfung Kasse. Korrektur 11.11.2026: nach dem Senden startet ein erneuter Lauf vom Stand nach dem Tag."""
+    j, rm = umgebung
+    mitte = datetime(2026, 11, 17, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))       # Aufbau mitten im Monat
+    lauf(j, rm, jetzt=mitte)
+    ids = [z["id"] for z in j.vorschlaege(buch="momentum") if z["status"] == "vorgeschlagen" and z["richtung"] > 0]
+    assert ids
+    an = {**AN, "buecher": {n: {**bk, "senden_freigeschaltet": True} for n, bk in AN["buecher"].items()}}
+    freigeben_und_senden(j, ids, BrokerAttrappe(), mitte, risk=rm, kurse_laden=kurse_attrappe(), konfig_betrieb=an)
+    gesendet = [z for z in j.vorschlaege(buch="momentum") if z["status"] == "gesendet"]
+    assert gesendet and j.signaltag_gesendet("momentum", "2026-11-17")
+    fills = [{"exec_id": f"m{i}", "order_ref": f"momentum:{z['id']}", "ticker": z["ticker"], "richtung": 1, "stueck": z["stueck"],
+              "preis": z["limit_preis"] * 0.98, "waehrung": "EUR", "gebuehr": 3.0, "gebuehr_waehrung": "EUR", "zeit": "2026-11-18T09:00"}
+             for i, z in enumerate(gesendet)]
+    positionen = [Position("DU1", z["ticker"], z["stueck"], 1.0) for z in gesendet]
+    vormittag = datetime(2026, 11, 18, 11, 6, tzinfo=ZoneInfo("Europe/Berlin"))   # Xetra noch offen: Signaltag 17.11.
+    e = lauf(j, rm, jetzt=vormittag, broker=BrokerAttrappe(fills=fills, positionen=positionen))
+    assert e.gestoppt is None, e.gestoppt
+    assert j.bestand("momentum") and j.kasse("momentum") > 0.2 * 10_000          # Restkasse vorhanden (1-%-Regel, ganze Stücke)
+    assert not [bv for bv, _ in e.vorschlaege if bv.vorschlag.buch == "momentum" and bv.vorschlag.richtung > 0]
+    # vor dem Senden bleibt der erneute Lauf am selben Signaltag wiederholbar (Stand vor dem Tag)
+    j2 = Journal(j.datei.parent / "zwei.sqlite")
+    e1 = lauf(j2, rm, jetzt=mitte)
+    e2 = lauf(j2, rm, jetzt=mitte)
+    erst = sorted(bv.vorschlag.ticker for bv, _ in e1.vorschlaege if bv.vorschlag.buch == "momentum")
+    assert erst and erst == sorted(bv.vorschlag.ticker for bv, _ in e2.vorschlaege if bv.vorschlag.buch == "momentum")
+    j2.schliessen()

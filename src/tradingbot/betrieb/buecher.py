@@ -4,7 +4,9 @@
 - Technik-Bücher (Crossover, Momentum): dieselbe SatelliteStrategie wie im Backtest, Zustand (Positionen, Stops,
   Sperren, Monatsprüfung) zwischen den Tagen im Journal. Ein leeres Buch baut beim ersten Lauf sofort auf: Crossover mit
   allen aktiven Signalen nach Stärke, Momentum mit dem Ergebnis der letzten Monatsprüfung; danach Monatsrhythmus am ersten
-  Xetra-Handelstag (Entscheidung Jakob 03.11.2026). Wiederholte Läufe am selben Signaltag starten vom Zustand vor dem Tag.
+  Xetra-Handelstag (Entscheidung Jakob 03.11.2026). Wiederholte Läufe am selben Signaltag starten vom Zustand vor dem Tag,
+  solange keine Order des Tages gesendet ist; danach vom Stand nach dem Tag (Restkasse bleibt bis zur nächsten Monatsprüfung
+  Kasse, wie im Backtest; Korrektur 11.11.2026).
 - Fundamental-Bücher (A: Originalscore, B: nur Qualitätshälfte): beim ersten Lauf sofort mit dem aktuellen Signal
   aufbauen, danach am ersten NYSE-Handelstag jedes Quartals mit der Auswahlregel des Backtests (20 Titel, Puffer 30,
   Drift-Band 2,5–7,5 %, höchstens 25 % je zweistelliger SIC).
@@ -159,6 +161,59 @@ def erster_handelstag_im_monat(boerse: str, tag) -> bool:
     return d == pd.Timestamp(tag).date()
 
 
+def ausstiegsart(grund: str) -> str:
+    """stop | zeit | signal – aus dem Grund im Strategieprotokoll („Stop 69.04“, „Zeit-Stop 63 Tage, …“, „SMA50 unter SMA200“)."""
+    return "stop" if grund.startswith("Stop") else ("zeit" if grund.startswith("Zeit-Stop") else "signal")
+
+
+def verkauf_begruendung(regel: str, ind: pd.DataFrame, tag, ausloese_tag, grund: str,
+                        stop: float | None) -> tuple[dict, list[str], list[str]]:
+    """Kennzahlen, Zahlen und „Was dagegen spricht“ für einen Technik-Verkauf (Jakob 11.11.2026).
+
+    Gezeigt werden die Werte, die den Ausstieg ausgelöst haben: beim Stop Stop-Kurs, Schluss am Auslösetag und Datum, beim
+    Signalende SMA50/SMA200 (Crossover) bzw. 12−1 (Momentum). Das Urteil ✓/✗ (betrieb/ansicht.kennzahlen_verkauf) bezieht
+    sich auf die Aktion: ✓ = spricht für den Verkauf. „Was dagegen spricht“ wird aus der Lage am aktuellen Tag gefüllt (Kurs
+    wieder über dem Stop, Trend intakt, 12−1 positiv); der Verkauf folgt trotzdem der Regel (Ausstiege sind immer erlaubt,
+    verpasste Ausstiege werden nachgeholt)."""
+    tag, ausloese_tag = pd.Timestamp(tag), pd.Timestamp(ausloese_tag)
+    z = ind.loc[tag]
+    za = ind.loc[ausloese_tag] if ausloese_tag in ind.index else z
+    nachgeholt = ausloese_tag < tag
+    art = ausstiegsart(grund)
+    if stop is None and art == "stop":
+        try:
+            stop = float(grund.split()[1])
+        except (IndexError, ValueError):
+            stop = None
+
+    def _f(x):
+        return None if x is None or (isinstance(x, float) and math.isnan(x)) else float(x)
+
+    kurs, sma50, sma200, mom = _f(z["close"]), _f(z["sma_schnell"]), _f(z["sma_langsam"]), _f(z["mom"])
+    abstand = sma50 / sma200 - 1 if sma50 is not None and sma200 else None
+    daten = {"typ": "technik", "aktion": "verkauf", "ausstieg": art, "grund": grund, "regel": regel,
+             "ausloese_tag": str(ausloese_tag.date()), "nachgeholt": nachgeholt, "kurs": kurs, "sma50": sma50, "sma200": sma200,
+             "abstand": abstand, "mom": mom, "stop_kurs": stop, "schluss_ausloese": _f(za["close"])}
+    if nachgeholt:
+        a50, a200 = _f(za["sma_schnell"]), _f(za["sma_langsam"])
+        daten["abstand_ausloese"] = a50 / a200 - 1 if a50 is not None and a200 else None
+        daten["mom_ausloese"] = _f(za["mom"])
+    zahlen = [f"Auslöser: {grund} am {ausloese_tag:%d.%m.%Y}" + (" (nachgeholt)" if nachgeholt else "")]
+    if art == "stop" and stop is not None:
+        zahlen.append(f"Stop {_z(stop)} €, Schluss am Auslösetag {_z(daten['schluss_ausloese'])} €")
+    zahlen.append(f"Schluss heute {_z(kurs)} €, SMA50 {_z(sma50)} €, SMA200 {_z(sma200)} € (Abstand {_pz(abstand)}), 12−1 {_pz(mom)}")
+    regel_nachholen = "; Verkauf folgt der Regel 'verpasste Ausstiege nachholen'" if nachgeholt and art == "signal" else ""
+    dagegen = []
+    if art == "stop" and stop is not None and kurs is not None and kurs > stop:
+        dagegen.append(f"Kurs liegt inzwischen wieder über dem Stop ({_z(kurs)} > {_z(stop)} €); Verkauf folgt der Regel "
+                       "'verpasste Stops nachholen'" if nachgeholt else f"Kurs liegt über dem Stop ({_z(kurs)} > {_z(stop)} €)")
+    if regel == "crossover" and abstand is not None and abstand > 0:
+        dagegen.append(f"Trend intakt (SMA50 > SMA200, Abstand {_pz(abstand)})" + regel_nachholen)
+    if regel == "momentum" and mom is not None and mom > 0:
+        dagegen.append(f"Momentum 12−1 positiv ({_pz(mom)})" + regel_nachholen)
+    return daten, zahlen, dagegen
+
+
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
                 gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0,
@@ -175,6 +230,10 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
     tag = pd.Timestamp(tag)
     s = SatelliteStrategie([regel], kurse_eur, konfig_technik)
     zustand_laden(s, zustand, tag, erster_handelstag_im_monat("xetra", tag))
+    # abgelehnte/verfallene Käufe aus dem Zustand nach dem Tag (erneuter Lauf nach dem Senden, 11.11.2026) gehen über den
+    # Nachkauf, solange das Signal gilt – nicht als „Kauf unterwegs“ liegen lassen
+    for t in [t for t, p in s.pos.items() if p.kauf_tag is None and t in nachkauf and bestand.get(t, 0) <= 0]:
+        del s.pos[t]
     m = Marktdaten(kurse_eur)
     gehalten = {t: v for t, v in bestand.items() if v > 0}
     nachgeholt: dict[str, tuple[pd.Timestamp, str]] = {}
@@ -240,11 +299,12 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                 these = f"{regel}: Ausstieg {t} – {grund}."
                 bv = _verkauf(buch, tag, t, bestand[t], kurs_eur, w_ccy, "etf", these, fx=f)
                 bv.kern = f"Ausstieg: {grund}."
-                bv.daten = {"typ": "technik", "kurs": kurs_eur, "sma50": float(z["sma_schnell"]), "sma200": float(z["sma_langsam"]),
-                            "abstand": (float(z["sma_schnell"]) / float(z["sma_langsam"]) - 1) if z["sma_langsam"] else None,
-                            "bestand_wert": bestand[t] * kurs_eur}
-                bv.details = details_text([f"Schluss {_z(kurs_eur)} €, SMA50 {_z(z['sma_schnell'])} €, SMA200 {_z(z['sma_langsam'])} €",
-                                           f"Bestand {bestand[t]:g} Stück ≈ {_z(bestand[t] * kurs_eur)} €"], [],
+                d_aus, g_roh = nachgeholt.get(t, (tag, next((p["grund"] for p in reversed(s.protokoll) if p["ticker"] == t
+                                                             and pd.Timestamp(p["tag"]) == tag and p["aktion"] == "verkaufen"), grund)))
+                pos = s.pos.get(t)
+                daten, zahlen, dagegen = verkauf_begruendung(regel, s.ind[t], tag, d_aus, g_roh, pos.stop if pos else None)
+                bv.daten = {**daten, "bestand_wert": bestand[t] * kurs_eur}
+                bv.details = details_text(zahlen + [f"Bestand {bestand[t]:g} Stück ≈ {_z(bestand[t] * kurs_eur)} €"], dagegen,
                                           "– (Ausstiege sind immer erlaubt)")
                 vorschlaege.append(bv)
             elif w > 0:

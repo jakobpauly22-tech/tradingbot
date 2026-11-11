@@ -98,3 +98,39 @@ def test_technikbuch_titel_unterwegs_gesperrt():
     tag = kurse["A.DE"].index[-1]
     tv, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 160.0}, {}, {}, 10_000.0, {}, {}, k, 0.02, GEB, gesperrt_titel={"A.DE"})
     assert not [b for b in tv if b.vorschlag.ticker == "A.DE"]
+
+
+def test_verkauf_begruendung_stop_nachgeholt_und_signalende():
+    """Jakob 11.11.2026: Grund-Kennzahlen des Verkaufs und „Was dagegen spricht“ automatisch."""
+    from tradingbot.betrieb.buecher import verkauf_begruendung
+    from tradingbot.engines.technik.strategien import berechne_indikatoren
+    k = lade_konfiguration("technik")
+    schluss = np.linspace(50, 80, 300)
+    schluss[-3] = 60.0                                              # Einbruch unter den Stop am drittletzten Tag
+    ind = berechne_indikatoren(_kerzen(schluss), k)
+    tag, aus = ind.index[-1], ind.index[-3]
+    daten, zahlen, dagegen = verkauf_begruendung("crossover", ind, tag, aus, "Stop 69.04", 69.04)
+    assert daten["aktion"] == "verkauf" and daten["ausstieg"] == "stop" and daten["nachgeholt"]
+    assert daten["schluss_ausloese"] == 60.0 and daten["stop_kurs"] == 69.04 and daten["ausloese_tag"] == str(aus.date())
+    assert any(f"am {aus:%d.%m.%Y} (nachgeholt)" in z for z in zahlen)
+    assert dagegen[0] == "Kurs liegt inzwischen wieder über dem Stop (80,00 > 69,04 €); Verkauf folgt der Regel 'verpasste Stops nachholen'"
+    assert dagegen[1].startswith("Trend intakt (SMA50 > SMA200")
+    # Stop ohne gespeicherten Stop-Kurs: aus dem Grund gelesen
+    assert verkauf_begruendung("crossover", ind, tag, aus, "Stop 69.04", None)[0]["stop_kurs"] == 69.04
+    # Signalende am selben Tag (fallender Kurs): nichts dagegen
+    ind2 = berechne_indikatoren(_kerzen(np.linspace(80, 50, 300)), k)
+    d2, _, dagegen2 = verkauf_begruendung("momentum", ind2, ind2.index[-1], ind2.index[-1], "12−1 ≤ 0", None)
+    assert d2["ausstieg"] == "signal" and not d2["nachgeholt"] and d2["mom"] < 0 and dagegen2 == []
+
+
+def test_technikbuch_verkauf_traegt_verkaufsdaten():
+    k = lade_konfiguration("technik")
+    kurse = {"A.DE": _kerzen(np.r_[np.linspace(100, 160, 280), np.linspace(160, 90, 40)])}
+    tag = kurse["A.DE"].index[-1]
+    zustand = {"positionen": {"A.DE": {"regel": "crossover", "signal_tag": str(kurse["A.DE"].index[200].date()),
+                                       "kauf_tag": str(kurse["A.DE"].index[201].date()), "stop": 150.0, "atr_signal": 2.0}}}
+    v, _ = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 90.0}, {}, {}, 0.0, {"A.DE": 10}, zustand, k, 0.02, GEB)
+    assert len(v) == 1 and v[0].vorschlag.richtung < 0
+    d = v[0].daten
+    assert d["aktion"] == "verkauf" and d["stop_kurs"] == 150.0 and d["bestand_wert"] == pytest.approx(900.0)
+    assert "Auslöser:" in v[0].details
