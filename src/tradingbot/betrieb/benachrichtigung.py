@@ -121,6 +121,7 @@ def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit:
     for b, befunde in sorted(erg.befunde.items()):
         zeilen.append(f"Datenprüfung: {b} ohne Vorschläge ({len(befunde)} Befund{'e' if len(befunde) != 1 else ''})")
 
+    zeilen += kassenzeilen(journal, eurobetraege=eurobetraege, seit=seit)
     if seit:
         for status, wort in (("abgelehnt", "Abgelehnt"), ("verfallen", "Verfallen")):
             rows = journal.db.execute("SELECT buch, ticker, art FROM vorschlaege WHERE status=? AND aktualisiert>=? ORDER BY buch, ticker",
@@ -147,6 +148,37 @@ def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit:
         else:
             zeilen.append(f"  {buch}: {_prozent(w / start - 1)}{modell}{vortag}{stand}")
     return "\n".join(zeilen)
+
+
+def kassenzeilen(journal, *, eurobetraege: bool = True, seit: str | None = None) -> list[str]:
+    """Dividenden seit dem letzten Lauf (je Titel und Buch, netto mit Quellensteuer), offene Dividenden-Vormerkungen und
+    „vermutet“-Übernahmen in die Kassenbasis (A0, Jakob 12.11.2026). Ohne Eurobeträge nur Titel, Buch und Status."""
+    zeilen = []
+    grenze = seit or ""
+    rows = journal.db.execute(
+        "SELECT ticker, buch, waehrung, SUM(betrag) AS netto, SUM(CASE WHEN art='quellensteuer' THEN betrag ELSE 0 END) AS qst "
+        "FROM kassenbuchungen WHERE gebucht>=? GROUP BY ticker, buch, waehrung ORDER BY ticker, buch", (grenze,)).fetchall()
+    for r in rows[:15]:
+        if eurobetraege:
+            qst = f" (QSt {_de(-float(r['qst']))})" if abs(float(r["qst"])) > 1e-9 else ""
+            zeilen.append(f"Dividende {r['ticker']}: {r['buch']} {_de(float(r['netto']))} {r['waehrung']} netto{qst}")
+        else:
+            zeilen.append(f"Dividende gebucht: {r['ticker']} ({r['buch']})")
+    konto = journal.zustand("_konto")
+    for v in konto.get("dividende_vormerkungen", []):
+        zeilen.append(f"Dividende vorgemerkt, Flex-Beleg folgt: {v['waehrung']} {_de(float(v['betrag']))} (seit {v['bis']})" if eurobetraege
+                      else f"Dividende vorgemerkt, Flex-Beleg folgt ({v['waehrung']}, seit {v['bis']})")
+    for e in konto.get("buchungen_ohne_buchbezug", []):
+        zeit = e.get("zeit") or e.get("tag", "")
+        if seit and zeit < seit:
+            continue
+        if eurobetraege:
+            posten = e.get("posten") or []
+            betraege = ", ".join(f"{p['waehrung']} {'+' if float(p['betrag']) >= 0 else '−'}{_de(abs(float(p['betrag'])))}" for p in posten)
+            zeilen.append("Kassendifferenz übernommen (Zinsen/Gebühren vermutet)" + (f": {betraege}" if betraege else ""))
+        else:
+            zeilen.append("Kassendifferenz übernommen")
+    return zeilen
 
 
 def fehlermeldung(was: str, ausnahme: BaseException, jetzt: datetime) -> str:

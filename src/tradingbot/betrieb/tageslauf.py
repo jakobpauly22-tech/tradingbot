@@ -217,14 +217,23 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
       gesunken, und die Zinsbilanz (Gutschrift + aktueller Zinsstand − letzter Zinsstand) liegt zwischen −0,05 € und
       Tageszins × Tage seit dem letzten Lauf + 1 €. Tageszins geschätzt aus der Veränderung der aufgelaufenen Zinsen
       zwischen zwei Läufen (Kalendertage). → Kassenbasis, Protokoll, kein Stopp. Bücher erhalten keine Zinsen (wie im Backtest).
-    - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert.
+    - Dividende am Zahltag (A0, Jakob 12.11.2026): Die aufgelaufenen Dividenden (AccruedDividend) sind gesunken. Immer:
+      Abnahme und Kassenzugang für die Prüfung brutto/netto festhalten (`dividende_abnahmen`). Nur wenn
+      `dividenden.vormerkung` an und der Ausweis geprüft ist: Zugang passt zur Abnahme → Vormerkung „Beleg folgt“ (kein
+      Stopp, keine Buchung; Bestätigung durch Flex in betrieb/dividenden.py). Dividende und Zinsgutschrift am selben Tag:
+      Rest nach der Dividende muss die Zinsregel erfüllen.
+    - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert
+      (mit Zeitfenster, damit ein späterer Flex-Beleg die Übernahme wieder ausgleicht).
     - Alles andere über 10 € stoppt."""
+    from tradingbot.betrieb import dividenden
+
     if not hasattr(broker, "kasse_je_waehrung"):
         return [], ""
     ibkr = broker.kasse_je_waehrung()
     if not ibkr:
         return [], "Kassen-Abgleich: IBKR meldet keine Kontokasse (accountValues leer) – nicht geprüft"
     zinsen = broker.aufgelaufene_zinsen() if hasattr(broker, "aufgelaufene_zinsen") else None
+    div_jetzt = broker.aufgelaufene_dividenden() if hasattr(broker, "aufgelaufene_dividenden") else None
     heute = pd.Timestamp(heute if heute is not None else pd.Timestamp.now()).normalize()
     bot: dict[str, float] = {}
     for n in buecher:
@@ -238,6 +247,9 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
         konto.update({"kassenbasis": basis, "festgehalten": str(heute.date())})
         if zinsen is not None:
             konto["aufgelaufene_zinsen"], konto["zinsstand_tag"] = zinsen, str(heute.date())
+        if div_jetzt is not None:
+            konto["aufgelaufene_dividenden"] = div_jetzt
+        konto["letzter_kassenabgleich"] = str(heute.date())
         journal.zustand_speichern("_konto", konto)
         journal.ereignis("kassenbasis", "Kassenbasis festgehalten: " + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()))
         return [], "Kassen-Abgleich: Kassenbasis erstmals festgehalten (" + ", ".join(f"{w} {v:,.2f}" for w, v in basis.items()) + \
@@ -247,15 +259,36 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
     vorher = konto.get("aufgelaufene_zinsen")
     tage = (heute - pd.Timestamp(konto["zinsstand_tag"])).days if konto.get("zinsstand_tag") else 0
     tageszins = konto.get("tageszins") or {}
-    abw, uebernommen, zinsbuchungen = [], [], []
-    for w in sorted(set(ibkr) | set(bot) | set(basis)):
-        soll = basis.get(w, 0.0) + bot.get(w, 0.0)
+    heute_text = str(heute.date())
+    von = konto.get("letzter_kassenabgleich") or konto.get("zinsstand_tag") or str((heute - pd.Timedelta(days=10)).date())
+    div_vorher = konto.get("aufgelaufene_dividenden")
+    dcfg = dividenden.einstellungen(b)
+    vorgemerkt = dividenden.vorgemerkt_je_waehrung(konto)
+    abw, uebernommen, zinsbuchungen, vormerkungen, abnahmen, posten = [], [], [], [], [], []
+    for w in sorted(set(ibkr) | set(bot) | set(basis) | set(vorgemerkt)):
+        soll = basis.get(w, 0.0) + bot.get(w, 0.0) + vorgemerkt.get(w, 0.0)
         d = ibkr.get(w, 0.0) - soll
         if abs(d) <= tol:
             continue
         abnahme = (vorher.get(w, 0.0) - zinsen.get(w, 0.0)) if (vorher is not None and zinsen is not None) else None
         grenze_bilanz = zinsbilanz_grenze(tageszins.get(w, 0.0), tage)
         bilanz = None if abnahme is None else zinsbilanz(d, vorher.get(w, 0.0), zinsen.get(w, 0.0))
+        div_ab = (div_vorher.get(w, 0.0) - div_jetzt.get(w, 0.0)) if (div_vorher is not None and div_jetzt is not None) else 0.0
+        if div_ab > tol and d > 0:
+            abnahmen.append({"waehrung": w, "abnahme": round(div_ab, 2), "kassenzugang": round(d, 2), "von": von, "bis": heute_text})
+            if dcfg["scharf"]:
+                betrag = dividenden.vormerkbar(d, div_ab, dcfg, tol)
+                rest = d - div_ab
+                if betrag is None and dcfg["ausweis"] == "netto" and abnahme is not None and \
+                        zinsbuchung_belegt(rest, vorher.get(w, 0.0), zinsen.get(w, 0.0), tageszins.get(w, 0.0), tage, tol):
+                    betrag = div_ab                                   # Dividende und Zinsgutschrift am selben Tag
+                    basis[w] = basis.get(w, 0.0) + rest
+                    zinsbuchungen.append(f"{w} {rest:+,.2f} (neben Dividende {div_ab:,.2f}; aufgelaufene Zinsen "
+                                         f"{vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f})")
+                if betrag is not None:
+                    vormerkungen.append({"waehrung": w, "betrag": round(betrag, 2), "von": von, "bis": heute_text,
+                                         "abnahme": round(div_ab, 2)})
+                    continue
         if abnahme is not None and zinsbuchung_belegt(d, vorher.get(w, 0.0), zinsen.get(w, 0.0), tageszins.get(w, 0.0), tage, tol):
             basis[w] = basis.get(w, 0.0) + d                # belegte Zinsbuchung (Jakob 09./10.11.2026)
             zinsbuchungen.append(f"{w} {d:+,.2f} (aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}; Zinsbilanz "
@@ -264,6 +297,7 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
             # Buchung ohne Buchbezug (Zinsen, Kontogebühren; Jakob 04.11.2026): in die Kassenbasis, protokolliert
             basis[w] = basis.get(w, 0.0) + d
             uebernommen.append(f"{w} {d:+,.2f}")
+            posten.append({"waehrung": w, "betrag": round(d, 2)})
         else:
             zins = ("aufgelaufene Zinsen: kein Vergleichsstand" if abnahme is None else
                     f"aufgelaufene Zinsen {vorher.get(w, 0.0):,.2f} → {zinsen.get(w, 0.0):,.2f}, Erhöhung passt nicht als Zinsbuchung "
@@ -273,9 +307,9 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
     if abw:
         return abw, ""
     konto["kassenbasis"] = basis
-    heute_text = str(heute.date())
     if uebernommen:
-        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": heute_text, "betraege": uebernommen})
+        konto.setdefault("buchungen_ohne_buchbezug", []).append({"tag": heute_text, "betraege": uebernommen, "posten": posten, "von": von,
+                                                                "zeit": datetime.now().isoformat(timespec="seconds"), "belegt": []})
         journal.ereignis("kassenbasis", "Buchung ohne Buchbezug (Zinsen/Kontogebühren vermutet) in die Kassenbasis: " + ", ".join(uebernommen))
     if zinsbuchungen:
         konto.setdefault("zinsbuchungen", []).append({"tag": heute_text, "betraege": zinsbuchungen})
@@ -288,12 +322,29 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
                     tageszins[w] = (z - vorher.get(w, 0.0)) / tage
             konto["tageszins"] = tageszins
         konto["aufgelaufene_zinsen"], konto["zinsstand_tag"] = zinsen, str(heute.date())
+    if div_jetzt is not None:
+        if div_vorher is None and any(abs(v) > 1e-9 for v in div_jetzt.values()):
+            journal.ereignis("dividende", "AccruedDividend gemeldet in: " + ", ".join(sorted(w for w, v in div_jetzt.items() if abs(v) > 1e-9)))
+        konto["aufgelaufene_dividenden"] = div_jetzt
+    if abnahmen:
+        konto.setdefault("dividende_abnahmen", []).extend(abnahmen)
+    if vormerkungen:
+        konto.setdefault("dividende_vormerkungen", []).extend(vormerkungen)
+        journal.ereignis("dividende", "Dividende vorgemerkt, Flex-Beleg folgt: "
+                         + ", ".join(f"{v['waehrung']} {v['betrag']:,.2f}" for v in vormerkungen))
+    konto["letzter_kassenabgleich"] = heute_text
     journal.zustand_speichern("_konto", konto)
     text = "Kassen-Abgleich: Kasse je Währung stimmt mit IBKR überein (" + ", ".join(f"{w} {ibkr.get(w, 0.0):,.2f}" for w in sorted(ibkr)) + ")"
     if zinsbuchungen:
         text += "; Zinsbuchung belegt, in die Kassenbasis (Bücher ohne Zinsen): " + ", ".join(zinsbuchungen)
     if uebernommen:
         text += "; Buchung ohne Buchbezug in die Kassenbasis übernommen: " + ", ".join(uebernommen)
+    if vormerkungen:
+        text += "; Dividende vorgemerkt (AccruedDividend gesunken), Flex-Beleg folgt: " + \
+            ", ".join(f"{v['waehrung']} {v['betrag']:,.2f}" for v in vormerkungen)
+    if abnahmen and not dcfg["scharf"]:
+        text += "; AccruedDividend gesunken (" + ", ".join(f"{a['waehrung']} {a['abnahme']:,.2f}, Kassenzugang {a['kassenzugang']:,.2f}"
+                                                          for a in abnahmen) + ") – für die Prüfung brutto/netto festgehalten, Vormerkung nicht scharf"
     return [], text
 
 
@@ -431,8 +482,12 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             offen_liste = broker.offene_orders()
             offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offen_liste]
             positionen = broker.positionen()
+            from tradingbot.betrieb import dividenden, nachtrag
+            flex = nachtrag.flex_aus_env() if flex == "env" else flex          # ein Flex-Bericht je Lauf
             # Ausführungen außerhalb des API-Zeitfensters (verpasste Abende, Jakob 09.11.2026): erst klären, dann verfallen
             stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg, jetzt)
+            if not stopp:                                  # Bardividenden mit Flex-Beleg vor dem Kassenabgleich (A0, 12.11.2026)
+                stopp = dividenden.dividenden_klaeren(journal, b, flex, fx, jetzt.date(), erg.meldungen)
             if stopp:
                 erg.gestoppt = stopp
                 erg.abgleich = "gestoppt"

@@ -131,6 +131,10 @@ def ampel(erg, journal, betrieb: dict, *, probe: bool, gateway: dict, jetzt: dat
                             stand + (f" – Datenbefund in {', '.join(sorted(erg.befunde))}" if erg.befunde else "")))
     if erg.gestoppt:
         lampen.append(Lampe("Abgleich", ROT, "GESTOPPT – " + erg.gestoppt[:160]))
+    vormerkungen = journal.zustand("_konto").get("dividende_vormerkungen") or []
+    if vormerkungen:                                 # A0 (Jakob 12.11.2026): Dividende am Zahltag, Flex-Beleg folgt
+        lampen.append(Lampe("Dividenden", GELB, "vorgemerkt, Flex-Beleg folgt: " + ", ".join(
+            f"{v['waehrung']} {float(v['betrag']):,.2f} seit {v['bis']}" for v in vormerkungen)))
     for buch in betrieb["buecher"]:
         an = buch_freigeschaltet(betrieb, buch)
         lampen.append(Lampe(f"Senden {buch}", GRAU if probe else (GRUEN if an else GRAU), "Probe" if probe else ("an" if an else "aus")))

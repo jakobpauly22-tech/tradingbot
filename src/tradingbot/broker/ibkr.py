@@ -213,6 +213,16 @@ class IbkrBroker:
                 werte[w.tag][w.currency] = werte[w.tag].get(w.currency, 0.0) + float(w.value)
         return werte["AccruedCash"] or werte["$LEDGER-AccruedCash"]
 
+    def aufgelaufene_dividenden(self) -> dict[str, float]:
+        """Aufgelaufene, noch nicht gezahlte Dividenden je Währung (accountValues „AccruedDividend“, sonst
+        „$LEDGER-AccruedDividend“, ohne BASE). Für die Vormerkung am Zahltag (A0, Jakob 12.11.2026); ob IBKR den Wert
+        brutto oder nach Quellensteuer ausweist, prüft der Tageslauf am ersten echten Fall (betrieb/dividenden.py)."""
+        werte: dict[str, dict[str, float]] = {"AccruedDividend": {}, "$LEDGER-AccruedDividend": {}}
+        for w in self.ib.accountValues():
+            if w.tag in werte and w.currency and w.currency != "BASE":
+                werte[w.tag][w.currency] = werte[w.tag].get(w.currency, 0.0) + float(w.value)
+        return werte["AccruedDividend"] or werte["$LEDGER-AccruedDividend"]
+
     def offene_orders(self) -> list[OffeneOrder]:
         """Alle offenen Orders des Kontos, auch die anderer Client-IDs (reqAllOpenOrders, reine Abfrage; Korrektur 10.11.2026:
         die Probe mit Client-ID 94 sah die Orders von Client 1 nicht und hielt sie für verfallen)."""

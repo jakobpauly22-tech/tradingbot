@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS dividenden (buch TEXT, ticker TEXT, ex_tag TEXT, stue
 CREATE TABLE IF NOT EXISTS ereignisse (zeit TEXT NOT NULL, art TEXT NOT NULL, buch TEXT, text TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS zustand (buch TEXT PRIMARY KEY, json TEXT NOT NULL, aktualisiert TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS buchwerte (buch TEXT, tag TEXT, wert REAL, kasse REAL, PRIMARY KEY (buch, tag));
+CREATE TABLE IF NOT EXISTS kassenbuchungen (
+    beleg_id TEXT NOT NULL, buch TEXT NOT NULL, art TEXT NOT NULL, ticker TEXT, conid INTEGER, action_id TEXT, ex_tag TEXT,
+    zahltag TEXT, waehrung TEXT NOT NULL, betrag REAL NOT NULL, betrag_eur REAL NOT NULL, stueck REAL, satz REAL, steuer TEXT,
+    quelle TEXT, gebucht TEXT NOT NULL, PRIMARY KEY (beleg_id, buch));
 CREATE TABLE IF NOT EXISTS tausche (exec_id TEXT PRIMARY KEY, order_ref TEXT, buch TEXT, von TEXT, nach TEXT, betrag_von REAL,
     betrag_nach REAL, gebuehr_eur REAL, zeit TEXT);
 """
@@ -95,7 +99,8 @@ class Journal:
                                  (buch,)).fetchone()["k"]
         div = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
         tausch = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur), 0) AS t FROM tausche WHERE buch=?", (buch,)).fetchone()["t"]
-        return self.startkapital(buch) + handel + div - tausch
+        bar = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) FROM kassenbuchungen WHERE buch=?", (buch,)).fetchone()[0]
+        return self.startkapital(buch) + handel + div - tausch + bar
 
     def gebuehren_differenz(self, buch: str) -> float:
         """Gebucht (IBKR) minus Modellgebühr in EUR, über alle Ausführungen und Tausche des Buchs (fehlende Modellwerte = 0)."""
@@ -128,6 +133,8 @@ class Journal:
             else:
                 kassen["EUR"] -= z["gebuehr_eur"]
         kassen["EUR"] += self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
+        for z in self.db.execute("SELECT waehrung, SUM(betrag) AS b FROM kassenbuchungen WHERE buch=? GROUP BY waehrung", (buch,)):
+            kassen[z["waehrung"]] = kassen.get(z["waehrung"], 0.0) + z["b"]   # Dividenden/Quellensteuer in Originalwährung (A0)
         return kassen
 
     def tausch(self, exec_id, order_ref, von, nach, betrag_von, betrag_nach, gebuehr_eur, zeit, *, gebuehr_ibkr=None,
@@ -320,6 +327,21 @@ class Journal:
                 raise ValueError(f"{e}: keine Ausführung mit angenommener Gebühr – wird nicht entfernt")
             self.db.execute("DELETE FROM ausfuehrungen WHERE exec_id=?", (e,))
         self.db.commit()
+
+    def beleg_gebucht(self, beleg_id: str) -> bool:
+        return self.db.execute("SELECT 1 FROM kassenbuchungen WHERE beleg_id=? LIMIT 1", (beleg_id,)).fetchone() is not None
+
+    def kassenbuchung(self, **z) -> bool:
+        """Bardividende, Ersatzzahlung oder Quellensteuer je Buch aus einem Flex-Beleg (A0, Jakob 12.11.2026); einmal je Beleg und Buch."""
+        z.setdefault("gebucht", datetime.now().isoformat(timespec="seconds"))
+        spalten = ", ".join(z)
+        neu = self.db.execute(f"INSERT OR IGNORE INTO kassenbuchungen ({spalten}) VALUES ({', '.join('?' * len(z))})",
+                              tuple(z.values())).rowcount > 0
+        self.db.commit()
+        return neu
+
+    def kassenbuchungen(self, where: str = "1", params: tuple = ()) -> list[sqlite3.Row]:
+        return self.db.execute(f"SELECT * FROM kassenbuchungen WHERE {where} ORDER BY gebucht, beleg_id, buch", params).fetchall()
 
     def dividende(self, buch, ticker, ex_tag, stueck, betrag_eur) -> bool:
         neu = self.db.execute("INSERT OR IGNORE INTO dividenden VALUES (?,?,?,?,?)", (buch, ticker, str(ex_tag), stueck, betrag_eur)).rowcount > 0

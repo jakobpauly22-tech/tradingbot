@@ -126,13 +126,29 @@ def flex_aus_env():
     if not token or not abfrage:
         return None
 
-    def laden() -> tuple[list[dict], str]:
-        from ib_async import FlexReport
+    zwischenspeicher: dict = {}
 
-        bericht = FlexReport(token=token, queryId=abfrage)
-        kopf = next(iter(bericht.root.iter("FlexStatement")), None)
-        stand = (kopf.attrib.get("whenGenerated") if kopf is not None else "") or "unbekannt"
-        return [dict(t.attrib) for t in bericht.root.iter("Trade")], f"{QUELLE_FLEX} {abfrage}, erstellt {stand}"
+    def bericht():
+        """Einmal je Lauf abrufen (Trades und Bargeldtransaktionen aus demselben Bericht)."""
+        if "root" not in zwischenspeicher:
+            from ib_async import FlexReport
+
+            root = FlexReport(token=token, queryId=abfrage).root
+            kopf = next(iter(root.iter("FlexStatement")), None)
+            stand = (kopf.attrib.get("whenGenerated") if kopf is not None else "") or "unbekannt"
+            zwischenspeicher.update(root=root, quelle=f"{QUELLE_FLEX} {abfrage}, erstellt {stand}",
+                                    bis=(kopf.attrib.get("toDate") if kopf is not None else None))
+        return zwischenspeicher
+
+    def laden() -> tuple[list[dict], str]:
+        b = bericht()
+        return [dict(t.attrib) for t in b["root"].iter("Trade")], b["quelle"]
+
+    def bargeld() -> tuple[list[dict], str]:
+        """Bargeldtransaktionen (Dividenden, Quellensteuer, Zinsen, Einzahlungen; A0, Jakob 12.11.2026)."""
+        b = bericht()
+        return [dict(t.attrib) for t in b["root"].iter("CashTransaction")], b["quelle"]
+    laden.bargeld = bargeld
     return laden
 
 

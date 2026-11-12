@@ -121,6 +121,14 @@ benachrichtigung:
   eurobetraege: true                   # false (Echtbetrieb): nur Prozente und Status, keine Eurobeträge
   zeitlimit_s: 8                       # je Versuch; ein Fehler beim Melden bricht den Tageslauf nie ab
 
+dividenden:
+  # A0, Jakob 12.11.2026 (tradingbot/betrieb/dividenden.py): Bardividenden und Quellensteuer nur mit Flex-Beleg, automatisch
+  # mit Meldung gebucht, aufgeteilt nach Bestand je Buch vor dem Ex-Tag. Steuerliche Markierungen „zu prüfen“.
+  vormerkung: false                    # Zahltag: Kassenzugang passend zur Abnahme von AccruedDividend vormerken statt stoppen
+  accrued_dividend_ausweis: unbekannt  # netto | brutto – erst nach der Prüfung am ersten echten Fall eintragen (Meldung im Lauf)
+  vormerkung_frist_handelstage: 3      # ohne Flex-Bestätigung danach: Stopp und Sofortmeldung
+  quellensteuer_max: 0.30              # nur bei Ausweis brutto: Kassenzugang zwischen Abnahme × (1 − 0,30) und Abnahme
+
 datenpruefung:                         # vor jedem Tageslauf (Jakob 02.11.2026); bei Befund an diesem Tag keine Vorschläge
   schluss_vom_letzten_handelstag: true # je Börse (Xetra, NYSE) die letzte abgeschlossene Sitzung
   max_tagessprung: 0.15                # größere Sprünge ohne Kapitalmaßnahme (Split, Ausschüttung) melden

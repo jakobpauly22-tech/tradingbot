@@ -264,3 +264,30 @@ Modul `betrieb/benachrichtigung.py`, Schalter in `config/betrieb.yaml` (`benachr
 - **Verbindungstest:** `.venv\Scripts\python tools\verbindungstest.py` schickt nur „Verbindung ok“ per Telegram und
   pingt Healthchecks über `…/log` (Eintrag im Protokoll ohne Statuswechsel, überdeckt also keinen ausgefallenen
   Abendlauf). Liest weder Journal noch Gateway; Exit-Code 1, wenn etwas nicht eingerichtet ist oder fehlschlägt.
+
+## Bardividenden und Quellensteuer (A0, Jakob 12.11.2026)
+
+Modul `betrieb/dividenden.py`, Einstellungen in `config/betrieb.yaml` (`dividenden`), Tabelle `kassenbuchungen` im Journal.
+
+- **Beleg:** nur Flex-Bargeldtransaktionen (*Dividends*, *Payment In Lieu Of Dividends*, *Withholding Tax*). Kein Buchen
+  ohne Flex-Beleg. Gebucht wird automatisch mit Meldung, je `transactionID` und Buch genau einmal; Storno- und
+  Korrekturzeilen sind eigene Belege mit Vorzeichen.
+- **Aufteilung:** Bestand je Buch zum Handelsschluss vor dem Ex-Tag (Kauf am Ex-Tag: kein Anspruch). Probe:
+  Buchstücke × Satz je Stück (aus der Flex-Beschreibung) = Brutto auf 0,05; sonst keine Buchung und Stopp
+  („Dividendenbeleg nicht verbuchbar“). Anteilig nach Stück, auf Cent gerundet, Rest an das letzte Buch. Quellensteuer
+  folgt der Aufteilung der zugehörigen Dividende (actionID, sonst Conid und Zahltag).
+- **Währung:** in der Originalwährung (USD-Dividende in die USD-Kasse des Buchs), Eurowert zum Kurs des Laufs.
+- **Steuer:** jede Buchung trägt einen Hinweis „zu prüfen“ (Kapitalertrag § 20 Abs. 1 Nr. 1 EStG; Quellensteuer
+  anrechenbar nach § 32d Abs. 5 EStG; Ersatzzahlung).
+- **Zahltag:** Flex reicht nur bis zum Vortag. Der Kassenabgleich hält jede Abnahme von `AccruedDividend` mit dem
+  Kassenzugang fest. Ist `dividenden.vormerkung` an und `accrued_dividend_ausweis` (netto/brutto) eingetragen, wird ein
+  passender Zugang als „Flex-Beleg folgt“ vorgemerkt statt übernommen oder gestoppt; Dividende und Zinsgutschrift am
+  selben Tag: der Rest muss die Zinsregel erfüllen. Bestätigt Flex die Vormerkung nicht innerhalb von 3 Xetra-
+  Handelstagen oder weicht Flex-Netto über 0,05 ab: Stopp und Sofortmeldung. Offene Vormerkung: gelbe Lampe
+  „Dividenden“ und Zeile in der Kurzfassung.
+- **Prüfung brutto/netto:** Beim ersten echten Fall vergleicht der Lauf die Abnahme von `AccruedDividend` mit Brutto und
+  Netto laut Flex und meldet das Ergebnis (Ereignis `dividende`). Erst danach trägt Jakob den Ausweis ein und schaltet
+  `vormerkung` an. Bis dahin: Zahltag bis 10 € als „vermutet“ in die Kassenbasis, darüber Stopp für einen Tag.
+- **„vermutet“-Übernahmen:** stehen in der Kurzfassung (Währung und Betrag; ohne Eurobeträge nur „Kassendifferenz
+  übernommen“). Belegt Flex später eine Dividende im selben Zeitfenster mit gleichem Betrag, wird die Übernahme aus der
+  Kassenbasis zurückgenommen (keine Doppelzählung).
