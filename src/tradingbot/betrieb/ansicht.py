@@ -432,6 +432,8 @@ def gliederung(bv, u, *, gesperrt: bool = False) -> dict:
     if daten.get("typ") == "fundamental":
         kennzahlen = list(daten["kennzahlen"])
         filter_ = [(n, t, f) for n, (t, f) in daten["filter"].items()]
+        if "zusatz" in daten:             # nur Angaben, die nicht in Tabelle oder Ampel stehen (Jakob 12.11.2026)
+            zahlen = list(daten["zusatz"])
     elif daten.get("typ") == "technik" and daten.get("aktion") == "verkauf":
         kennzahlen = kennzahlen_verkauf(daten)
         zahlen = []

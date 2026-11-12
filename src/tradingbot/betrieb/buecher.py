@@ -357,30 +357,65 @@ def _wert(z, spalte):
     return None if v is None or (isinstance(v, float) and math.isnan(v)) else v
 
 
-def details_fundamental(ticker, z, med, variante, rang, kurs_usd, n, limit_eur, zielwert) -> str:
+def branchenmedian(rangliste: pd.DataFrame) -> pd.DataFrame:
+    """Median je Vergleichsgruppe (Zeilen: gruppe) für die Anzeige „Branchenmedian“; Aufbau, Stichtag und Nachkauf gleich."""
+    spalten = [c for c in ("ep", "ebit_ev", "accruals", "piotroski_filter") if c in rangliste.columns]
+    if "gruppe" not in rangliste.columns or not spalten:
+        return pd.DataFrame()
+    return rangliste.groupby("gruppe")[spalten].median()
+
+
+def median_der_gruppe(median: pd.DataFrame, z):
+    g = _wert(z, "gruppe")
+    return median.loc[g] if g is not None and g in median.index else None
+
+
+def _piotroski_signale(z) -> str:
     sig = _wert(z, "piotroski_signale") or {}
     erfuellt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v == 1]
     verfehlt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v == 0]
     fehlt = [SIGNALNAMEN.get(k, k) for k, v in sig.items() if v is None]
+    return "; ".join(([f"hochgerechnet aus {_wert(z, 'piotroski_n')} Signalen"] if _wert(z, "piotroski_hoch") else [])
+                     + ([f"erfüllt: {', '.join(erfuellt)}"] if erfuellt else [])
+                     + ([f"nicht erfüllt: {', '.join(verfehlt)}"] if verfehlt else [])
+                     + ([f"nicht berechenbar: {', '.join(fehlt)}"] if fehlt else []))
+
+
+def _branche_kurs(z, kurs_usd) -> str:
+    sic = _wert(z, "sic")
+    return f"Branche SIC {int(sic) if sic is not None else '–'} (Vergleichsgruppe {_wert(z, 'gruppe') or '–'}), Kurs {_z(kurs_usd)} USD"
+
+
+def _stand_und_stueck(z, n, limit_eur, zielwert) -> list[str]:
+    return [f"Jahresabschluss bis {pd.Timestamp(z['geschaeftsjahr_ende']).date():%d.%m.%Y}"
+            if _wert(z, "geschaeftsjahr_ende") is not None else "Jahresabschluss: –",
+            f"Daten bekannt ab {pd.Timestamp(z['bekannt_ab']).date():%d.%m.%Y} (Tag nach der SEC-Einreichung)"
+            if _wert(z, "bekannt_ab") is not None else "",
+            f"{n} Stück ≈ {_z(n * limit_eur)} € (Ziel ≈ {_z(zielwert)} €)"]
+
+
+def zusatz_fundamental(z, kurs_usd, n, limit_eur, zielwert) -> list[str]:
+    """Aufzählung unter der Kennzahlen-Tabelle (Jakob 12.11.2026): nur Angaben, die nicht in Tabelle oder Filter-Ampel stehen."""
+    sig = _piotroski_signale(z)
+    return [x for x in [_branche_kurs(z, kurs_usd), f"Piotroski-Signale – {sig}" if sig else ""]
+            + _stand_und_stueck(z, n, limit_eur, zielwert) if x]
+
+
+def details_fundamental(ticker, z, med, variante, rang, kurs_usd, n, limit_eur, zielwert) -> str:
     ep, ev, acc = _wert(z, "ep"), _wert(z, "ebit_ev"), _wert(z, "accruals")
     m = (lambda c: None if med is None or c not in med.index or (isinstance(med[c], float) and math.isnan(med[c])) else float(med[c]))
     kgv = (1 / ep) if ep and ep > 0 else None
     kgv_med = (1 / m("ep")) if m("ep") and m("ep") > 0 else None
     mw = _wert(z, "marktwert_usd")
-    zahlen = [f"Branche SIC {int(z['sic'])} (Vergleichsgruppe {_wert(z, 'gruppe') or '–'}), Kurs {_z(kurs_usd)} USD"
-              + (f", Marktkapitalisierung {_z(mw / 1e9, 1)} Mrd. USD" if mw else ""),
+    sig = _piotroski_signale(z)
+    zahlen = [_branche_kurs(z, kurs_usd) + (f", Marktkapitalisierung {_z(mw / 1e9, 1)} Mrd. USD" if mw else ""),
               f"Rang {rang} im gefilterten S&P 500 (ohne Finanzwerte), Gesamtscore {z['gesamt']:.2f} = "
               + ("nur Qualität" if variante == "B" else "½ Qualität + ½ Bewertung") + f"; Qualität {z['qualitaet']:.2f}, Bewertung {z['bewertung']:.2f}",
-              f"Piotroski {_z(_wert(z, 'piotroski_filter'), 0)} von 9" + (f" (hochgerechnet aus {_wert(z, 'piotroski_n')} Signalen)" if _wert(z, "piotroski_hoch") else "")
-              + (f"; erfüllt: {', '.join(erfuellt)}" if erfuellt else "") + (f"; nicht erfüllt: {', '.join(verfehlt)}" if verfehlt else "")
-              + (f"; nicht berechenbar: {', '.join(fehlt)}" if fehlt else ""),
+              f"Piotroski {_z(_wert(z, 'piotroski_filter'), 0)} von 9" + (f" ({sig})" if sig else ""),
               f"Accruals {_pz(acc)} (Branchenmedian {_pz(m('accruals'))}; niedriger ist besser)",
               f"KGV {_z(kgv, 1)} (Branchenmedian {_z(kgv_med, 1)}), EBIT/EV {_pz(ev)} (Branchenmedian {_pz(m('ebit_ev'))})",
               f"Altman {_wert(z, 'altman_variante') or '–'} {_z(_wert(z, 'altman'))} ({_wert(z, 'altman_zone') or 'nicht berechenbar'}), "
-              f"Beneish {_z(_wert(z, 'beneish'))} (Grenze −1,78)",
-              f"Jahresabschluss bis {pd.Timestamp(z['geschaeftsjahr_ende']).date():%d.%m.%Y}" if _wert(z, "geschaeftsjahr_ende") is not None else "Jahresabschluss: –",
-              (f"Daten bekannt ab {pd.Timestamp(z['bekannt_ab']).date():%d.%m.%Y} (Tag nach der SEC-Einreichung)" if _wert(z, "bekannt_ab") is not None else ""),
-              f"{n} Stück ≈ {_z(n * limit_eur)} € (Ziel ≈ {_z(zielwert)} €)"]
+              f"Beneish {_z(_wert(z, 'beneish'))} (Grenze −1,78)"] + _stand_und_stueck(z, n, limit_eur, zielwert)
     dagegen = list(_wert(z, "hinweise") or [])
     if z.get("ersetzt"):
         dagegen.append(f"Median-Ersatz für: {z['ersetzt']} (fehlende Werte zählen neutral)")
@@ -390,7 +425,9 @@ def details_fundamental(ticker, z, med, variante, rang, kurs_usd, n, limit_eur, 
         dagegen.append(f"Bewertung zählt in Buch B nicht (Bewertungsrang {z['bewertung']:.2f})")
     return details_text([x for x in zahlen if x], dagegen,
                         "ein Filter die Aktie ausschließt (Piotroski ≤ 3, Altman, Beneish) oder ihr Rang am nächsten Quartalsstichtag über 30 liegt.")
-def kennzahlen_fundamental(z, med, variante, rang) -> dict:
+
+
+def kennzahlen_fundamental(z, med, variante, rang, zusatz: list[str] | None = None) -> dict:
     """Nur Anzeige (neue Oberfläche, 10.11.2026): Kennzahlen mit Branchenmedian und Urteil, Filter als Ampel.
     Urteil ✓/✗: Accruals und KGV niedriger als der Branchenmedian sind gut, EBIT/EV höher ist gut. Filter wie im Risk-Manager:
     Piotroski ≤ 3 raus (4–6 gelb, ≥ 7 grün), Altman nach Zone (sicher/grau/gefahr), Beneish > −1,78 Warnhinweis."""
@@ -423,7 +460,7 @@ def kennzahlen_fundamental(z, med, variante, rang) -> dict:
                    {"sicher": "gruen", "grau": "gelb", "gefahr": "rot"}.get(zone)),
         "Beneish": (f"{_z(ben)} (Grenze −1,78)" if ben is not None else "–", None if ben is None else ("gruen" if ben <= -1.78 else "rot")),
     }
-    return {"typ": "fundamental", "kennzahlen": kennzahlen, "filter": filter_, "sic": _wert(z, "sic")}
+    return {"typ": "fundamental", "kennzahlen": kennzahlen, "filter": filter_, "sic": _wert(z, "sic"), "zusatz": list(zusatz or [])}
 
 
 def quartalsstichtag(tag) -> bool:
@@ -457,8 +494,7 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
                               band=tuple(float(x) for x in sp["drift_band"]))
     zeilen = rangliste.set_index("ticker")
     gruende = {p["ticker"]: p for p in protokoll}
-    spalten_median = [c for c in ("ep", "ebit_ev", "accruals", "piotroski_filter") if c in rangliste.columns]
-    median = rangliste.groupby("gruppe")[spalten_median].median() if "gruppe" in rangliste.columns and spalten_median else pd.DataFrame()
+    median = branchenmedian(rangliste)
     vorschlaege, frei, nicht_kaufbar = [], kasse, []
     for t, w in sorted(ziel.items(), key=lambda x: x[1] if not math.isnan(x[1]) else 1):   # Verkäufe zuerst
         if math.isnan(w) or t in gesperrt_titel:
@@ -487,9 +523,10 @@ def fundamentalbuch(buch: str, variante: str, tag, rangliste: pd.DataFrame, kurs
             bv = _kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD")
             bv.kern = (f"Rang {gruende[t].get('rang')}: " + (f"Qualität {z['qualitaet']:.2f} (Buch B: nur Qualitätshälfte zählt)." if variante == "B"
                        else f"Qualität {z['qualitaet']:.2f} und Bewertung {z['bewertung']:.2f} im oberen Bereich der Branche."))
-            med = median.loc[z["gruppe"]] if z.get("gruppe") in median.index else None
+            med = median_der_gruppe(median, z)
             bv.details = details_fundamental(t, z, med, variante, gruende[t].get("rang"), kurse_usd[t], n, limit_eur, w * wert)
-            bv.daten = kennzahlen_fundamental(z, med, variante, gruende[t].get("rang"))
+            bv.daten = kennzahlen_fundamental(z, med, variante, gruende[t].get("rang"),
+                                              zusatz_fundamental(z, kurse_usd[t], n, limit_eur, w * wert))
             vorschlaege.append(bv)
             frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     grund = "Aufbau" if not aufgebaut else "Quartalsstichtag"
@@ -508,6 +545,7 @@ def _fundamental_nachkauf(buch, variante, tag, rangliste, kurse_usd, eurusd, kas
     wert = kasse + reserviert + sum(st * kurse_usd[t] / eurusd for t, st in bestand.items() if t in kurse_usd)
     vorschlaege, frei, fehlt = [], kasse, []
     zeilen = rangliste.set_index("ticker") if "ticker" in rangliste.columns else pd.DataFrame()
+    median = branchenmedian(rangliste)      # wie beim Aufbau (bis 12.11.2026 fehlte er: Branchenmedian „–“ im Nachkauf)
     for t, w in sorted(nachkauf_ziel.items()):
         if t not in kurse_usd:
             fehlt.append(t)
@@ -522,10 +560,13 @@ def _fundamental_nachkauf(buch, variante, tag, rangliste, kurse_usd, eurusd, kas
                  f"der Kauf wurde abgelehnt oder ist verfallen, das Signal gilt bis zum nächsten Quartalsstichtag.")
         bv = _kauf(buch, tag, t, n, kurs_eur, kurse_usd[t], "USD", aufschlag, "aktie", these, fx=eurusd, plan="USD")
         bv.kern = f"Nachkauf: Rang {rang} am Stichtag {zustand.get('letzter_signaltag')}, Kauf abgelehnt oder verfallen."
-        bv.details = (details_fundamental(t, zeilen.loc[t], None, variante, rang, kurse_usd[t], n, limit_eur, w * wert)
-                      if t in zeilen.index else f"Zahlen:\n  • Kurs {_z(kurse_usd[t])} USD, {n} Stück ≈ {_z(n * limit_eur)} €")
         if t in zeilen.index:
-            bv.daten = kennzahlen_fundamental(zeilen.loc[t], None, variante, rang)
+            z = zeilen.loc[t]
+            med = median_der_gruppe(median, z)
+            bv.details = details_fundamental(t, z, med, variante, rang, kurse_usd[t], n, limit_eur, w * wert)
+            bv.daten = kennzahlen_fundamental(z, med, variante, rang, zusatz_fundamental(z, kurse_usd[t], n, limit_eur, w * wert))
+        else:
+            bv.details = f"Zahlen:\n  • Kurs {_z(kurse_usd[t])} USD, {n} Stück ≈ {_z(n * limit_eur)} €"
         vorschlaege.append(bv)
         frei -= n * limit_eur + gebuehr(n, n * limit_eur)
     grund = f"Nachkauf {len(vorschlaege)} Titel (abgelehnt/verfallen)" + (f"; ohne Kurs: {', '.join(fehlt)}" if fehlt else "")

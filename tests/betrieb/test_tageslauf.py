@@ -524,6 +524,13 @@ def test_nachkauf_fundamental_bis_zum_stichtag(umgebung):
     neu = {bv.vorschlag.ticker for bv, _ in e.vorschlaege if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx"}
     assert neu == abgelehnt
     assert any("fundamental_a: Nachkauf 2 Titel" in m for m in e.meldungen)
+    # Nachkauf gibt die Branchenmediane weiter wie der Aufbau (Abend 11.11.2026: „–“ bei BF-B)
+    for bv, _ in e.vorschlaege:
+        if bv.vorschlag.buch == "fundamental_a" and bv.vorschlag.art != "fx":
+            k = {name: median for name, _, median, _ in bv.daten["kennzahlen"]}
+            assert all(k[n] != "–" for n in ("Accruals (niedriger besser)", "KGV (niedriger besser)", "EBIT/EV (höher besser)")), k
+            assert "Branchenmedian –" not in bv.details
+            assert any("Stück ≈" in x for x in bv.daten["zusatz"])
 
 def test_technikbuch_ohne_kauf_baut_am_naechsten_tag_wieder_auf(umgebung):
     """Momentum war am 03.11. gesperrt, der Zustand galt trotzdem als aufgebaut → am 04.11. keine Vorschläge bis zur

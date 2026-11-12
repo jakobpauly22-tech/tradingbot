@@ -241,6 +241,28 @@ def test_gliederung_fundamental():
     assert g["art"] == "KAUF" and "fundamental_a · KAUF 3 Stück · Limit 102.00 USD" in g["kopf"]
 
 
+def test_gliederung_fundamental_aufzaehlung_ohne_wiederholung():
+    """Unter der Tabelle nur, was nicht in Tabelle oder Ampel steht (Jakob 12.11.2026)."""
+    from tradingbot.betrieb.buecher import details_fundamental, kennzahlen_fundamental, zusatz_fundamental
+    z = _fundamental_zeile()
+    z["gruppe"], z["piotroski_hoch"] = "58", False
+    z["piotroski_signale"] = {"roa": 1, "cfo": 1, "delta_roa": 0, "accrual": None}
+    z["geschaeftsjahr_ende"], z["bekannt_ab"] = pd.Timestamp("2026-06-30"), pd.Timestamp("2026-08-05")
+    med = pd.Series({"accruals": -0.02, "ep": 0.04, "ebit_ev": 0.10})
+    bv, u = vorschlag(1, "fundamental_a", "DPZ", "aktie", waehrung="USD")
+    bv.details = details_fundamental("DPZ", z, med, "A", 3, 340.0, 3, 300.0, 1000.0)
+    bv.daten = kennzahlen_fundamental(z, med, "A", 3, zusatz_fundamental(z, 340.0, 3, 300.0, 1000.0))
+    zahlen = ansicht.gliederung(bv, u)["zahlen"]
+    text = " | ".join(zahlen)
+    for doppelt in ("Rang 3", "Gesamtscore", "Accruals", "KGV", "EBIT/EV", "Altman", "Beneish", "von 9", "Marktkapitalisierung"):
+        assert doppelt not in text, doppelt
+    assert "Piotroski-Signale – erfüllt: ROA > 0, CFO > 0; nicht erfüllt: ROA steigt; nicht berechenbar: CFO > Jahresüberschuss" in zahlen
+    assert "Jahresabschluss bis 30.06.2026" in zahlen and "Daten bekannt ab 05.08.2026 (Tag nach der SEC-Einreichung)" in zahlen
+    assert "3 Stück ≈ 900,00 € (Ziel ≈ 1.000,00 €)" in zahlen
+    # der volle Text (alte Oberfläche, Journal) bleibt vollständig
+    assert "Accruals -5,0% (Branchenmedian -2,0%" in bv.details and "Piotroski 8 von 9 (erfüllt: ROA > 0" in bv.details
+
+
 def test_gliederung_technik():
     bv, u = vorschlag(1, "crossover", "EUNK.DE")
     bv.daten = {"typ": "technik", "kurs": 107.06, "sma50": 104.21, "sma200": 101.40, "abstand": 0.0277, "mom": 0.138, "atr": 1.12,
