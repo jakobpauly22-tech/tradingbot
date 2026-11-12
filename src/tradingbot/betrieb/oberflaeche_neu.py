@@ -286,6 +286,27 @@ class Tagesfenster:
             knopf = ttk.Button(z, text="Stopp quittieren", command=lambda: self.stopp_quittieren(buch))
             knopf.pack(side="left", padx=8)
             self.stopp_knoepfe[buch] = knopf
+        from tradingbot.betrieb import kapitalmassnahmen
+        if not hasattr(self, "flex_split_knoepfe"):
+            self.flex_split_knoepfe: dict[str, ttk.Button] = {}
+        for beleg, v in sorted(kapitalmassnahmen.flex_split_offen(self.journal, buch).items()):
+            knopf = ttk.Button(z, text=f"Split {v['ticker']} {float(v['r']):g} aus Flex übernehmen (Quelle: Flex)",
+                               command=lambda beleg=beleg: self.flex_split_quittieren(beleg))
+            knopf.pack(side="left", padx=8)
+            self.flex_split_knoepfe[beleg] = knopf
+
+    def flex_split_quittieren(self, beleg: str) -> str:
+        """SPYI-Fall (Jakob 12.11.2026): Split-Verhältnis aus dem Flex-Beleg für die Aktienzahl übernehmen – Quittung mit
+        Zeitstempel im Journal; danach Übersicht und Ampel neu."""
+        from tradingbot.betrieb import kapitalmassnahmen
+        try:
+            text = kapitalmassnahmen.flex_split_quittieren(self.journal, beleg, self.jetzt_fn())
+        except ValueError as f:
+            text = str(f)
+        self._protokoll_schreiben([text])
+        self._uebersicht_bauen()
+        self._lampen_zeichnen()
+        return text
 
     def stopp_quittieren(self, buch: str) -> str:
         """Quittung mit Zeitstempel im Journal (Ereignis „stopp_quittiert“); danach Übersicht und Ampel neu."""

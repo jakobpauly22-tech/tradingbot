@@ -49,8 +49,24 @@ def kurse_aktualisieren(symbole: list[str], bis: date) -> list[str]:
     return fehler
 
 
-def bewertung_am(tag, *, aktualisieren: bool = True) -> tuple[pd.DataFrame, dict, list[str]]:
-    """Bewertungstabelle aller investierbaren Firmen am Stichtag (eine Zeile je Firma) und Yahoo-Symbol je Firma."""
+def split_ereignisse_ergaenzen(kurse: pd.DataFrame, splits: list[tuple[str, float]]) -> pd.DataFrame:
+    """Splits, die Yahoo nicht als Ereignis führt, deren Verhältnis aber aus dem IBKR-Flex-Beleg quittiert ist (Jakob
+    12.11.2026, „Quelle: Flex“): in einer Kopie am ersten Handelstag ab dem Stichtag in die Spalte `split` eintragen, damit
+    `aktien_splitbereinigt` die gemeldete Aktienzahl auf die Kursbasis bringt. Ein vorhandenes Yahoo-Ereignis bleibt."""
+    k = kurse.copy()
+    if "split" not in k.columns:
+        k["split"] = 0.0
+    for tag, r in splits:
+        ab = k.index[k.index >= pd.Timestamp(tag)]
+        if len(ab) and not (k.loc[ab[0], "split"] or 0) > 0:
+            k.loc[ab[0], "split"] = float(r)
+    return k
+
+
+def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list[tuple[str, float]]] | None = None
+                 ) -> tuple[pd.DataFrame, dict, list[str]]:
+    """Bewertungstabelle aller investierbaren Firmen am Stichtag (eine Zeile je Firma) und Yahoo-Symbol je Firma.
+    `splits_flex`: quittierte Splits „Quelle: Flex“ je Symbol (nur Betrieb, betrieb/kapitalmassnahmen.flex_splits_je_symbol)."""
     warnings.simplefilter("ignore")
     tag = pd.Timestamp(tag)
     konfig = lade_konfiguration("fundamental")
@@ -87,6 +103,8 @@ def bewertung_am(tag, *, aktualisieren: bool = True) -> tuple[pd.DataFrame, dict
             erst = zusammenlegen([cache.lesen("sec_erstmeldungen", cik10(c))[0] for c in ciks_der_zeile(zeile)])
             werte = jahreswerte_firma(erst, kennzahlen)
             kurse = daten.kurse[firma]
+            if splits_flex and symbol_je_firma.get(firma) in splits_flex:
+                kurse = split_ereignisse_ergaenzen(kurse, splits_flex[symbol_je_firma[firma]])
             a = kennzahl_jahreswerte(erst, kennzahlen["aktien_ausstehend"], "2100-01-01") if len(erst) else pd.DataFrame()
             aktien = (pd.Series(aktien_splitbereinigt(a["wert"], kurse["split"]).to_numpy(), index=(a["filed"] + pd.Timedelta(days=1)).to_numpy()).sort_index()
                       if len(a) else pd.Series(dtype=float))

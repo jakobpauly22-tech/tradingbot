@@ -240,7 +240,10 @@ EINHEITEN: dict[str, dict[str, str]] = {
     # Kontozustand und Buchstopps: nur Beträge gesamt, Daten, Texte
     "konto_zustand": {s: "neutral" for s in ("kassenbasis", "festgehalten", "zinsbuchungen", "letzter_kassenabgleich", "aufgelaufene_zinsen", "zinsstand_tag",
                                              "aufgelaufene_dividenden", "tageszins", "dividende_vormerkungen", "dividende_abnahmen",
-                                             "accrued_dividend_befund", "buchungen_ohne_buchbezug", "kennzahlen_passend")},
+                                             "accrued_dividend_befund", "buchungen_ohne_buchbezug", "kennzahlen_passend",
+                                             "split_quelle_flex")},
+    # Split-Verhältnis aus Flex für die Aktienzahl (Jakob 12.11.2026, SPYI-Fall): je Beleg im Kontozustand
+    "split_quelle_flex": {s: "neutral" for s in ("ticker", "tag", "r", "buecher", "status", "vorgeschlagen", "quittiert")},
     "buchstopp_eintrag": {s: "neutral" for s in ("seit", "kategorie", "titel", "belege", "details", "abweichung_weg", "quittung_noetig")},
 }
 
@@ -383,6 +386,66 @@ def kurse_mit_massnahmen(kurse_laden, journal, meldungen: list[str]):
         return k
     laden.roh = kurse_laden
     return laden
+
+
+FRIST_YAHOO_SPLIT = 5                  # Handelstage nach dem Flex-Beleg ohne Yahoo-Ereignis → Vorschlag „Quelle: Flex“
+
+
+def kennzahlen_stand(kurse_roh, r: float, tag: str) -> str:
+    """passt | unbereinigt | ohne_ereignis | keine_kurse (siehe kennzahlen_je_aktie_passend)."""
+    ok, grund = kennzahlen_je_aktie_passend(kurse_roh, r, tag)
+    return "passt" if ok else "unbereinigt" if "unbereinigt" in grund else "ohne_ereignis" if "nicht als Ereignis" in grund else "keine_kurse"
+
+
+def flex_splits(journal, *, nur_quittiert: bool = True) -> dict[str, dict]:
+    """Splits, deren Verhältnis aus dem Flex-Beleg für die Aktienzahl gilt (Kennzeichnung „Quelle: Flex“), je Beleg."""
+    alle = journal.zustand("_konto").get("split_quelle_flex") or {}
+    return {b: e for b, e in alle.items() if not nur_quittiert or e.get("status") == "quittiert"}
+
+
+def flex_splits_je_symbol(journal) -> dict[str, list[tuple[str, float]]]:
+    """Quittierte Flex-Splits je Yahoo-Symbol für die Fundamental-Bewertung (engines/fundamental/aktuell.bewertung_am)."""
+    aus: dict[str, list[tuple[str, float]]] = {}
+    for e in flex_splits(journal).values():
+        aus.setdefault(e["ticker"], []).append((e["tag"], float(e["r"])))
+    return aus
+
+
+def flex_split_offen(journal, buch: str | None = None) -> dict[str, dict]:
+    """Vorgeschlagene, noch nicht quittierte Übernahmen des Flex-Verhältnisses (optional nur für ein Buch)."""
+    return {b: e for b, e in flex_splits(journal, nur_quittiert=False).items()
+            if e.get("status") == "vorgeschlagen" and (buch is None or buch in e.get("buecher", []))}
+
+
+def flex_split_quittieren(journal, beleg_id: str, jetzt: datetime | None = None) -> str:
+    """Jakobs Quittung in der Oberfläche: ab jetzt gilt das Verhältnis aus dem Flex-Beleg für die Aktienzahl (Ereignis
+    „flex_split_quittiert“ mit Zeitstempel). Stopps, die nur daran hingen, werden sofort aufgehoben."""
+    from tradingbot.betrieb import buchstopp
+
+    jetzt = (jetzt or datetime.now()).replace(tzinfo=None)
+    konto = journal.zustand("_konto")
+    e = (konto.get("split_quelle_flex") or {}).get(beleg_id)
+    if e is None or e.get("status") != "vorgeschlagen":
+        raise ValueError(f"Beleg {beleg_id}: kein offener Vorschlag „Quelle: Flex“")
+    e.update(status="quittiert", quittiert=jetzt.isoformat(timespec="seconds"))
+    konto["kennzahlen_passend"] = sorted(set(konto.get("kennzahlen_passend") or []) | {beleg_id})
+    journal.zustand_speichern("_konto", konto)
+    text = (f"Split-Verhältnis {float(e['r']):g} für {e['ticker']} aus Flex-Beleg {beleg_id} übernommen (Quelle: Flex), quittiert von Jakob "
+            f"am {jetzt:%d.%m.%Y %H:%M:%S}")
+    journal.ereignis("flex_split_quittiert", text, jetzt=jetzt)
+    st = buchstopp.gestoppt(journal)
+    aufgehoben = []
+    for b in list(e.get("buecher", [])):
+        s = st.get(b)
+        if s and set(s.get("titel") or []) <= {e["ticker"]} and not s.get("quittung_noetig") and buchstopp._gedeckt(journal, b, s) \
+                and not ({z["ticker"] for z in journal.unterwegs(b)} & {e["ticker"]}):
+            del st[b]
+            aufgehoben.append(b)
+            journal.ereignis("stopp_aufgehoben", f"Stopp aufgehoben: Buch {b} (Split-Verhältnis aus Flex quittiert): {beleg_id}", b, jetzt=jetzt)
+    if aufgehoben:
+        journal.zustand_speichern(buchstopp.SCHLUESSEL, st)
+        text += "; Stopp aufgehoben: " + ", ".join(aufgehoben)
+    return text
 
 
 def kennzahlen_je_aktie_passend(kurse_roh, r: float, tag: str) -> tuple[bool, str]:
@@ -666,19 +729,26 @@ def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx:
     return ergebnisse
 
 
-def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, tag_kurse) -> list[str]:
+def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, tag_kurse, heute=None) -> list[str]:
     """Fundamental-Bücher (Entscheidung 4): Hält ein Fundamental-Buch einen Titel mit Split (oder hat eine Order dafür
     unterwegs) und passen Kurs und Kennzahlen je Aktie noch nicht zum selben Stand, bleibt das Buch für diesen Titel
     gestoppt (Eintrag in `je_buch` mit Beleg), bis es passt. Einmal passend → nicht erneut geprüft (Kontozustand
-    `kennzahlen_passend`). Gibt Protokollzeilen zurück."""
+    `kennzahlen_passend`). Gibt Protokollzeilen zurück.
+
+    SPYI-Fall (Jakob 12.11.2026): Ist die Reihe bereinigt, fehlt aber das Yahoo-Ereignis noch FRIST_YAHOO_SPLIT Handelstage
+    nach dem Flex-Beleg, schlägt der Bot vor, das Verhältnis aus dem Flex-Beleg für die Aktienzahl zu übernehmen
+    („Quelle: Flex“). Erst nach Jakobs Quittung in der Oberfläche gilt es (flex_split_quittieren)."""
     from tradingbot.betrieb import buchstopp
+    from tradingbot.betrieb.dividenden import handelstage_nach
 
     fund = [b for b in buecher if b.startswith("fundamental")]
     if not fund:
         return []
     konto = journal.zustand("_konto")
     passend = set(konto.get("kennzahlen_passend") or [])
-    zeilen, neu_passend = [], []
+    flex = dict(konto.get("split_quelle_flex") or {})
+    heute = heute or datetime.now().date()
+    zeilen, neu_passend, geaendert = [], [], False
     for m in splits_mit_verhaeltnis(journal):
         if m["beleg_id"] in passend:
             continue
@@ -687,9 +757,28 @@ def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, ta
             if not halter:
                 continue
             try:
-                ok, grund = kennzahlen_je_aktie_passend(kurse_roh(t, tag_kurse, "aktie_usd"), m["r"], m["tag"])
+                reihe = kurse_roh(t, tag_kurse, "aktie_usd")
+                ok, grund = kennzahlen_je_aktie_passend(reihe, m["r"], m["tag"])
+                stand = kennzahlen_stand(reihe, m["r"], m["tag"])
             except Exception as f:  # noqa: BLE001 – ohne Kurse kein Urteil: gestoppt lassen
-                ok, grund = False, f"Kurse nicht abrufbar ({type(f).__name__})"
+                ok, grund, stand = False, f"Kurse nicht abrufbar ({type(f).__name__})", "keine_kurse"
+            fe = flex.get(m["beleg_id"])
+            if not ok and stand == "ohne_ereignis":
+                if fe and fe.get("status") == "quittiert":
+                    ok, grund = True, f"Quelle: Flex, Verhältnis {m['r']:g} quittiert am {fe['quittiert'][:10]}"
+                elif fe is None:
+                    erkannt = journal.massnahmen("beleg_id=? AND buch=?", (m["beleg_id"], KONTO))[0]["erkannt"][:10]
+                    if handelstage_nach(erkannt, heute) >= FRIST_YAHOO_SPLIT:
+                        fe = flex[m["beleg_id"]] = {"ticker": t, "tag": m["tag"], "r": m["r"], "buecher": halter, "status": "vorgeschlagen",
+                                                    "vorgeschlagen": str(heute)}
+                        geaendert = True
+                        text = (f"Vorschlag: Yahoo führt den Split {m['r']:g} von {t} auch {FRIST_YAHOO_SPLIT} Handelstage nach dem Flex-Beleg "
+                                f"nicht – Verhältnis aus Flex-Beleg {m['beleg_id']} für die Aktienzahl übernehmen (Quelle: Flex); gilt erst "
+                                "nach Quittung in der Oberfläche")
+                        journal.ereignis("flex_split_vorschlag", text)
+                        zeilen.append(text)
+                if fe and fe.get("status") == "vorgeschlagen":
+                    grund += "; Vorschlag „Quelle: Flex“ wartet auf Quittung in der Oberfläche"
             if ok:
                 neu_passend.append(m["beleg_id"])
                 zeilen.append(f"{t}: Kurs und Kennzahlen je Aktie passen zum Split {m['r']:g} ({grund})")
@@ -699,5 +788,8 @@ def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, ta
                                     f"{t}: Kurs und Kennzahlen je Aktie nicht auf demselben Stand ({grund}) – Buch bleibt gestoppt, bis es passt")
     if neu_passend:
         konto["kennzahlen_passend"] = sorted(passend | set(neu_passend))
+    if geaendert:
+        konto["split_quelle_flex"] = flex
+    if neu_passend or geaendert:
         journal.zustand_speichern("_konto", konto)
     return zeilen

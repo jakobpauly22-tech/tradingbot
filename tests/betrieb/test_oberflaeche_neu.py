@@ -290,3 +290,24 @@ def test_stopp_quittieren_in_der_oberflaeche(wurzel, journal):
 
 def lampe_farbe(f, name):
     return next(la.farbe for la in f.lampen if la.name == name)
+
+
+def test_split_quelle_flex_quittieren_in_der_oberflaeche(wurzel, journal):
+    """SPYI-Fall (Jakob 12.11.2026): Knopf „Split … aus Flex übernehmen“ am gestoppten Buch; Quittung hebt den Stopp auf."""
+    from tradingbot.betrieb import buchstopp, kapitalmassnahmen
+
+    journal.massnahme(beleg_id="CA:77", buch="_konto", art="split", status="gebucht", tag="2026-11-02", posten=[{"ticker": "US1", "stueck": 10}])
+    journal.massnahme(beleg_id="CA:77", buch="fundamental_a", art="split", status="gebucht", tag="2026-11-02",
+                      posten=[{"ticker": "US1", "stueck": -10}, {"ticker": "US1", "stueck": 20}])
+    buchstopp.aktualisieren(journal, {"fundamental_a": {"titel": {"US1"}, "belege": {"CA:77"}, "details": ["US1: Kennzahlen je Aktie"]}},
+                            datetime(2026, 11, 9, 23, 0))
+    konto = journal.zustand("_konto")
+    konto["split_quelle_flex"] = {"CA:77": {"ticker": "US1", "tag": "2026-11-02", "r": 2.0, "buecher": ["fundamental_a"],
+                                            "status": "vorgeschlagen", "vorgeschlagen": "2026-11-09"}}
+    journal.zustand_speichern("_konto", konto)
+    f = fenster(wurzel, journal)
+    knopf = f.flex_split_knoepfe["CA:77"]
+    assert "aus Flex übernehmen (Quelle: Flex)" in knopf["text"]
+    knopf.invoke()
+    assert buchstopp.gestoppt(journal) == {} and kapitalmassnahmen.flex_splits_je_symbol(journal) == {"US1": [("2026-11-02", 2.0)]}
+    assert journal.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='flex_split_quittiert'").fetchone()[0] == 1

@@ -517,7 +517,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             # Titelabgleich je Buch (A1, Jakob 12.11.2026): nicht zuordenbar → Stopp für alles, sonst nur die betroffenen Bücher
             diff, je_buch = buchstopp.zuordnen(journal, list(b["buecher"]), positionen)
             # Fundamental: Kurs und Kennzahlen je Aktie nach einem Split auf demselben Stand? Sonst Buch gestoppt (A2)
-            erg.meldungen += kapitalmassnahmen.kennzahlen_pruefen(journal, list(b["buecher"]), kurse_laden, je_buch, nyse)
+            erg.meldungen += kapitalmassnahmen.kennzahlen_pruefen(journal, list(b["buecher"]), kurse_laden, je_buch, nyse, jetzt.date())
             if not diff and je_buch and journal.zustand("_konto").get("kassenbasis") is None:
                 erg.meldungen.append("Kassen-Abgleich: ausgesetzt – die Kassenbasis wird erst bei sauberem Abgleich aller Bücher festgehalten")
             elif not diff:                                   # Kassenbasis erst festhalten, wenn die Bestände stimmen
@@ -674,7 +674,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         except Exception as f:  # noqa: BLE001
             erg.meldungen.append(f"S&P-500-Liste nicht aktualisiert ({type(f).__name__}: {f}) – Stand unverändert")
     if braucht:
-        bewertung, _, meldungen = (fundamental_bewertung or _fundamental_bewertung)(pd.Timestamp(nyse))
+        splits_flex = _km.flex_splits_je_symbol(journal)        # Split-Verhältnis „Quelle: Flex“, von Jakob quittiert
+        bewertung, _, meldungen = (fundamental_bewertung or (lambda t: _fundamental_bewertung(t, splits_flex)))(pd.Timestamp(nyse))
+        if splits_flex:
+            meldungen = [f"Aktienzahl mit Split-Verhältnis aus Flex (Quelle: Flex): {', '.join(sorted(splits_flex))}"] + list(meldungen)
         erg.meldungen += meldungen[:5]
         bewertung, raus = nicht_handelbare_entfernen(bewertung, nyse)
         erg.meldungen += raus
@@ -988,7 +991,7 @@ def _yahoo_kurse(ticker: str, bis, art: str) -> pd.DataFrame:
     return lade_kurse(ticker, start, bis, heute=heute)
 
 
-def _fundamental_bewertung(tag):
+def _fundamental_bewertung(tag, splits_flex=None):
     from tradingbot.engines.fundamental.aktuell import bewertung_am
 
-    return bewertung_am(tag)
+    return bewertung_am(tag, splits_flex=splits_flex or None)

@@ -374,3 +374,72 @@ def test_tickerwechsel_erst_nach_kontrakte_yaml_dann_umgebucht(j):
     assert "ALT.DE" not in z and z["NEU.DE"]["stop"] == pytest.approx(27.0)              # r = 1: Stop unverändert
     assert j.zustand("fundamental_a")["ziel"] == {"NEU.DE": 0.05}
     assert j.db.execute("SELECT status FROM vorschlaege WHERE id='f1'").fetchone()[0] == "ersetzt"
+
+
+# --- Split ohne Yahoo-Ereignis (SPYI-Fall): Verhältnis aus Flex nach Quittung (Jakob 12.11.2026) ------------------------------
+def _fundamental_split_gebucht(j):
+    kauf(j, "fundamental_a", "US1", 10, preis=80.0)
+    fs = [zeile(-10, conid="555", symbol="US1", waehrung="USD", isin="US0005"), zeile(20, conid="555", symbol="US1", waehrung="USD", isin="US0005")]
+    erg, m = erkennen_und_buchen(j, fs, [Position("DU1", "US1", 20, 40.0)])
+    assert erg[0].ok, m
+    tage = pd.bdate_range(end="2026-11-20", periods=60)
+    return lambda t, bis, art: _reihe(np.full(60, 40.0), tage)            # bereinigt, aber ohne Split-Ereignis
+
+
+def _nach_handelstagen(start: str, n: int):
+    from tradingbot.betrieb.dividenden import handelstage_nach
+    d = pd.Timestamp(start).date()
+    while handelstage_nach(start, d) < n:
+        d += pd.Timedelta(days=1)
+    return d
+
+
+def test_split_ohne_yahoo_ereignis_vorschlag_nach_5_handelstagen_und_quittung(j):
+    kurse = _fundamental_split_gebucht(j)
+    erkannt = j.massnahmen("beleg_id='CA:77' AND buch='_konto'")[0]["erkannt"][:10]
+    je_buch: dict = {}
+    z = km.kennzahlen_pruefen(j, ["fundamental_a"], kurse, je_buch, "2026-11-20", _nach_handelstagen(erkannt, 4))
+    assert z == [] and set(je_buch) == {"fundamental_a"} and km.flex_split_offen(j) == {}
+    buchstopp.aktualisieren(j, je_buch, JETZT)
+    je_buch = {}
+    z = km.kennzahlen_pruefen(j, ["fundamental_a"], kurse, je_buch, "2026-11-20", _nach_handelstagen(erkannt, 5))
+    assert len(z) == 1 and "Quelle: Flex" in z[0] and "Quittung" in z[0]
+    assert "fundamental_a" in je_buch and "wartet auf Quittung" in je_buch["fundamental_a"]["details"][0]   # gilt noch nicht
+    assert set(km.flex_split_offen(j, "fundamental_a")) == {"CA:77"} and km.flex_splits_je_symbol(j) == {}
+    # zweiter Lauf: kein zweiter Vorschlag
+    assert km.kennzahlen_pruefen(j, ["fundamental_a"], kurse, {}, "2026-11-20", _nach_handelstagen(erkannt, 6)) == []
+    text = km.flex_split_quittieren(j, "CA:77", datetime(2026, 11, 20, 19, 1, 2))
+    assert "quittiert von Jakob am 20.11.2026 19:01:02" in text and "Stopp aufgehoben: fundamental_a" in text
+    assert buchstopp.gestoppt(j) == {} and km.flex_splits_je_symbol(j) == {"US1": [("2026-11-02", 2.0)]}
+    assert j.db.execute("SELECT zeit FROM ereignisse WHERE art='flex_split_quittiert'").fetchone()[0] == "2026-11-20T19:01:02"
+    je_buch = {}
+    km.kennzahlen_pruefen(j, ["fundamental_a"], kurse, je_buch, "2026-11-20", _nach_handelstagen(erkannt, 7))
+    assert je_buch == {}
+    with pytest.raises(ValueError, match="kein offener Vorschlag"):
+        km.flex_split_quittieren(j, "CA:77")
+
+
+def test_kein_flex_vorschlag_solange_yahoo_reihe_unbereinigt(j):
+    _fundamental_split_gebucht(j)
+    tage = pd.bdate_range(end="2026-11-20", periods=60)
+    sprung = int(np.searchsorted(tage, pd.Timestamp("2026-11-02")))
+    roh = lambda t, bis, art: _reihe(np.full(60, 40.0), tage, sprung_ab=sprung)       # noqa: E731
+    erkannt = j.massnahmen("beleg_id='CA:77' AND buch='_konto'")[0]["erkannt"][:10]
+    je_buch: dict = {}
+    assert km.kennzahlen_pruefen(j, ["fundamental_a"], roh, je_buch, "2026-11-20", _nach_handelstagen(erkannt, 10)) == []
+    assert "fundamental_a" in je_buch and km.flex_split_offen(j) == {}
+
+
+def test_split_ereignis_aus_flex_fuer_die_aktienzahl():
+    from tradingbot.daten.index_nachbau import aktien_splitbereinigt
+    from tradingbot.engines.fundamental.aktuell import split_ereignisse_ergaenzen
+
+    tage = pd.bdate_range("2026-10-26", "2026-11-06")
+    k = _reihe(np.full(len(tage), 40.0), tage)
+    neu = split_ereignisse_ergaenzen(k, [("2026-11-01", 2.0)])                       # Sonntag → erster Handelstag danach
+    assert neu.loc["2026-11-02", "split"] == 2.0 and k["split"].sum() == 0              # Original unverändert
+    aktien = pd.Series([1000.0], index=[pd.Timestamp("2026-10-15")])
+    assert aktien_splitbereinigt(aktien, neu["split"]).iloc[0] == 2000.0
+    yahoo = k.copy()
+    yahoo.loc["2026-11-03", "split"] = 2.0
+    assert split_ereignisse_ergaenzen(yahoo, [("2026-11-03", 2.0)])["split"].sum() == 2.0   # Yahoo-Ereignis bleibt, nicht doppelt
