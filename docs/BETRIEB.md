@@ -230,3 +230,34 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   - Status als Hintergrund der Zeile, weil `ttk.Treeview` keine einzelnen Zellen färben kann: Veto hellrot, freigegeben
     hellgelb, gesendet hellblau, ausgeführt hellgrün, abgelehnt/verfallen grau.
   - Abweichung zu SPYI grün oder rot. Alles andere neutral.
+
+## Benachrichtigungen (Jakob 12.11.2026)
+
+Modul `betrieb/benachrichtigung.py`, Schalter in `config/betrieb.yaml` (`benachrichtigung`), Zugangsdaten nur in `.env`.
+
+- **(a) Kurzfassung** nach jedem echten Tageslauf per Telegram: Signaltage, Abgleich ok, gestoppt oder nicht geprüft,
+  Vorschläge je Buch (frei/Veto), Bücher mit Datenbefund, abgelehnte und verfallene Orders seit dem letzten Lauf,
+  Buchwert je Buch (wie gebucht und mit Modellgebühr, gegenüber Startkapital und Vortag).
+- **(b) Erinnerung**, wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief (auch ein gestoppter Lauf zählt als
+  gelaufen):
+  - lokal: Aufgabe „TradingBot Waechter“ Mo–Fr 22:00 (`tools/waechter.py`, einrichten mit
+    `powershell -ExecutionPolicy Bypass -File tools\waechter_einrichten.ps1`); Ergebnis in `daten/betrieb/waechter.log`.
+    An Xetra-Feiertagen unter der Woche sendet der Wächter nur ein Lebenszeichen an Healthchecks.
+  - extern: Healthchecks.io bekommt nach jedem echten Lauf ein Lebenszeichen ohne Inhalt. Einstellung des Checks: Cron
+    `0 18 * * 1-5`, Zeitzone Europe/Berlin, Karenz 4 h 30 min; Benachrichtigung über die Telegram-Integration von
+    Healthchecks. Damit kommt die Erinnerung um 22:30 auch bei ausgeschaltetem Laptop. Grenzen: Ein Lauf vor 18:00 deckt
+    den Tag nicht ab; an Xetra-Feiertagen bei ausgeschaltetem Laptop gibt es einen Fehlalarm.
+- **(c) Sofortmeldung:** Stopp im Tageslauf (als Kurzfassung mit Kopfzeile „GESTOPPT“), Ausnahme im Tageslauf (nur der
+  Typ, dazu Lebenszeichen „fail“), Probleme beim Senden (abgelehnt, unbestätigt, Veto bei der zweiten Prüfung, Gateway
+  nicht verbunden, Abgleich vor dem Senden weicht ab, Read-Only, Abbruch). Grenze: Lehnt IBKR eine Order erst zur
+  Eröffnung ab, erfährt der Bot das erst beim nächsten Abendlauf.
+- **Sicherheit:** Der Bot sendet nur (Telegram `sendMessage`), ruft nie Nachrichten ab und öffnet keinen Port; über
+  Nachrichten lässt sich nichts auslösen. Inhalte kommen aus einer Positivliste; Freitexte des Tageslaufs (etwa
+  Kassenstände des Kontos im Stopptext) gehen nie hinaus, aus einem Stopp nur Kategorie und betroffene Titel. Konto-IDs
+  und Werte geheimer `.env`-Variablen werden vor dem Versand zusätzlich entfernt. Ein Fehler beim Melden bricht den
+  Tageslauf nie ab und steht im Protokoll (Ereignis `benachrichtigung`). Probe und Kopie melden nie.
+- **Echtbetrieb:** `eurobetraege: false` zeigt nur Prozente und Status.
+- **Einrichtung (Jakob):** Bot bei @BotFather anlegen, Token als `TELEGRAM_BOT_TOKEN` in `.env`; dem Bot eine Nachricht
+  schreiben und die Chat-ID einmalig über `https://api.telegram.org/bot<Token>/getUpdates` im Browser ablesen, als
+  `TELEGRAM_CHAT_ID` eintragen (der Bot selbst ruft getUpdates nie auf). Check bei Healthchecks.io anlegen, Ping-URL als
+  `HEALTHCHECKS_PING_URL`.

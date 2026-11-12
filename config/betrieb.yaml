@@ -112,6 +112,15 @@ daten:
   # Messbeginn je Buch = Tag der ersten Freigabe, im Journal festgehalten (02.11.2026)
   # Freigaben im Probe-Modus (Tageslauf_Probe.bat) oder bei ausgeschaltetem Senden zählen nie als Messbeginn (03.11.2026)
 
+benachrichtigung:
+  # Jakob 12.11.2026 (tradingbot/betrieb/benachrichtigung.py): (a) Kurzfassung nach jedem echten Tageslauf, (b) Erinnerung,
+  # wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief (lokal tools/waechter.py, extern Healthchecks.io),
+  # (c) Sofortmeldung bei Stopp oder Fehler. Probe und Kopie melden nie. Zugangsdaten nur in .env.
+  telegram: true                       # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; der Bot sendet nur und liest nie Nachrichten
+  healthchecks: true                   # HEALTHCHECKS_PING_URL; Lebenszeichen nach jedem Lauf, an Xetra-Feiertagen vom Wächter
+  eurobetraege: true                   # false (Echtbetrieb): nur Prozente und Status, keine Eurobeträge
+  zeitlimit_s: 8                       # je Versuch; ein Fehler beim Melden bricht den Tageslauf nie ab
+
 datenpruefung:                         # vor jedem Tageslauf (Jakob 02.11.2026); bei Befund an diesem Tag keine Vorschläge
   schluss_vom_letzten_handelstag: true # je Börse (Xetra, NYSE) die letzte abgeschlossene Sitzung
   max_tagessprung: 0.15                # größere Sprünge ohne Kapitalmaßnahme (Split, Ausschüttung) melden

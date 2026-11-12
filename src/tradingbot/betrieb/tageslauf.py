@@ -47,6 +47,7 @@ class Laufergebnis:
     kurse_eur: dict[str, float] = field(default_factory=dict)         # letzter Schluss je Titel in EUR
     spyi: object = None                                               # Schlusskurse SPYI in EUR (Vergleich je Buch)
     fx: dict[str, float] = field(default_factory=dict)                # Devisenkurse des Laufs (Fremdwährung je EUR)
+    abgleich: str = "nicht_geprueft"                                  # ok | gestoppt | nicht_geprueft (Benachrichtigung, 12.11.2026)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -434,6 +435,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg, jetzt)
             if stopp:
                 erg.gestoppt = stopp
+                erg.abgleich = "gestoppt"
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
                 return erg
@@ -445,10 +447,12 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 diff += kasse_diff
             if diff:
                 erg.gestoppt = "Abgleich mit IBKR weicht ab – Tageslauf gestoppt: " + "; ".join(diff)
+                erg.abgleich = "gestoppt"
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
                 return erg
             journal.ereignis("abgleich", "Bestände aller Bücher stimmen mit IBKR überein")
+            erg.abgleich = "ok"
             erg.meldungen.append(f"Abgleich: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
         except Exception as f:  # noqa: BLE001 – Gateway nicht erreichbar: Vorschläge trotzdem, Abgleich vor dem Senden
             erg.meldungen.append(f"Gateway nicht verbunden ({type(f).__name__}): Ausführungen nicht eingelesen; Abgleich vor dem Senden")

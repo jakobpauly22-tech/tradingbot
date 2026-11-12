@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from tradingbot.backtest.tresor import betriebsmodus
+from tradingbot.betrieb import benachrichtigung
 from tradingbot.betrieb.journal import Journal, konto_kurz
 from tradingbot.betrieb.sperre import LaufGesperrt, laufsperre
 from tradingbot.betrieb.speicher import betriebspfad
@@ -84,6 +85,36 @@ def sperrdatei(probe: bool):
         return betriebspfad("probe/tageslauf.sperre" if probe else "tageslauf.sperre")
 
 
+def melden_nach_lauf(erg, journal, betrieb: dict, probe: bool) -> None:
+    """Kurzfassung bzw. Stoppmeldung und Lebenszeichen nach einem echten Tageslauf (Jakob 12.11.2026); Probe meldet nie."""
+    if probe:
+        return
+    erg.meldungen += benachrichtigung.nach_tageslauf(erg, journal, betrieb, benachrichtigung.melder_aus_env(betrieb))
+
+
+def fehler_melden(was: str, ausnahme: BaseException, betrieb: dict, probe: bool) -> None:
+    """Sofortmeldung bei einer Ausnahme (nur der Typ) und Lebenszeichen „fehlgeschlagen“; wirft nie."""
+    if probe:
+        return
+    try:
+        melder = benachrichtigung.melder_aus_env(betrieb)
+        melder.melden(benachrichtigung.fehlermeldung(was, ausnahme, datetime.now(BERLIN)))
+        melder.lebenszeichen(fehler=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def senden_melden(journal, ids, start: datetime, meldungen: list[str], betrieb: dict) -> list[str]:
+    """Sofortmeldung, wenn beim Senden etwas abgelehnt, unbestätigt oder abgebrochen wurde (Jakob 12.11.2026)."""
+    try:
+        text = benachrichtigung.sendeprobleme(journal, list(ids), start.isoformat(timespec="seconds"), meldungen, datetime.now(BERLIN))
+        if text:
+            return meldungen + [benachrichtigung.melder_aus_env(betrieb).melden(text)]
+    except Exception as f:  # noqa: BLE001
+        return meldungen + [f"Benachrichtigung nach dem Senden fehlgeschlagen ({type(f).__name__})"]
+    return meldungen
+
+
 def rechnen(probe: bool, kopie: bool = False):
     meldungen = []
     with betriebsmodus("Probelauf (Kopie des echten Journals)" if kopie else "Probelauf" if probe else "Tageslauf"):
@@ -113,8 +144,14 @@ def ohne_fenster(probe: bool, kopie: bool = False) -> int:
 
 
 def _ohne_fenster(probe: bool, kopie: bool = False) -> int:
-    erg, journal, broker = rechnen(probe, kopie)
-    text = bericht(erg, journal, lade_konfiguration("betrieb"))
+    betrieb = lade_konfiguration("betrieb")
+    try:
+        erg, journal, broker = rechnen(probe, kopie)
+    except Exception as f:
+        fehler_melden("Tageslauf", f, betrieb, probe or kopie)
+        raise
+    melden_nach_lauf(erg, journal, betrieb, probe or kopie)
+    text = bericht(erg, journal, betrieb)
     print(text)
     with betriebsmodus("Probelauf-Bericht" if probe else "Tageslauf-Bericht"):
         ziel = betriebspfad(f"{'probe/' if probe else ''}bericht_{datetime.now():%Y-%m-%d_%H%M}.txt")
@@ -150,7 +187,9 @@ def _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise) 
     try:
         erg, journal, broker = rechnen(probe=probe)
         erg.meldungen = hinweise + erg.meldungen
-    except Exception:  # noqa: BLE001
+        melden_nach_lauf(erg, journal, betrieb, probe)
+    except Exception as f:  # noqa: BLE001
+        fehler_melden("Tageslauf", f, betrieb, probe)
         messagebox.showerror("Tageslauf fehlgeschlagen", traceback.format_exc()[-1500:])
         return 1
 
@@ -159,8 +198,10 @@ def _fenster(tk, messagebox, Freigabefenster, betrieb, wurzel, probe, hinweise) 
             if probe:
                 return freigeben_und_senden(journal, ids, None, datetime.now(BERLIN), probe=True)
             from tradingbot.broker.ibkr import IbkrBroker
-            return freigeben_und_senden(journal, ids, broker or IbkrBroker(betrieb, PROJEKT_WURZEL), datetime.now(BERLIN),
-                                        fortschritt=wurzel.update)          # Fenster bleibt während des Sendens bedienbar
+            start = datetime.now()
+            m = freigeben_und_senden(journal, ids, broker or IbkrBroker(betrieb, PROJEKT_WURZEL), datetime.now(BERLIN),
+                                     fortschritt=wurzel.update)             # Fenster bleibt während des Sendens bedienbar
+            return senden_melden(journal, ids, start, m, betrieb)
 
     Freigabefenster(wurzel, erg, journal, betrieb, probe=probe, senden_fn=senden_fn)
     wurzel.mainloop()
@@ -178,7 +219,9 @@ def _fenster_neu(tk, messagebox, betrieb, wurzel, probe, kopie, hinweise) -> int
     try:
         erg, journal, broker = rechnen(probe=probe, kopie=kopie)
         erg.meldungen = hinweise + erg.meldungen
-    except Exception:  # noqa: BLE001
+        melden_nach_lauf(erg, journal, betrieb, probe)
+    except Exception as f:  # noqa: BLE001
+        fehler_melden("Tageslauf", f, betrieb, probe)
         messagebox.showerror("Tageslauf fehlgeschlagen", traceback.format_exc()[-1500:])
         return 1
     zustand = {"broker": broker}
@@ -198,7 +241,9 @@ def _fenster_neu(tk, messagebox, betrieb, wurzel, probe, kopie, hinweise) -> int
                 return freigeben_und_senden(journal, ids, None, datetime.now(BERLIN), probe=True)
             b = zustand["broker"] or IbkrBroker(betrieb, PROJEKT_WURZEL)
             zustand["broker"] = b
-            return freigeben_und_senden(journal, ids, b, datetime.now(BERLIN), fortschritt=wurzel.update)
+            start = datetime.now()
+            m = freigeben_und_senden(journal, ids, b, datetime.now(BERLIN), fortschritt=wurzel.update)
+            return senden_melden(journal, ids, start, m, betrieb)
 
     gateway = status_fn() if broker is not None else ansicht.gateway_status(None)
     Tagesfenster(wurzel, erg, journal, betrieb, probe=probe, senden_fn=senden_fn, status_fn=status_fn, gateway=gateway,
