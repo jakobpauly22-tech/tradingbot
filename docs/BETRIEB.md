@@ -294,7 +294,7 @@ Modul `betrieb/dividenden.py`, Einstellungen in `config/betrieb.yaml` (`dividend
 
 ## Kapitalmaßnahmen: Erkennen und Stopp je Buch (A1, Jakob 12.11.2026)
 
-A1 erkennt Kapitalmaßnahmen und stoppt das betroffene Buch. **Gebucht wird noch nichts:** Split, Reverse-Split und Tickerwechsel kommen in A2, Übernahme und Delisting in A3, Abspaltung in A4.
+A1 erkennt Kapitalmaßnahmen und stoppt das betroffene Buch. A1 selbst bucht nichts: Split, Reverse-Split und Tickerwechsel bucht A2 (Abschnitt unten), Übernahme und Delisting kommen in A3, Abspaltung in A4.
 
 - **Quelle:** Flex-Abschnitt „Corporate Actions“ (`CorporateAction`, `betrieb/kapitalmassnahmen.py`). Die Typ-Kürzel stammen aus der IBKR-Referenz (geprüft 12.11.2026):
 
@@ -342,3 +342,58 @@ A1 erkennt Kapitalmaßnahmen und stoppt das betroffene Buch. **Gebucht wird noch
   - Verschwindet die Abweichung ohne gebuchten Beleg, bleibt das Buch gestoppt, bis Jakob auf der Buchkarte „Stopp quittieren“ drückt. Die Quittung steht als Ereignis `stopp_quittiert` mit Zeitstempel im Journal.
   - Solange die Abweichung besteht, ist keine Quittung möglich.
 - **Backlog (vor Echtgeld):** Ausstiege für nicht betroffene Titel im gestoppten Buch.
+
+## Split, Reverse-Split und Tickerwechsel buchen (A2, Jakob 12.11.2026)
+
+A2 bucht Split (FS, FI), Reverse-Split (RS) und Tickerwechsel (IC) mit Flex-Beleg automatisch und meldet die Buchung (`kapitalmassnahmen.buchen`, im Tageslauf direkt nach dem Erkennen und vor dem Abgleich).
+
+- **Nur bei exakt passender Probe** (Entscheidung 1). Sonst wird nichts gebucht, das Buch bleibt gestoppt und eine Meldung nennt den Grund.
+  - Verhältnis r = neue Stück je alte Stück. Beim Split kommt es aus der Beschreibung („SPLIT 2 FOR 1“ → 2, „SPLIT 1 FOR 10“ → 0,1), beim Tickerwechsel aus den Stückzahlen.
+  - Flex darf eine Zeile mit der Änderung liefern oder zwei Zeilen (alte Stücke ab, neue zu).
+  - Bücher vor dem Stichtag × r: Die ganzen Stück müssen exakt der Flex-Angabe entsprechen. Eine Spitze ist nur mit Barausgleich im Beleg erlaubt; ohne Spitze darf kein Barbetrag über 0,05 im Beleg stehen.
+  - Nach der Buchung müssen die Bücher je Titel ganzzahlig exakt der IBKR-Position entsprechen.
+- **Buchung je Buch:**
+  - Grundlage ist der Bestand des Buchs vor dem Stichtag (`journal.bestand_vor`). Ausführungen am Stichtag laufen schon in neuen Einheiten.
+  - Gebucht wird: alte Stücke ab, neue zu. Der Einstand bleibt in Summe gleich (gleitender Durchschnitt), das Anschaffungsdatum wird übernommen. Steuer immer „zu prüfen“.
+  - Alles läuft in einer Transaktion (`journal.massnahme_buchen`). Bricht etwas ab, bleibt alles beim Alten; ein zweiter Lauf bucht nicht doppelt.
+- **Spitzen beim Reverse-Split** (Entscheidung 2): Jedes Buch bekommt zuerst seine ganzen Stücke. Die übrigen ganzen Stücke gehen einzeln an die Bücher mit dem größten rechnerischen Rest; bei Gleichstand entscheidet der Buchname.
+  - Die verbleibende Spitze wird zum Barausgleichskurs laut Beleg (Barbetrag ÷ Spitze des Kontos) abgerechnet: Abgang mit anteiligem Einstand, oder Zukauf, wenn ein Buch aufgerundet wurde. Die Beträge sind auf Cent gerundet, ihre Summe entspricht exakt dem Beleg.
+  - Ohne Barausgleichskurs, aber mit Aufrundung, wird nicht gebucht.
+  - Jede Buchung steht als Ereignis `kapitalmassnahme_gebucht` im Journal (alt → neu, Einstand, Spitze, Steuer).
+- **Werte in Kurseinheiten** (Entscheidung 3). Die vollständige Liste steht in `kapitalmassnahmen.EINHEITEN`; `test_kurseinheiten_vollstaendig` prüft, dass jede Journalspalte und jedes gespeicherte Zustandsfeld eingeordnet ist.
+
+  | Feld | Einheit | Bei Split |
+  | --- | --- | --- |
+  | Technik-Zustand `stop`, `atr_signal` (in „vor“ und „nach“) | Kurs | ÷ r, Ereignis `kurseinheiten` |
+  | offene Vorschläge vor dem Stichtag: `limit_preis`, `letzter_kurs_eur`, `stop` | Kurs | ÷ r |
+  | offene Vorschläge vor dem Stichtag: `stueck` | Stück | × r (Stück × Limit und damit die Reservierung bleiben gleich) |
+  | Ausführungen (Preis, Stück, Eröffnung), Dividenden (Stück, Satz), Posten | historisch | bleiben (Belegprinzip); die Anzeige rechnet Ø = Einstand ÷ Stück |
+  | Zielgewichte, Ränge, Beträge gesamt, Daten, Texte | neutral | bleiben; beim Tickerwechsel wird nur der Schlüssel umbenannt |
+
+  Indikatoren (SMA50/200, ATR, 55-Tage-Hoch, 20-Tage-Tief, RSI, ADX, 12−1) sind nicht gespeichert; jeder Lauf rechnet sie aus der Kursreihe neu. Trailing-Stops mit gespeichertem Hochpunkt gibt es nicht (der Stop ist fest: Einstieg − 2 × ATR). Das Risiko bis zum Stop bleibt gleich: 10 × (100 − 90) = 20 × (50 − 45).
+- **Kursreihe** (Entscheidung 4): Solange Yahoo die Historie noch nicht bereinigt hat (Sprung am Stichtag von etwa 1/r, Band ± 15 %), bereinigt der Lauf die Reihe selbst: vor dem Sprung Kurse und Ausschüttung ÷ r, Volumen × r.
+  - Das geschieht **nur im Speicher des Laufs**. Der Kurs-Cache, der Tresor und die Backtest-Daten bleiben unberührt.
+  - Meldung „Kursreihe X selbst bereinigt … Kurs-Cache unverändert“.
+  - Jeder Lauf entscheidet neu; ist kein Sprung mehr da, bleibt die Reihe unverändert. Doppelt bereinigt wird also nie.
+  - Danach besteht die Reihe die Datenprüfung (Sprung > 15 %) ohne Ausnahme.
+- **Fundamental: Kurs und Kennzahlen je Aktie** (Entscheidung 4, Ergänzung):
+  - Die Engine rechnet den Marktwert aus Schluss × Aktienzahl (SEC). Die Aktienzahl wird über die Yahoo-Spalte `split` auf die Kursbasis gebracht (`aktien_splitbereinigt`). E/P und EBIT/EV hängen am Marktwert, die Dividende je Aktie an der Reihe. EPS, Buchwert je Aktie und Dividende je Aktie aus SEC nutzt die Engine nicht direkt.
+  - Kurs und Kennzahlen passen erst zusammen, wenn die Reihe im Cache bereinigt ist (kein Sprung) **und** Yahoo den Split als Ereignis mit Faktor r führt. Eine nur im Speicher bereinigte Reihe genügt nicht, weil die Bewertung den Cache liest.
+  - Bis dahin bleibt ein Fundamental-Buch, das den Titel hält oder eine Order dafür unterwegs hat, gestoppt. Passt es einmal, wird der Beleg nicht erneut geprüft (`kennzahlen_passend` im Kontozustand).
+  - Beim SPYI-Split vom Februar 2026 führte Yahoo kein Split-Ereignis. In so einem Fall bleibt das Buch gestoppt, bis Jakob entscheidet.
+  - **Offener Punkt:** Piotroski (Signal „keine neuen Aktien“) vergleicht die erstgemeldeten gewichteten Aktienzahlen zweier Jahre. Liegt ein Split dazwischen, sieht das wie eine Kapitalerhöhung aus, bis ein volles Jahr nach dem Split gemeldet ist. Das betrifft auch den Backtest und ist in A2 nicht geändert.
+- **Order über den Stichtag:**
+  - Offene Vorschläge vor dem Stichtag werden umgerechnet: Ereignis `order_an_split_angepasst` bei gesendeten Orders, sonst `kurseinheiten`.
+  - Das Buch bleibt gestoppt, bis die Order abgeschlossen ist (ausgeführt, storniert oder verfallen).
+  - Hat IBKR die Order angepasst (ausgeführte Stück = Stück × r), wird das gemeldet und der Stopp nach sauberem Abgleich aufgehoben.
+  - Weicht die Ausführung davon ab (unverändert oder teilweise ausgeführt), bleibt das Buch gestoppt, bis Jakob quittiert (`quittung_noetig`).
+  - Beim Tickerwechsel wird eine gesendete Order nicht umgedeutet; noch nicht gesendete Vorschläge für den alten Titel werden „ersetzt“.
+  - Ein negativer Bestand in einem Buch stoppt das Buch, auch wenn er mit IBKR übereinstimmt (nur long).
+- **Tickerwechsel** (Entscheidung 5): Gebucht wird erst, wenn der neue Conid in `config/kontrakte.yaml` steht. Steht der alte Titel im Technik-Universum, muss auch der neue in `config/technik.yaml` stehen. Bis dahin bleibt das Buch gestoppt und die Meldung nennt den fehlenden Eintrag.
+- **Aufhebung:** wie in A1, zusätzlich:
+  - Jeder Titel des Stopps muss in einem gebuchten Beleg vorkommen.
+  - Für die Titel des Stopps darf keine Order mehr unterwegs sein.
+  - Steht `quittung_noetig` im Stopp, hebt nur Jakobs Quittung ihn auf.
+- **Anzeige:** Ø Kaufkurs und Einstand werden jetzt als gleitender Durchschnitt über Käufe, Verkäufe und Maßnahmen gerechnet (`journal.einstaende`). Vorher galten nur die Käufe; nach einem Teilverkauf und Split ergab das einen falschen Ø.
+- **Restrisiko (Paper akzeptiert, Entscheidung 6):** Eine Order, die abends vor einem Ex-Tag gesendet wird, kann über den Split laufen. A2 erkennt das erst danach.
+- **Pflicht vor Echtgeld: A5 (Vorwarnung).** Kapitalmaßnahmen müssen vor dem Senden aus einer Vorwarnung (SEC/Yahoo) bekannt sein, damit keine Order über einen Stichtag läuft; das gilt mindestens für Verkäufe über einen Reverse-Split. Ohne A5 kein Echtgeld.

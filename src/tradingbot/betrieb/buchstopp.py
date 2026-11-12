@@ -61,13 +61,34 @@ def zuordnen(journal, buecher: list[str], positionen, offen: list[dict] | None =
         for b in betroffen:
             hinweis = " (Order unterwegs für diesen Titel – bitte im Client Portal prüfen)" if t in unterwegs[b] else ""
             eintragen(je_buch, b, t, [m["beleg_id"] for m in belege if b in m["buecher"]], text + hinweis)
+    # nur long (A2, Plan 12.11.2026): ein negativer Bestand (z. B. Verkauf über einen Reverse-Split unverändert ausgeführt)
+    # stimmt zwar mit IBKR überein, stoppt aber das Buch bis zur Quittung
+    for b in buecher:
+        for t, s in bestaende[b].items():
+            if s < -1e-9:
+                eintragen(je_buch, b, t, [], f"{t}: negativer Bestand im Buch ({s:g} Stück) – Leerverkauf? Bitte im Client Portal prüfen")
     return nicht_zuordenbar, je_buch
 
 
 def kurz(buch: str, e: dict) -> str:
     """Positivliste für Nachrichten: Buch, Kategorie, Titel – ohne Stück und Beträge."""
-    weg = "; Abweichung ohne Beleg verschwunden – Quittung in der Oberfläche nötig" if e.get("abweichung_weg") else ""
+    weg = ("; Abweichung ohne Beleg verschwunden – Quittung in der Oberfläche nötig" if e.get("abweichung_weg") and not e.get("quittung_noetig")
+           else "; Order über den Stichtag unklar – Quittung in der Oberfläche nötig" if e.get("quittung_noetig") else "")
     return f"Buch {buch} gestoppt – {e['kategorie']}; betroffen: {', '.join(e['titel'][:10])}{weg}"
+
+
+def _gedeckt(journal, buch: str, e: dict) -> bool:
+    """Abweichung durch gebuchte Belege erklärt (A2): jeder Beleg des Eintrags gebucht und jeder Titel des Eintrags kommt in
+    einem dieser Belege vor (Kassenzeilen „Kasse …“ deckt der Beleg selbst)."""
+    if not e.get("belege"):
+        return False
+    titel_belege: set[str] = set()
+    for x in e["belege"]:
+        if not journal.massnahmen("beleg_id=? AND buch=? AND status='gebucht'", (x, buch)) and                 not journal.massnahmen("beleg_id=? AND buch=? AND status IN ('gebucht', 'ohne_buch')", (x, kapitalmassnahmen.KONTO)):
+            return False
+        for nr in (buch, kapitalmassnahmen.KONTO):
+            titel_belege |= {p["ticker"] for p in journal.massnahme_posten(x, nr) if p["ticker"]}
+    return all(t in titel_belege or t.startswith("Kasse ") for t in e.get("titel") or [])
 
 
 def aktualisieren(journal, je_buch: dict[str, dict], jetzt: datetime, *, aufheben: bool = True) -> tuple[list[str], list[str]]:
@@ -82,6 +103,8 @@ def aktualisieren(journal, je_buch: dict[str, dict], jetzt: datetime, *, aufhebe
         eintrag = {"seit": alt["seit"] if alt else zeit, "kategorie": KAT_BELEG if belege else KAT_OHNE,
                    "titel": sorted(set(alt["titel"] if alt else ()) | e["titel"]), "belege": belege, "details": e["details"],
                    "abweichung_weg": None}
+        if alt and alt.get("quittung_noetig"):
+            eintrag["quittung_noetig"] = alt["quittung_noetig"]
         st[b] = eintrag
         if alt is None:
             journal.ereignis("buchstopp", f"Buch {b} gestoppt – {eintrag['kategorie']}: " + "; ".join(e["details"]), b)
@@ -91,7 +114,11 @@ def aktualisieren(journal, je_buch: dict[str, dict], jetzt: datetime, *, aufhebe
     if aufheben:
         for b in [b for b in st if b not in je_buch]:
             e = st[b]
-            erklaert = bool(e["belege"]) and all(journal.massnahmen("beleg_id=? AND buch=? AND status='gebucht'", (x, b)) for x in e["belege"])
+            offen = sorted({z["ticker"] for z in journal.unterwegs(b)} & set(e.get("titel") or []))
+            if offen and not e.get("quittung_noetig"):           # Order über den Stichtag unterwegs: warten, bis sie abgeschlossen ist
+                meldungen.append(f"Buch {b} bleibt gestoppt: Order unterwegs für {', '.join(offen)} – Aufhebung erst, wenn sie abgeschlossen ist")
+                continue
+            erklaert = not e.get("quittung_noetig") and _gedeckt(journal, b, e)
             if erklaert:
                 del st[b]
                 text = f"Stopp aufgehoben: Buch {b} (Abweichung durch gebuchten Beleg erklärt, Abgleich sauber)"

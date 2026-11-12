@@ -386,6 +386,90 @@ class Journal:
         self.db.commit()
         return neu
 
+    def massnahme_buchen(self, *, beleg_id: str, art: str, felder: dict, posten_je_buch: dict[str, list[dict]],
+                         zustaende: dict[str, dict], vorschlaege: list[tuple[str, dict]], ereignisse: list[tuple[str, str, str | None]],
+                         konto_status: str = "gebucht"):
+        """Buchung einer Kapitalmaßnahme in EINER Transaktion (A2, Jakob 12.11.2026): Posten und Status „gebucht“ je Buch,
+        umgerechnete Strategiezustände und offene Vorschläge (Kurseinheiten ÷ r, Stück × r), Ereignisse, Status des
+        Kontobelegs. Bricht etwas ab, bleibt alles beim Alten – keine doppelte Umrechnung beim nächsten Lauf."""
+        jetzt = datetime.now().isoformat(timespec="seconds")
+        try:
+            for buch, posten in posten_je_buch.items():
+                self.db.execute("DELETE FROM kapitalmassnahmen_posten WHERE beleg_id=? AND buch=?", (beleg_id, buch))
+                z = {"beleg_id": beleg_id, "buch": buch, "art": art, "status": "gebucht", "erkannt": jetzt, "aktualisiert": jetzt, **felder}
+                self.db.execute(f"INSERT OR IGNORE INTO kapitalmassnahmen ({', '.join(z)}) VALUES ({', '.join('?' * len(z))})", tuple(z.values()))
+                self.db.execute("UPDATE kapitalmassnahmen SET status='gebucht', aktualisiert=? WHERE beleg_id=? AND buch=?", (jetzt, beleg_id, buch))
+                for nr, pz in enumerate(posten, 1):
+                    q = {"beleg_id": beleg_id, "buch": buch, "nr": nr, **pz}
+                    self.db.execute(f"INSERT INTO kapitalmassnahmen_posten ({', '.join(q)}) VALUES ({', '.join('?' * len(q))})", tuple(q.values()))
+            for buch, daten in zustaende.items():
+                self.db.execute("INSERT OR REPLACE INTO zustand VALUES (?,?,?)", (buch, json.dumps(daten, ensure_ascii=False, default=str), jetzt))
+            for vid, werte in vorschlaege:
+                self.db.execute(f"UPDATE vorschlaege SET {', '.join(f'{k}=?' for k in werte)}, aktualisiert=? WHERE id=?",
+                                (*werte.values(), jetzt, vid))
+            self.db.execute("UPDATE kapitalmassnahmen SET status=?, aktualisiert=? WHERE beleg_id=? AND buch='_konto'", (konto_status, jetzt, beleg_id))
+            for e_art, text, buch in ereignisse:
+                self.db.execute("INSERT INTO ereignisse VALUES (?,?,?,?)", (jetzt, e_art, buch, text))
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def bestand_vor(self, buch: str, tag: str) -> dict[str, float]:
+        """Bestand je Titel zum Handelsschluss vor `tag` (Ausführungen und gebuchte Kapitalmaßnahmen mit Datum vor `tag`)."""
+        aus: dict[str, float] = {}
+        for z in self.db.execute("SELECT ticker, SUM(richtung * stueck) s FROM ausfuehrungen WHERE buch=? AND substr(zeit, 1, 10) < ? "
+                                 "GROUP BY ticker", (buch, tag)):
+            aus[z["ticker"]] = float(z["s"])
+        for p in self.massnahmen_posten(buch, bis=tag):
+            if p["ticker"]:
+                aus[p["ticker"]] = aus.get(p["ticker"], 0.0) + float(p["stueck"])
+        return {t: s for t, s in aus.items() if abs(s) > 1e-9}
+
+    def einstaende(self, buch: str, *, bis: str | None = None) -> dict[str, dict]:
+        """Einstand des Bestands je Titel, gleitender Durchschnitt (A2, 12.11.2026): Käufe erhöhen Stück und Einstand, Verkäufe
+        mindern beides anteilig (Ø unverändert), gebuchte Kapitalmaßnahmen tragen ihren Einstand mit (Split: −alt/+neu bei
+        gleichem Einstand → Ø ÷ r). `w` = Einstand in der Handelswährung ohne Gebühren, `k` = in EUR inkl. Kaufgebühren,
+        `erst` = Tag des ersten Kaufs der aktuellen Position. Posten eines Stichtags vor den Ausführungen desselben Tags
+        (die schon in neuen Einheiten laufen). `bis`: nur Vorgänge vor diesem Tag."""
+        vorgaenge = []
+        sql = "SELECT * FROM ausfuehrungen WHERE buch=?" + (" AND substr(zeit, 1, 10) < ?" if bis else "")
+        for z in self.db.execute(sql, (buch, bis) if bis else (buch,)):
+            vorgaenge.append((str(z["zeit"])[:10], 1, str(z["zeit"]), dict(z)))
+        for p in self.massnahmen_posten(buch, bis=bis):
+            if p["ticker"] and p["stueck"]:
+                vorgaenge.append((str(p["tag"] or ""), 0, str(p["tag"] or ""), {**dict(p), "_posten": True}))
+        erg: dict[str, dict] = {}
+        for _, _, zeit, z in sorted(vorgaenge, key=lambda v: (v[0], v[1], v[2])):
+            e = erg.setdefault(z["ticker"], {"s": 0.0, "w": 0.0, "k": 0.0, "waehrung": None, "erst": None})
+            if z.get("_posten"):
+                e["s"] += float(z["stueck"])
+                e["w"] += float(z["einstand"] or 0.0)
+                e["k"] += float(z["einstand_eur"] or 0.0)
+                e["waehrung"] = e["waehrung"] or z["waehrung"]
+                if float(z["stueck"]) > 0:
+                    erst = z["angeschafft"] or z["tag"]
+                    if erst and (e["erst"] is None or str(erst) < str(e["erst"])):
+                        e["erst"] = erst
+            elif z["richtung"] > 0:
+                preis = z["preis"] if z["preis"] is not None else z["preis_eur"]
+                e["s"] += float(z["stueck"])
+                e["w"] += float(z["stueck"]) * float(preis)
+                e["k"] += float(z["stueck"]) * float(z["preis_eur"]) + float(z["gebuehr_eur"])
+                e["waehrung"] = z["waehrung"] or e["waehrung"]
+                if e["erst"] is None:
+                    e["erst"] = zeit
+            elif e["s"] > 1e-9:
+                anteil = min(float(z["stueck"]) / e["s"], 1.0)
+                e["w"] -= e["w"] * anteil
+                e["k"] -= e["k"] * anteil
+                e["s"] -= float(z["stueck"])
+            else:
+                e["s"] -= float(z["stueck"])
+            if abs(e["s"]) <= 1e-9:
+                e.update(s=0.0, w=0.0, k=0.0, erst=None)
+        return erg
+
     def massnahmen(self, where: str = "1", params: tuple = ()) -> list[sqlite3.Row]:
         return self.db.execute(f"SELECT * FROM kapitalmassnahmen WHERE {where} ORDER BY tag, beleg_id, buch", params).fetchall()
 

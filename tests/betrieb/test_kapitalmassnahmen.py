@@ -186,15 +186,15 @@ def test_stopp_aufgehoben_wenn_beleg_gebucht_und_abgleich_sauber(umgebung):
     lauf(j, rm)
     kauf(j, "crossover", "EUNK.DE", 10, preis=100.0)
     fs = [{**z, "symbol": "EUNK", "currency": "EUR", "reportDate": "20261102"} for z in SPLIT]
-    e = lauf(j, rm, broker=BrokerAttrappe(positionen=[Position("DU1", "EUNK.DE", 20, 50.0)]), flex=flex_mit(fs))
-    assert e.buchstopps["crossover"]["belege"] == ["CA:77"]
-    # Buchung wie in A2 (hier von Hand): Posten des Buchs, Status gebucht
-    j.db.execute("DELETE FROM kapitalmassnahmen WHERE beleg_id='CA:77' AND buch='crossover'")
-    j.massnahme(beleg_id="CA:77", buch="crossover", art="split", status="gebucht", tag="2026-11-02",
-                posten=[{"ticker": "EUNK.DE", "stueck": -10, "einstand": -1000.0}, {"ticker": "EUNK.DE", "stueck": 20, "einstand": 1000.0}])
+    # Ex-Tag: IBKR zeigt schon 20 Stück, der Flex-Beleg kommt erst am Folgetag → Stopp ohne Beleg (A1)
+    e = lauf(j, rm, broker=BrokerAttrappe(positionen=[Position("DU1", "EUNK.DE", 20, 50.0)]), flex=flex_mit())
+    assert e.buchstopps["crossover"]["kategorie"] == buchstopp.KAT_OHNE
+    # Folgetag mit Beleg: A2 bucht (Probe passt), hängt den Beleg an den Stopp, Abgleich sauber → Stopp aufgehoben
     e = lauf(j, rm, jetzt=NAECHSTER, broker=BrokerAttrappe(positionen=[Position("DU1", "EUNK.DE", 20, 50.0)]), flex=flex_mit(fs))
     assert e.buchstopps == {} and e.abgleich == "ok"
+    assert [r["status"] for r in j.massnahmen("beleg_id='CA:77'")] == ["gebucht", "gebucht"]
     assert any(s.startswith("Stopp aufgehoben: Buch crossover") for s in e.sofort)
+    assert any(s.startswith("Kapitalmaßnahme gebucht: Aktiensplit EUNK.DE (r = 2)") for s in e.sofort)
 
 
 def test_buch_mit_order_unterwegs_fuer_den_titel_wird_gestoppt_und_nicht_gesendet(umgebung):

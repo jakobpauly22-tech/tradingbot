@@ -501,8 +501,13 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg, jetzt)
             if not stopp:                                  # Bardividenden mit Flex-Beleg vor dem Kassenabgleich (A0, 12.11.2026)
                 stopp = dividenden.dividenden_klaeren(journal, b, flex, fx, jetzt.date(), erg.meldungen)
-            if not stopp:                                  # Kapitalmaßnahmen nur erkennen und melden (A1, 12.11.2026)
+            if not stopp:                                  # Kapitalmaßnahmen erkennen und melden (A1, 12.11.2026)
                 kapitalmassnahmen.erkennen(journal, list(b["buecher"]), flex, erg.meldungen)
+                # Split, Reverse-Split, Tickerwechsel mit Flex-Beleg buchen, nur bei exakt passender Probe (A2, 12.11.2026)
+                for bu in kapitalmassnahmen.buchen(journal, list(b["buecher"]), positionen, erg.meldungen, fx=fx, jetzt=jetzt,
+                                                   technik_universum={e["ticker"] for e in kt["universum"]["etfs"]}):
+                    if bu.ok:
+                        erg.sofort.append(bu.text)
             if stopp:
                 erg.gestoppt = stopp
                 erg.abgleich = "gestoppt"
@@ -511,6 +516,8 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 return erg
             # Titelabgleich je Buch (A1, Jakob 12.11.2026): nicht zuordenbar → Stopp für alles, sonst nur die betroffenen Bücher
             diff, je_buch = buchstopp.zuordnen(journal, list(b["buecher"]), positionen)
+            # Fundamental: Kurs und Kennzahlen je Aktie nach einem Split auf demselben Stand? Sonst Buch gestoppt (A2)
+            erg.meldungen += kapitalmassnahmen.kennzahlen_pruefen(journal, list(b["buecher"]), kurse_laden, je_buch, nyse)
             if not diff and je_buch and journal.zustand("_konto").get("kassenbasis") is None:
                 erg.meldungen.append("Kassen-Abgleich: ausgesetzt – die Kassenbasis wird erst bei sauberem Abgleich aller Bücher festgehalten")
             elif not diff:                                   # Kassenbasis erst festhalten, wenn die Bestände stimmen
@@ -545,6 +552,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
 
     def gebuehr_fuer(plan, f=1.0):
         return lambda n, wert_eur: risk.kosten.gebuehren_eur(plan, n, wert_eur, f)
+
+    # Kursreihen mit Split laut Flex-Beleg: im Speicher bereinigen, solange Yahoo nicht nachgezogen hat (A2, Entscheidung 4)
+    from tradingbot.betrieb import kapitalmassnahmen as _km
+    kurse_laden = _km.kurse_mit_massnahmen(kurse_laden, journal, erg.meldungen)
 
     # gestoppte Bücher (A1, betrieb/buchstopp.py): keine Vorschläge, kein Buchwert; Technik meldet nur gerissene Stops
     from tradingbot.betrieb import buchstopp as _buchstopp

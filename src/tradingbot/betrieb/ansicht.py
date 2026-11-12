@@ -231,24 +231,10 @@ def rendite_spyi(spyi: pd.Series | None, einz: pd.Series, bis) -> float | None:
 
 
 def _kaufkurse(journal, buch: str) -> dict[str, dict]:
-    """Je Titel aus den Käufen: Ø Kaufkurs (Handelswährung, ohne Gebühren), Ø Kosten je Stück in EUR inkl. gebuchter Gebühr,
-    Währung und Tag des ersten Kaufs."""
-    zeilen = journal.db.execute("SELECT ticker, MAX(waehrung) waehrung, SUM(stueck * COALESCE(preis, preis_eur)) w, SUM(stueck) s, "
-                                "SUM(stueck * preis_eur + gebuehr_eur) k, MIN(zeit) erst FROM ausfuehrungen "
-                                "WHERE buch=? AND richtung>0 GROUP BY ticker", (buch,)).fetchall()
-    summen = {z["ticker"]: {"w": z["w"] or 0.0, "s": z["s"] or 0.0, "k": z["k"] or 0.0, "waehrung": z["waehrung"], "erst": z["erst"]}
-              for z in zeilen}
-    # gebuchte Kapitalmaßnahmen (A1): Stück und übertragener Einstand (Split: −alt/+neu bei gleichem Einstand → Ø Kurs geteilt)
-    for p in journal.massnahmen_posten(buch):
-        if not p["ticker"] or not p["stueck"]:
-            continue
-        s = summen.setdefault(p["ticker"], {"w": 0.0, "s": 0.0, "k": 0.0, "waehrung": p["waehrung"], "erst": None})
-        s["s"] += float(p["stueck"])
-        s["w"] += float(p["einstand"] or 0.0)
-        s["k"] += float(p["einstand_eur"] or 0.0)
-        erst = p["angeschafft"] or p["tag"]
-        if erst and (s["erst"] is None or str(erst) < str(s["erst"])):
-            s["erst"] = erst
+    """Je Titel des Bestands: Ø Kaufkurs (Handelswährung, ohne Gebühren), Ø Kosten je Stück in EUR inkl. gebuchter Gebühr,
+    Währung und Tag des ersten Kaufs. Gleitender Durchschnitt über Käufe, Verkäufe und gebuchte Kapitalmaßnahmen
+    (journal.einstaende, A2 12.11.2026: Split −alt/+neu bei gleichem Einstand → Ø Kurs ÷ r, auch nach Teilverkäufen)."""
+    summen = journal.einstaende(buch)
     erg = {}
     for t, z in summen.items():
         tag = None
