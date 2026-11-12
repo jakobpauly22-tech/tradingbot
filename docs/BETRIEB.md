@@ -400,3 +400,36 @@ A2 bucht Split (FS, FI), Reverse-Split (RS) und Tickerwechsel (IC) mit Flex-Bele
 - **Anzeige:** Ø Kaufkurs und Einstand werden jetzt als gleitender Durchschnitt über Käufe, Verkäufe und Maßnahmen gerechnet (`journal.einstaende`). Vorher galten nur die Käufe; nach einem Teilverkauf und Split ergab das einen falschen Ø.
 - **Restrisiko (Paper akzeptiert, Entscheidung 6):** Eine Order, die abends vor einem Ex-Tag gesendet wird, kann über den Split laufen. A2 erkennt das erst danach.
 - **Pflicht vor Echtgeld: A5 (Vorwarnung).** Kapitalmaßnahmen müssen vor dem Senden aus einer Vorwarnung (SEC/Yahoo) bekannt sein, damit keine Order über einen Stichtag läuft; das gilt mindestens für Verkäufe über einen Reverse-Split. Ohne A5 kein Echtgeld.
+
+## Übernahme und Delisting buchen (A3, Jakob 12.11.2026)
+
+A3 bucht Übernahmen (TC, Merger) und Delisting wertlos (DW), aber erst nach Jakobs Bestätigung in der Oberfläche und nur mit Flex-Beleg (`kapitalmassnahmen._buchen_uebernahme`).
+
+- **Ablauf:**
+  1. Erkennen (A1): Das Buch, das den Titel hält, wird gestoppt. Eine erkannte Maßnahme stoppt das Buch jetzt auch ohne Abweichung zu IBKR.
+  2. Am gestoppten Buch zeigt die Oberfläche die Konditionen laut Flex-Beleg (Verhältnis, Barbetrag je Aktie, Flex-Posten) mit den Knöpfen „Bestätigen“ und „Ablehnen“. Beides steht mit Zeitstempel im Journal (`massnahme_bestaetigt`, `massnahme_abgelehnt`).
+  3. Gebucht wird im nächsten Tageslauf nach der Bestätigung (Entscheidung 2), nur bei exakt passender Probe. Sonst bleibt der Stopp, und eine Meldung nennt den Grund.
+- **Probe:**
+  - Abgang laut Flex = Bücher vor dem Stichtag.
+  - Neue ganze Stück = floor(Stück × Verhältnis) laut Flex, verteilt nach größtem Rest (wie A2).
+  - Barbetrag laut Flex = Stück × Barbetrag je Aktie (Barzuzahlung) + Spitzenausgleich. Gibt es keine Spitze, muss der Barbetrag auf ± 0,05 passen.
+  - Danach Bücher = IBKR-Position.
+  - Der neue Conid muss in `config/kontrakte.yaml` stehen.
+- **Konditionen:** Sie werden aus der IBKR-Beschreibung gelesen („… WITH &lt;ISIN&gt; 14625 FOR 100000 AND USD 3.50“, „… FOR USD 50.00 PER SHARE“). Das Format ist am ersten echten Beleg zu prüfen. Werte von Hand gibt es nicht; ist die Beschreibung nicht lesbar, gelten die Flex-Stückzahlen und -Beträge.
+- **Einstand und Barkomponente** (Entscheidung 1):
+  - Der Einstand geht voll auf die neuen Aktien über (Anschaffungsdatum übernommen); nur eine verkaufte Spitze nimmt ihren Anteil mit.
+  - Jeder Posten trägt eine Art (`kapitalmassnahmen_posten.art`), steuerlich getrennt von Dividenden und Veräußerungen:
+    - `barzuzahlung`: „Barzuzahlung (§ 20 Abs. 4a, zu prüfen)“. Lässt sich umrechnen, falls die Vorschrift nicht greift.
+    - `barabfindung`: reine Barübernahme, Veräußerung § 20 Abs. 2, zu prüfen.
+    - `spitzenausgleich`: Bruchteil, Veräußerung, zu prüfen (gilt auch für die Spitzen aus A2).
+    - `bestand`: Stückposten mit übertragenem Einstand.
+- **Delisting:**
+  - Nur DW gilt als „Delisting wertlos“: Der Titel wird ausgebucht, der Einstand wird zum Verlust.
+  - Ein DW mit Gegenleistung im Beleg wird nicht gebucht.
+  - Ein Delisting, bei dem der Handel weitergeht (z. B. außerbörslich), ist kein DW. Ein unbekanntes Kürzel stoppt wie in A1 und wird nie automatisch gebucht. Die Oberfläche bietet dafür nur „Ablehnen (nicht buchen)“, danach kommt die Quittung.
+- **Ablehnen** (Entscheidung 4): Status „abgelehnt“, das Buch bleibt gestoppt bis zur Quittung. Abweichungen der Titel einer abgelehnten Maßnahme werden weiter dem Buch zugeordnet (kein Stopp für alles). Quittieren geht erst, wenn der Abgleich des Buchs sauber ist.
+- **Strategiezustand:** Der untergegangene Titel fällt aus der Technik-Position und aus Fundamental-Ziel und -Rang, damit es keinen Nachkauf eines delisteten Titels gibt. Gesendete Orders werden nicht umgedeutet: Das Buch bleibt gestoppt, bis sie abgeschlossen sind. Nicht gesendete Vorschläge werden „ersetzt“.
+- **Fremdtitel** (Entscheidung 3):
+  - Fundamental-Bücher halten erhaltene Aktien bis zum nächsten Quartalsstichtag; dann entscheidet die Auswahlregel. Ein Titel außerhalb des gefilterten Universums wird verkauft.
+  - Technik-Bücher bekommen im nächsten Lauf einen Ausstiegsvorschlag für jeden Titel außerhalb des Universums (Ausstiege sind immer erlaubt).
+- **Kenvue** (Primärquellen geprüft 12.11.2026): Gemeinsame Pressemitteilung vom 03.11.2025: 3,50 USD bar und 0,14625 Kimberly-Clark-Aktien je Kenvue-Aktie. 8-K vom 02.11.2026: Vollzug am 02.11.2026, Bruchteile bar zum VWAP-Durchschnitt der 5 Handelstage vor dem Vollzug. Kein Buch hielt KVUE; der Fall dient als Test (`test_kapitalmassnahmen_a3.py`).

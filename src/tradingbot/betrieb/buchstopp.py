@@ -61,6 +61,18 @@ def zuordnen(journal, buecher: list[str], positionen, offen: list[dict] | None =
         for b in betroffen:
             hinweis = " (Order unterwegs für diesen Titel – bitte im Client Portal prüfen)" if t in unterwegs[b] else ""
             eintragen(je_buch, b, t, [m["beleg_id"] for m in belege if b in m["buecher"]], text + hinweis)
+    # erkannte/bestätigte Maßnahme: Buch bis zur Buchung gestoppt, auch ohne Abweichung (z. B. Delisting mit Handel
+    # außerbörslich oder unbekanntes Kürzel, Jakob 12.11.2026); abgelehnte nicht – dort entscheidet die Quittung
+    for m in offen:
+        if m.get("status", "erkannt") not in kapitalmassnahmen.OFFEN:
+            continue
+        for b in m["buecher"]:
+            if b not in bestaende:
+                continue
+            for t in sorted(m["titel"] & set(bestaende[b])):
+                if not any(t == x for x in je_buch.get(b, {}).get("titel", ())):
+                    eintragen(je_buch, b, t, [m["beleg_id"]], f"{t}: Kapitalmaßnahme {m['beleg_id']} ({kapitalmassnahmen.NAMEN[m['art']]}) "
+                                                              "erkannt, noch nicht gebucht")
     # nur long (A2, Plan 12.11.2026): ein negativer Bestand (z. B. Verkauf über einen Reverse-Split unverändert ausgeführt)
     # stimmt zwar mit IBKR überein, stoppt aber das Buch bis zur Quittung
     for b in buecher:

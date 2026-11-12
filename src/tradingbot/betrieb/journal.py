@@ -78,6 +78,9 @@ class Journal:
         # Nachträge vom 09.11.2026 (Weg über die Position) tragen eine angenommene Gebühr (Jakob 09.11.2026)
         self.db.execute("UPDATE ausfuehrungen SET gebuehr_angenommen=1 WHERE quelle LIKE 'IBKR Position (Einstand)%' "
                         "AND COALESCE(gebuehr_angenommen, 0)=0")
+        if "art" not in {z["name"] for z in self.db.execute("PRAGMA table_info(kapitalmassnahmen_posten)")}:
+            # A3: bestand | barzuzahlung | barabfindung | spitzenausgleich (steuerlich getrennt, kapitalmassnahmen.POSTEN_ARTEN)
+            self.db.execute("ALTER TABLE kapitalmassnahmen_posten ADD COLUMN art TEXT")
         if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
             self.db.execute("ALTER TABLE buchwerte ADD COLUMN wert_modell REAL")
         self.db.commit()

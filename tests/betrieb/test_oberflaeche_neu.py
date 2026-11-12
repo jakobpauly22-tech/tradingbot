@@ -311,3 +311,26 @@ def test_split_quelle_flex_quittieren_in_der_oberflaeche(wurzel, journal):
     knopf.invoke()
     assert buchstopp.gestoppt(journal) == {} and kapitalmassnahmen.flex_splits_je_symbol(journal) == {"US1": [("2026-11-02", 2.0)]}
     assert journal.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='flex_split_quittiert'").fetchone()[0] == 1
+
+
+def test_uebernahme_bestaetigen_und_ablehnen_in_der_oberflaeche(wurzel, journal):
+    """A3 (Jakob 12.11.2026): Konditionen laut Flex am gestoppten Buch, Knöpfe Bestätigen/Ablehnen; unbekannte Art nur Ablehnen."""
+    from tradingbot.betrieb import buchstopp, kapitalmassnahmen
+
+    for beleg, art, ticker in (("CA:55", "uebernahme", "KVUE"), ("CA:60", "sonstige", "OTC")):
+        journal.massnahme(beleg_id=beleg, buch="_konto", art=art, tag="2026-11-02", beschreibung=f"{ticker} MERGED(Acquisition) WITH X 14625 FOR "
+                          "100000 AND USD 3.50", posten=[{"ticker": ticker, "stueck": -100, "waehrung": "USD", "betrag": 425.0}])
+        journal.massnahme(beleg_id=beleg, buch="fundamental_a", art=art, tag="2026-11-02")
+    buchstopp.aktualisieren(journal, {"fundamental_a": {"titel": {"KVUE"}, "belege": {"CA:55"}, "details": ["KVUE: erkannt"]}},
+                            datetime(2026, 11, 9, 23, 0))
+    f = fenster(wurzel, journal)
+    assert set(f.bestaetigen_knoepfe["CA:55"]) == {"bestaetigen", "ablehnen"} and set(f.bestaetigen_knoepfe["CA:60"]) == {"ablehnen"}
+    f.bestaetigen_knoepfe["CA:55"]["bestaetigen"].invoke()
+    assert {r["status"] for r in journal.massnahmen("beleg_id='CA:55'")} == {"bestaetigt"}
+    f = fenster(wurzel, journal)
+    assert "CA:55" not in f.bestaetigen_knoepfe
+    f.bestaetigen_knoepfe["CA:60"]["ablehnen"].invoke()
+    assert {r["status"] for r in journal.massnahmen("beleg_id='CA:60'")} == {"abgelehnt"}
+    assert buchstopp.gestoppt(journal)["fundamental_a"]["quittung_noetig"]
+    assert journal.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art IN ('massnahme_bestaetigt','massnahme_abgelehnt')").fetchone()[0] == 2
+    assert kapitalmassnahmen.bestaetigung_offen(journal) == []

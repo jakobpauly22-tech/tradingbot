@@ -146,7 +146,10 @@ def erkennen(journal, buecher: list[str], flex, meldungen: list[str], *, ticker_
         neu.append(m.beleg_id)
         text = (f"Kapitalmaßnahme erkannt: {NAMEN[m.art]} ({m.code or '?'}) am {m.tag or '?'}, Titel {', '.join(sorted(titel))}; "
                 + (f"betroffen: {', '.join(betroffen)} – Buch gestoppt bis zur Buchung" if betroffen else "kein Buch betroffen")
-                + f"; Steuer {STEUER[m.art]}; noch nicht gebucht")
+                + f"; Steuer {STEUER[m.art]}; noch nicht gebucht"
+                + ("; Bestätigung in der Oberfläche nötig" if m.art in BESTAETIGUNG else
+                   "; unbekannte Art – wird nie automatisch gebucht, nach Prüfung in der Oberfläche ablehnen und quittieren"
+                   if m.art == "sonstige" else ""))
         journal.ereignis("kapitalmassnahme", text)
         meldungen.append(text)
         for p in m.posten:                                                # neue Conids nur als Vorschlag
@@ -159,17 +162,18 @@ def erkennen(journal, buecher: list[str], flex, meldungen: list[str], *, ticker_
 
 
 def offene(journal) -> list[dict]:
-    """Erkannte, noch nicht gebuchte Maßnahmen mit Titeln, Barkomponente und betroffenen Büchern."""
+    """Nicht gebuchte Maßnahmen (erkannt, bestätigt, abgelehnt) mit Status, Titeln, Barkomponente und betroffenen Büchern.
+    Abgelehnte bleiben dabei, damit Abweichungen ihrer Titel dem Buch zugeordnet werden statt alles zu stoppen (A3)."""
     aus = []
-    for k in journal.massnahmen("buch=? AND status IN (?, ?)", (KONTO, *OFFEN)):
+    for k in journal.massnahmen("buch=? AND status IN (?, ?, ?)", (KONTO, *OFFEN, "abgelehnt")):
         posten = journal.massnahme_posten(k["beleg_id"])
         bar: dict[str, float] = {}
         for p in posten:
             if abs(p["betrag"] or 0.0) > 1e-9:
                 bar[p["waehrung"]] = bar.get(p["waehrung"], 0.0) + float(p["betrag"])
         buecher = [r["buch"] for r in journal.massnahmen("beleg_id=? AND buch!=?", (k["beleg_id"], KONTO))]
-        aus.append({"beleg_id": k["beleg_id"], "art": k["art"], "titel": {p["ticker"] for p in posten if p["ticker"]}, "bar": bar,
-                    "buecher": buecher})
+        aus.append({"beleg_id": k["beleg_id"], "art": k["art"], "status": k["status"], "titel": {p["ticker"] for p in posten if p["ticker"]},
+                    "bar": bar, "buecher": buecher})
     return aus
 
 
@@ -221,7 +225,7 @@ EINHEITEN: dict[str, dict[str, str]] = {
                                                   "betrag", "betrag_eur", "steuer", "quelle", "gebucht")}},
     "kapitalmassnahmen_posten": {"stueck": "historisch",
                                  **{s: "neutral" for s in ("beleg_id", "buch", "nr", "ticker", "conid", "symbol", "isin", "waehrung", "betrag",
-                                                           "betrag_eur", "einstand", "einstand_eur", "angeschafft")}},
+                                                           "betrag_eur", "einstand", "einstand_eur", "angeschafft", "art")}},
     "kapitalmassnahmen": {s: "neutral" for s in ("beleg_id", "buch", "code", "art", "tag", "beschreibung", "status", "steuer", "quelle",
                                                  "erkannt", "aktualisiert")},
     "buecher": {s: "neutral" for s in ("buch", "startkapital", "messbeginn")},
@@ -518,7 +522,15 @@ def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx:
     ist = {p.ticker: float(p.stueck) for p in positionen}
     jetzt_text = (jetzt or datetime.now()).replace(tzinfo=None).isoformat(timespec="seconds")
     ergebnisse: list[Buchung] = []
-    for k in journal.massnahmen("buch=? AND art IN (?, ?, ?) AND status IN (?, ?)", (KONTO, *BUCHBAR, *OFFEN)):
+    for k in journal.massnahmen("buch=? AND art IN (?, ?, ?, ?, ?) AND status IN (?, ?)", (KONTO, *BUCHBAR, *BESTAETIGUNG, *OFFEN)):
+        if k["art"] in BESTAETIGUNG:                               # A3: erst nach Jakobs Bestätigung, im nächsten Tageslauf
+            if k["status"] != "bestaetigt":
+                meldungen.append(f"{NAMEN[k['art']]} {k['beleg_id']}: wartet auf Bestätigung in der Oberfläche – Buch bleibt gestoppt")
+                continue
+            bu = _buchen_uebernahme(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen)
+            if bu is not None:
+                ergebnisse.append(bu)
+            continue
         beleg, art, tag = k["beleg_id"], k["art"], k["tag"]
         kopf = f"{NAMEN[art]} {beleg}"
         roh = [dict(p) for p in journal.massnahme_posten(beleg)]
@@ -649,14 +661,13 @@ def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx:
                 k_neu = k_alt + (-f) * preis_spitze / (1.0 if bar_w == "EUR" else float(fx[bar_w]))
             angeschafft = str(e.get("erst") or "")[:10] or None
             posten = [{"ticker": alt, "conid": p_alt.get("conid"), "symbol": p_alt.get("symbol"), "isin": p_alt.get("isin"), "stueck": -s,
-                       "waehrung": w_ein, "einstand": -w_alt, "einstand_eur": -k_alt}]
+                       "waehrung": w_ein, "einstand": -w_alt, "einstand_eur": -k_alt, "art": "bestand"}]
             if ganz:
                 posten.append({"ticker": neu, "conid": p_neu.get("conid"), "symbol": p_neu.get("symbol"), "isin": p_neu.get("isin"),
-                               "stueck": ganz, "waehrung": w_ein, "einstand": w_neu, "einstand_eur": k_neu, "angeschafft": angeschafft})
+                               "stueck": ganz, "waehrung": w_ein, "einstand": w_neu, "einstand_eur": k_neu, "angeschafft": angeschafft,
+                               "art": "bestand"})
             if b in bar_je:
-                betrag = bar_je[b]
-                posten.append({"ticker": None, "stueck": 0, "waehrung": bar_w, "betrag": betrag,
-                               "betrag_eur": round(betrag if bar_w == "EUR" else betrag / float(fx[bar_w]), 2)})
+                posten.append(_barposten(bar_je[b], bar_w, fx, "spitzenausgleich"))
             posten_je_buch[b] = posten
             text = (f"{kopf} gebucht ({b}): {alt} {s:g} → {neu} {ganz} Stück (r = {r:g}), Einstand {w_alt:,.2f} → {w_neu:,.2f} {w_ein}"
                     + (f", Spitze {f:+.4f} Stück nach größtem Rest, Barausgleich {bar_je.get(b, 0.0):+,.2f} {bar_w}" if abs(f) > 1e-9 else "")
@@ -664,8 +675,7 @@ def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx:
             ereignisse.append(("kapitalmassnahme_gebucht", text, b))
             zeilen.append(text)
 
-        # --- Kurseinheiten ÷ r (Entscheidung 3): Strategiezustände aller Bücher, offene Vorschläge vor dem Stichtag -----------
-        zustaende: dict[str, dict] = {}
+        zustaende = {}
         for b in buecher:
             z = journal.zustand(b)
             if not z:
@@ -674,58 +684,8 @@ def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx:
             if aend:
                 zustaende[b] = z_neu
                 ereignisse.append(("kurseinheiten", f"{kopf}: Strategiezustand {b} umgerechnet (Kurseinheiten ÷ {r:g}): " + "; ".join(aend), b))
-        vorschlaege, unterwegs_alt, ueber_stichtag = [], {}, {}
-        for z in journal.db.execute("SELECT * FROM vorschlaege WHERE ticker=? AND art!='fx' AND signaltag < ? AND status IN "
-                                    "('vorgeschlagen','freigegeben','gesendet','unbestaetigt','ausgefuehrt')", (alt, tag)).fetchall():
-            if z["status"] == "ausgefuehrt":                       # Order über den Stichtag ausgeführt?
-                spaet = journal.db.execute("SELECT COALESCE(SUM(stueck), 0) FROM ausfuehrungen WHERE order_ref=? AND substr(zeit, 1, 10) >= ?",
-                                           (f"{z['buch']}:{z['id']}", tag)).fetchone()[0]
-                if spaet:
-                    erwartet = float(z["stueck"]) * r
-                    if abs(float(spaet) - erwartet) > 1e-6:
-                        ueber_stichtag.setdefault(z["buch"], []).append(
-                            f"Order {z['id']} ({alt}) über den Stichtag ausgeführt: {float(spaet):g} Stück statt {erwartet:g} nach Umrechnung – "
-                            "von IBKR nicht angepasst? Bitte im Client Portal prüfen und quittieren")
-                    else:
-                        meldungen.append(f"Order {z['id']} ({alt}) über den Stichtag von IBKR angepasst ausgeführt ({float(spaet):g} Stück)")
-                continue
-            if neu != alt and z["status"] in ("vorgeschlagen", "freigegeben"):
-                vorschlaege.append((z["id"], {"status": "ersetzt"}))
-                ereignisse.append(("kurseinheiten", f"{kopf}: Vorschlag {z['id']} ({alt}) ersetzt – der Titel heißt jetzt {neu}", z["buch"]))
-                continue
-            if z["status"] in ("gesendet", "unbestaetigt"):
-                unterwegs_alt.setdefault(z["buch"], []).append(z["id"])
-                if neu != alt:                                      # Tickerwechsel: nicht automatisch umdeuten (Plan A2)
-                    continue
-            werte = vorschlag_umrechnen(z, r)
-            vorschlaege.append((z["id"], werte))
-            ereignisse.append(("order_an_split_angepasst" if z["status"] in ("gesendet", "unbestaetigt") else "kurseinheiten",
-                               f"{kopf}: Vorschlag {z['id']} ({z['status']}) umgerechnet: "
-                               + ", ".join(f"{f} {float(z[f]):g} → {v:g}" for f, v in werte.items()), z["buch"]))
-
-        # --- Buchstopps: Beleg anhängen; Order über den Stichtag → Quittung bzw. Warten ----------------------------------------
-        st = buchstopp.gestoppt(journal)
-        for b in sorted(set(vorher) | set(unterwegs_alt) | set(ueber_stichtag)):
-            if b not in st and b not in ueber_stichtag and b not in unterwegs_alt:
-                continue
-            e = st.setdefault(b, {"seit": jetzt_text, "kategorie": buchstopp.KAT_BELEG, "titel": [], "belege": [], "details": [],
-                                  "abweichung_weg": None})
-            e["belege"] = sorted(set(e.get("belege") or []) | {beleg})
-            e["titel"] = sorted(set(e.get("titel") or []) | {alt, neu})
-            if b in ueber_stichtag:
-                e["quittung_noetig"] = "; ".join(ueber_stichtag[b])
-                e["details"] = list(e.get("details") or []) + ueber_stichtag[b]
-            if b in unterwegs_alt:
-                e["details"] = list(e.get("details") or []) + [f"Order(s) {', '.join(unterwegs_alt[b])} über den Stichtag unterwegs – "
-                                                               "Stopp bleibt, bis sie abgeschlossen sind"]
-        zustaende[buchstopp.SCHLUESSEL] = st
-        journal.massnahme_buchen(beleg_id=beleg, art=art, felder=felder, posten_je_buch=posten_je_buch, zustaende=zustaende,
-                                 vorschlaege=vorschlaege, ereignisse=ereignisse)
-        meldungen += zeilen
-        meldungen += [x for b in sorted(ueber_stichtag) for x in ueber_stichtag[b]]
-        ergebnisse.append(Buchung(beleg, art, True, f"Kapitalmaßnahme gebucht: {NAMEN[art]} {alt}" + (f" → {neu}" if neu != alt else "")
-                                  + (f" (r = {r:g})" if art in SPLITS else "") + f"; Bücher {', '.join(sorted(vorher))}",
-                                  sorted(vorher), {alt, neu}))
+        ergebnisse.append(_abschliessen(journal, k, alt, neu, r, vorher, posten_je_buch, zustaende, ereignisse, zeilen, meldungen, jetzt_text,
+                                        umrechnen=True))
     return ergebnisse
 
 
@@ -793,3 +753,347 @@ def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, ta
     if neu_passend or geaendert:
         journal.zustand_speichern("_konto", konto)
     return zeilen
+
+
+# === A3 (Jakob 12.11.2026): Übernahme (TC) und Delisting wertlos (DW) nach Bestätigung =======================================
+#
+# Entscheidungen: (1) Einstand geht voll auf die neuen Aktien über; die Barkomponente wird als eigene Posten-Art
+# „Barzuzahlung (§ 20 Abs. 4a, zu prüfen)“ gebucht, getrennt von Dividenden und Veräußerungen, damit sie sich umrechnen
+# lässt, falls die Vorschrift nicht greift; (2) gebucht wird erst im nächsten Tageslauf nach der Bestätigung (Probe mit
+# frischen IBKR-Positionen); (3) Fremdtitel: Fundamental hält bis zum nächsten Stichtag, Technik bekommt im nächsten Lauf
+# einen Ausstiegsvorschlag; (4) nach „Ablehnen“ bleibt das Buch gestoppt bis zur Quittung. Zusatz: Nur DW ist „Delisting
+# wertlos“; ein Delisting mit weiterem Handel (z. B. außerbörslich) ist kein DW – ein unbekanntes Kürzel stoppt wie in A1
+# und wird nie automatisch gebucht.
+
+BESTAETIGUNG = ("uebernahme", "delisting")
+POSTEN_ARTEN = {"bestand": "Stückposten (Einstand übertragen)",
+                "barzuzahlung": "Barzuzahlung (§ 20 Abs. 4a, zu prüfen)",
+                "barabfindung": "Barabfindung (Veräußerung § 20 Abs. 2, zu prüfen)",
+                "spitzenausgleich": "Spitzenausgleich (Veräußerung des Bruchteils, zu prüfen)"}
+
+
+def _barposten(betrag: float, waehrung: str, fx: dict[str, float], art: str) -> dict:
+    return {"ticker": None, "stueck": 0, "waehrung": waehrung, "betrag": betrag, "art": art,
+            "betrag_eur": round(betrag if waehrung == "EUR" else betrag / float(fx[waehrung]), 2)}
+
+
+def konditionen(beschreibung: str | None) -> tuple[float | None, str | None, float | None]:
+    """Übernahmekonditionen aus der IBKR-Beschreibung: (neue Aktien je alte Aktie, Währung, Barbetrag je Aktie).
+    „… MERGED(Acquisition) WITH US4943681035 14625 FOR 100000 AND USD 3.50 (…)“ → (0,14625, USD, 3,50);
+    „… MERGED(Acquisition) FOR USD 50.00 PER SHARE (…)“ → (None, USD, 50,0). Format am ersten echten Beleg prüfen."""
+    t = str(beschreibung or "")
+    r = None
+    m = re.search(r"WITH\s+\S+\s+(\d+(?:\.\d+)?)\s+FOR\s+(\d+(?:\.\d+)?)", t, re.IGNORECASE)
+    if m and float(m.group(2)) > 0:
+        r = float(m.group(1)) / float(m.group(2))
+    m = re.search(r"(?:AND|FOR)\s+([A-Z]{3})\s+(\d+(?:\.\d+)?)", t)
+    return r, (m.group(1) if m else None), (float(m.group(2)) if m else None)
+
+
+def bestaetigung_offen(journal, buch: str | None = None) -> list[dict]:
+    """Erkannte Übernahmen/Delistings (Bestätigen oder Ablehnen) und unbekannte Arten (nur Ablehnen), optional je Buch, mit
+    Text der Konditionen laut Flex-Beleg für die Oberfläche."""
+    aus = []
+    for k in journal.massnahmen("buch=? AND status='erkannt' AND art IN (?, ?, ?)", (KONTO, *BESTAETIGUNG, "sonstige")):
+        buecher = [r["buch"] for r in journal.massnahmen("beleg_id=? AND buch!=?", (k["beleg_id"], KONTO))]
+        if buch is not None and buch not in buecher:
+            continue
+        aus.append({"beleg_id": k["beleg_id"], "art": k["art"], "buecher": buecher, "bestaetigbar": k["art"] in BESTAETIGUNG,
+                    "text": konditionen_text(journal, k)})
+    return aus
+
+
+def konditionen_text(journal, k) -> str:
+    """Konditionen laut Flex-Beleg zum Vergleich mit der Pressemitteilung (nur Oberfläche, nie in Nachrichten)."""
+    posten = journal.massnahme_posten(k["beleg_id"])
+    r, w, bar_je = konditionen(k["beschreibung"])
+    teile = [f"{NAMEN[k['art']]} {k['beleg_id']} am {k['tag'] or '?'}"]
+    if r is not None:
+        teile.append(f"{r:g} neue Aktien je Aktie")
+    if bar_je is not None:
+        teile.append(f"{bar_je:,.2f} {w} bar je Aktie")
+    teile.append("Flex: " + ", ".join(f"{p['ticker'] or p['waehrung']} {p['stueck']:+g}" + (f" / {p['betrag']:+,.2f} {p['waehrung']}" if p["betrag"] else "")
+                                      for p in posten))
+    return "; ".join(teile)
+
+
+def bestaetigen(journal, beleg_id: str, jetzt: datetime | None = None) -> str:
+    """Jakob bestätigt eine Übernahme/ein Delisting in der Oberfläche (Status „bestätigt“, Ereignis mit Zeitstempel);
+    gebucht wird im nächsten Tageslauf, nur bei exakt passender Probe."""
+    jetzt = (jetzt or datetime.now()).replace(tzinfo=None)
+    k = (journal.massnahmen("beleg_id=? AND buch=?", (beleg_id, KONTO)) or [None])[0]
+    if k is None or k["status"] != "erkannt" or k["art"] not in BESTAETIGUNG:
+        raise ValueError(f"Beleg {beleg_id}: nicht bestätigbar (Art {k['art'] if k else '?'}, Status {k['status'] if k else '?'})")
+    for r in journal.massnahmen("beleg_id=?", (beleg_id,)):
+        journal.massnahme_status(beleg_id, r["buch"], "bestaetigt")
+    text = f"{NAMEN[k['art']]} {beleg_id} bestätigt von Jakob am {jetzt:%d.%m.%Y %H:%M:%S} ({konditionen_text(journal, k)}) – Buchung im nächsten Tageslauf"
+    journal.ereignis("massnahme_bestaetigt", text, jetzt=jetzt)
+    return text
+
+
+def ablehnen(journal, beleg_id: str, jetzt: datetime | None = None) -> str:
+    """Jakob lehnt ab (Konditionen passen nicht, oder unbekannte Art ohne Buchung erledigt): Status „abgelehnt“, die Bücher
+    bleiben gestoppt bis zur Quittung (Entscheidung 4)."""
+    from tradingbot.betrieb import buchstopp
+
+    jetzt = (jetzt or datetime.now()).replace(tzinfo=None)
+    k = (journal.massnahmen("beleg_id=? AND buch=?", (beleg_id, KONTO)) or [None])[0]
+    if k is None or k["status"] not in OFFEN:
+        raise ValueError(f"Beleg {beleg_id}: nicht ablehnbar (Status {k['status'] if k else '?'})")
+    buecher = [r["buch"] for r in journal.massnahmen("beleg_id=? AND buch!=?", (beleg_id, KONTO))]
+    for r in journal.massnahmen("beleg_id=?", (beleg_id,)):
+        journal.massnahme_status(beleg_id, r["buch"], "abgelehnt")
+    text = f"{NAMEN[k['art']]} {beleg_id} abgelehnt von Jakob am {jetzt:%d.%m.%Y %H:%M:%S} – Bücher {', '.join(buecher) or '–'} bleiben gestoppt bis zur Quittung"
+    st = buchstopp.gestoppt(journal)
+    titel = sorted({p["ticker"] for p in journal.massnahme_posten(beleg_id) if p["ticker"]})
+    for b in buecher:
+        e = st.setdefault(b, {"seit": jetzt.isoformat(timespec="seconds"), "kategorie": buchstopp.KAT_BELEG, "titel": [], "belege": [],
+                              "details": [], "abweichung_weg": None})
+        e["titel"] = sorted(set(e.get("titel") or []) | set(titel))
+        e["belege"] = sorted(set(e.get("belege") or []) | {beleg_id})
+        e["quittung_noetig"] = text
+        e["details"] = list(e.get("details") or []) + [text]
+    journal.zustand_speichern(buchstopp.SCHLUESSEL, st)
+    journal.ereignis("massnahme_abgelehnt", text, jetzt=jetzt)
+    return text
+
+
+def zustand_entfernen(z: dict, alt: str) -> tuple[dict, list[str]]:
+    """Strategiezustand ohne den untergegangenen Titel (A3): Technik-Position, Sperren, Monatsprüfung, Fundamental-Ziel und
+    -Rang – sonst schlüge der Nachkauf einen delisteten Titel vor."""
+    aenderungen: list[str] = []
+
+    def teil(d: dict, wo: str) -> dict:
+        d = dict(d)
+        for schluessel in ("positionen", "gesperrt", "pruefmonat", "ziel", "rang"):
+            if isinstance(d.get(schluessel), dict) and alt in d[schluessel]:
+                d[schluessel] = {t: v for t, v in d[schluessel].items() if t != alt}
+                aenderungen.append(f"{wo}{schluessel}: {alt} entfernt")
+        return d
+
+    if "nach" in z or "vor" in z:
+        z = dict(z)
+        for wo in ("vor", "nach"):
+            if isinstance(z.get(wo), dict):
+                z[wo] = teil(z[wo], f"{wo}: ")
+        return z, aenderungen
+    return teil(z, ""), aenderungen
+
+
+def _abschliessen(journal, k, alt: str, neu: str | None, r: float, vorher: dict[str, float], posten_je_buch, zustaende, ereignisse,
+                  zeilen, meldungen, jetzt_text, *, umrechnen: bool) -> Buchung:
+    """Gemeinsamer Abschluss A2/A3: offene Vorschläge vor dem Stichtag (Split: umrechnen; Titel geht unter: ersetzen bzw.
+    unterwegs lassen), Order über den Stichtag, Beleg an die Buchstopps, alles in einer Transaktion."""
+    from tradingbot.betrieb import buchstopp
+
+    beleg, art, tag = k["beleg_id"], k["art"], k["tag"]
+    kopf = f"{NAMEN[art]} {beleg}"
+    titel = {alt} | ({neu} if neu else set())
+    vorschlaege, unterwegs_alt, ueber_stichtag = [], {}, {}
+    for z in journal.db.execute("SELECT * FROM vorschlaege WHERE ticker=? AND art!='fx' AND signaltag < ? AND status IN "
+                                "('vorgeschlagen','freigegeben','gesendet','unbestaetigt','ausgefuehrt')", (alt, tag)).fetchall():
+        if z["status"] == "ausgefuehrt":                           # Order über den Stichtag ausgeführt?
+            spaet = journal.db.execute("SELECT COALESCE(SUM(stueck), 0) FROM ausfuehrungen WHERE order_ref=? AND substr(zeit, 1, 10) >= ?",
+                                       (f"{z['buch']}:{z['id']}", tag)).fetchone()[0]
+            if spaet:
+                erwartet = float(z["stueck"]) * r if umrechnen else None
+                if erwartet is None or abs(float(spaet) - erwartet) > 1e-6:
+                    ueber_stichtag.setdefault(z["buch"], []).append(
+                        f"Order {z['id']} ({alt}) über den Stichtag ausgeführt: {float(spaet):g} Stück"
+                        + (f" statt {erwartet:g} nach Umrechnung – von IBKR nicht angepasst?" if erwartet is not None else " – Titel ging am Stichtag unter")
+                        + " Bitte im Client Portal prüfen und quittieren")
+                else:
+                    meldungen.append(f"Order {z['id']} ({alt}) über den Stichtag von IBKR angepasst ausgeführt ({float(spaet):g} Stück)")
+            continue
+        if (neu != alt or not umrechnen) and z["status"] in ("vorgeschlagen", "freigegeben"):
+            vorschlaege.append((z["id"], {"status": "ersetzt"}))
+            ereignisse.append(("kurseinheiten", f"{kopf}: Vorschlag {z['id']} ({alt}) ersetzt – " + (f"der Titel heißt jetzt {neu}" if umrechnen
+                               else "der Titel ist untergegangen"), z["buch"]))
+            continue
+        if z["status"] in ("gesendet", "unbestaetigt"):
+            unterwegs_alt.setdefault(z["buch"], []).append(z["id"])
+            if neu != alt or not umrechnen:                        # Tickerwechsel/Übernahme: nicht automatisch umdeuten
+                continue
+        werte = vorschlag_umrechnen(z, r)
+        vorschlaege.append((z["id"], werte))
+        ereignisse.append(("order_an_split_angepasst" if z["status"] in ("gesendet", "unbestaetigt") else "kurseinheiten",
+                           f"{kopf}: Vorschlag {z['id']} ({z['status']}) umgerechnet: "
+                           + ", ".join(f"{f} {float(z[f]):g} → {v:g}" for f, v in werte.items()), z["buch"]))
+    st = buchstopp.gestoppt(journal)
+    for b in sorted(set(vorher) | set(unterwegs_alt) | set(ueber_stichtag)):
+        if b not in st and b not in ueber_stichtag and b not in unterwegs_alt:
+            continue
+        e = st.setdefault(b, {"seit": jetzt_text, "kategorie": buchstopp.KAT_BELEG, "titel": [], "belege": [], "details": [],
+                              "abweichung_weg": None})
+        e["belege"] = sorted(set(e.get("belege") or []) | {beleg})
+        e["titel"] = sorted(set(e.get("titel") or []) | titel)
+        if b in ueber_stichtag:
+            e["quittung_noetig"] = "; ".join(ueber_stichtag[b])
+            e["details"] = list(e.get("details") or []) + ueber_stichtag[b]
+        if b in unterwegs_alt:
+            e["details"] = list(e.get("details") or []) + [f"Order(s) {', '.join(unterwegs_alt[b])} über den Stichtag unterwegs – "
+                                                           "Stopp bleibt, bis sie abgeschlossen sind"]
+    zustaende[buchstopp.SCHLUESSEL] = st
+    felder = {"code": k["code"], "tag": tag, "beschreibung": k["beschreibung"], "steuer": STEUER[art], "quelle": k["quelle"]}
+    journal.massnahme_buchen(beleg_id=beleg, art=art, felder=felder, posten_je_buch=posten_je_buch, zustaende=zustaende,
+                             vorschlaege=vorschlaege, ereignisse=ereignisse)
+    meldungen += zeilen
+    meldungen += [x for b in sorted(ueber_stichtag) for x in ueber_stichtag[b]]
+    return Buchung(beleg, art, True, f"Kapitalmaßnahme gebucht: {NAMEN[art]} {alt}" + (f" → {neu}" if neu and neu != alt else "")
+                   + (f" (r = {r:g})" if art in SPLITS else "") + f"; Bücher {', '.join(sorted(vorher))}", sorted(vorher), titel)
+
+
+def _buchen_uebernahme(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen) -> Buchung | None:
+    """Übernahme (Aktien, bar oder beides) bzw. Delisting wertlos je Buch, nur bei exakt passender Probe:
+    - Abgang laut Flex = Bücher vor dem Stichtag; neue ganze Stück = floor(Stück · r) laut Flex, Verteilung nach größtem Rest;
+    - Barzuzahlung = Stück · Barbetrag je Aktie (Konditionen aus der Beschreibung), der Rest des Barbetrags ist der
+      Spitzenausgleich (Kurs = Rest ÷ Spitze des Kontos); ohne Spitze muss der Barbetrag auf ± 0,05 passen;
+    - DW nur ohne Gegenleistung (sonst kein „Delisting wertlos“);
+    - danach Bücher = IBKR-Position je Titel."""
+    beleg, art, tag = k["beleg_id"], k["art"], k["tag"]
+    kopf = f"{NAMEN[art]} {beleg}"
+    roh = [dict(p) for p in journal.massnahme_posten(beleg)]
+    for p in roh:
+        if p["conid"] and p["conid"] in tabelle:
+            p["ticker"] = tabelle[p["conid"]]
+
+    def nicht(text):
+        meldungen.append(f"{kopf}: nicht gebucht – {text}")
+        return Buchung(beleg, art, False, meldungen[-1], titel={p["ticker"] for p in roh if p["ticker"]})
+
+    if not tag:
+        return nicht("Stichtag fehlt im Beleg")
+    stueck_je: dict[str, float] = {}
+    bar: dict[str, float] = {}
+    for p in roh:
+        if p["ticker"] and abs(p["stueck"] or 0) > 1e-9:
+            stueck_je[p["ticker"]] = stueck_je.get(p["ticker"], 0.0) + float(p["stueck"])
+        if abs(p["betrag"] or 0) > 1e-9:
+            bar[p["waehrung"]] = bar.get(p["waehrung"], 0.0) + float(p["betrag"])
+    vorher_je = {b: journal.bestand_vor(b, tag) for b in buecher}
+    gehalten = {t for t in stueck_je if stueck_je[t] < 0 and any(vorher_je[b].get(t, 0) for b in buecher)}
+    if not gehalten:
+        journal.massnahme_status(beleg, KONTO, "ohne_buch")
+        meldungen.append(f"{kopf}: kein Buch hielt den Titel vor dem Stichtag – nichts zu buchen")
+        return None
+    if len(gehalten) != 1:
+        return nicht(f"mehrere gehaltene Titel im Beleg ({', '.join(sorted(gehalten))})")
+    alt = next(iter(gehalten))
+    vorher = {b: vorher_je[b].get(alt, 0.0) for b in buecher if abs(vorher_je[b].get(alt, 0.0)) > 1e-9}
+    alt_konto = sum(vorher.values())
+    if any(s < 0 or abs(s - round(s)) > 1e-9 for s in vorher.values()):
+        return nicht(f"Bestand vor dem Stichtag nicht ganzzahlig positiv ({alt})")
+    if abs(stueck_je[alt] + alt_konto) > 1e-6:
+        return nicht(f"Abgang {alt} laut Flex {stueck_je[alt]:g} Stück, Bücher vor dem Stichtag {alt_konto:g} Stück")
+    neue = sorted(t for t, s in stueck_je.items() if s > 0)
+    if len(neue) > 1:
+        return nicht(f"mehrere neue Titel im Beleg ({', '.join(neue)})")
+    neu = neue[0] if neue else None
+    if len(bar) > 1:
+        return nicht(f"Barbetrag in mehreren Währungen ({', '.join(sorted(bar))})")
+    bar_w, bar_betrag = next(iter(bar.items())) if bar else (None, 0.0)
+    r, bar_je, preis_spitze = 0.0, 0.0, None
+    neu_konto = 0
+    if art == "delisting":
+        if neu or abs(bar_betrag) > TOLERANZ_KASSE:
+            return nicht("Delisting mit Gegenleistung im Beleg – kein „Delisting wertlos“ (DW); bitte prüfen")
+    else:
+        kr, kw, kb = konditionen(k["beschreibung"])
+        if neu:
+            fehlt = [p for p in roh if (p["stueck"] or 0) > 0 and (not p["conid"] or p["conid"] not in tabelle)]
+            if fehlt:
+                return nicht(f"neue Conid {fehlt[0]['conid']} ({fehlt[0]['symbol']}) steht noch nicht in config/kontrakte.yaml – Buch bleibt "
+                             "gestoppt, bis Jakob sie übernommen hat (Vorschlag im Journal)")
+            neu_konto = stueck_je[neu]
+            if abs(neu_konto - round(neu_konto)) > 1e-9:
+                return nicht(f"neue Stückzahl laut Flex nicht ganzzahlig ({neu_konto:g})")
+            neu_konto = int(round(neu_konto))
+            r = kr if kr is not None else neu_konto / alt_konto
+        elif kr is not None:
+            return nicht("Aktienteil laut Beschreibung fehlt im Beleg")
+        if kw and bar_w and kw != bar_w:
+            return nicht(f"Währung laut Beschreibung {kw}, laut Beleg {bar_w}")
+        bar_w = bar_w or kw
+        exakt_konto = alt_konto * r
+        if neu_konto != int(math.floor(exakt_konto + 1e-9)):
+            return nicht(f"Probe: Bücher {alt_konto:g} Stück × {r:g} = {exakt_konto:g}, Flex {neu_konto} ganze Stück")
+        spitze_konto = exakt_konto - neu_konto
+        if kb is None:
+            if spitze_konto > 1e-9:
+                return nicht("Barbetrag je Aktie nicht lesbar und Spitze vorhanden")
+            kb = bar_betrag / alt_konto
+        bar_je = kb
+        bar_aktie = round(alt_konto * bar_je, 2)
+        rest = bar_betrag - bar_aktie
+        if spitze_konto > 1e-9:
+            if rest <= TOLERANZ_KASSE:
+                return nicht(f"Probe Kasse: Barbetrag {bar_betrag:,.2f} {bar_w}, Barkomponente {alt_konto:g} × {bar_je:g} = {bar_aktie:,.2f} – "
+                             "kein Spitzenausgleich übrig")
+            preis_spitze = rest / spitze_konto
+        elif abs(rest) > TOLERANZ_KASSE:
+            return nicht(f"Probe Kasse: Barbetrag {bar_betrag:,.2f} {bar_w}, erwartet {alt_konto:g} × {bar_je:g} = {bar_aktie:,.2f}")
+    verteilung = verteilen(vorher, r, neu_konto) if r > 0 else {b: (0, 0.0) for b in vorher}
+    if verteilung is None:
+        return nicht(f"Spitzen nicht nach größtem Rest verteilbar ({neu_konto} Stück auf {len(vorher)} Bücher)")
+    if preis_spitze is None and any(f < -1e-9 for _, f in verteilung.values()):
+        return nicht("Spitzenausgleich zwischen Büchern ohne Barausgleichskurs im Beleg")
+    nachher = {alt: 0.0, **({neu: 0.0} if neu else {})}
+    for b in buecher:
+        jetzt_b = journal.bestand(b)
+        for t in nachher:
+            nachher[t] += jetzt_b.get(t, 0.0)
+    for b, s in vorher.items():
+        nachher[alt] -= s
+        if neu:
+            nachher[neu] += verteilung[b][0]
+    abweichend = [t for t in sorted(nachher) if abs(nachher[t] - ist.get(t, 0.0)) > 1e-6]
+    if abweichend:
+        return nicht("Probe gegen IBKR: " + "; ".join(f"{t} Bücher danach {nachher[t]:g}, IBKR {ist.get(t, 0.0):g}" for t in abweichend))
+
+    barart = "barzuzahlung" if neu else "barabfindung"
+    bar_aktie_je = _cent_aufteilen({b: s * bar_je for b, s in vorher.items()}, round(alt_konto * bar_je, 2)) if bar_je else {}
+    spitze_je = (_cent_aufteilen({b: f * preis_spitze for b, (_, f) in verteilung.items() if abs(f) > 1e-9}, bar_betrag - round(alt_konto * bar_je, 2))
+                 if preis_spitze else {})
+    p_alt = next((p for p in roh if p["ticker"] == alt), {})
+    p_neu = next((p for p in roh if p["ticker"] == neu and (p["stueck"] or 0) > 0), {}) if neu else {}
+    posten_je_buch, ereignisse, zeilen = {}, [], []
+    for b, s in sorted(vorher.items()):
+        ganz, f = verteilung[b]
+        e = journal.einstaende(b, bis=tag).get(alt, {})
+        w_alt, k_alt = float(e.get("w", 0.0)), float(e.get("k", 0.0))
+        w_ein = e.get("waehrung") or p_alt.get("waehrung") or "EUR"
+        angeschafft = str(e.get("erst") or "")[:10] or None
+        posten = [{"ticker": alt, "conid": p_alt.get("conid"), "symbol": p_alt.get("symbol"), "isin": p_alt.get("isin"), "stueck": -s,
+                   "waehrung": w_ein, "einstand": -w_alt, "einstand_eur": -k_alt, "art": "bestand"}]
+        w_neu = k_neu = 0.0
+        if neu and ganz:
+            if f >= 0:                     # Einstand voll auf die neuen Aktien (Entscheidung 1); verkaufte Spitze anteilig ab
+                w_neu, k_neu = w_alt * ganz / (s * r), k_alt * ganz / (s * r)
+            else:                          # aufgerundet: zugekaufte Spitze zum Spitzenausgleichskurs
+                w_neu = w_alt + (-f) * preis_spitze
+                k_neu = k_alt + (-f) * preis_spitze / (1.0 if bar_w == "EUR" else float(fx[bar_w]))
+            posten.append({"ticker": neu, "conid": p_neu.get("conid"), "symbol": p_neu.get("symbol"), "isin": p_neu.get("isin"), "stueck": ganz,
+                           "waehrung": p_neu.get("waehrung") or w_ein, "einstand": w_neu, "einstand_eur": k_neu, "angeschafft": angeschafft,
+                           "art": "bestand"})
+        if b in bar_aktie_je:
+            posten.append(_barposten(bar_aktie_je[b], bar_w, fx, barart))
+        if b in spitze_je:
+            posten.append(_barposten(spitze_je[b], bar_w, fx, "spitzenausgleich"))
+        posten_je_buch[b] = posten
+        text = (f"{kopf} gebucht ({b}): {alt} −{s:g} Stück (Einstand {w_alt:,.2f} {w_ein})"
+                + (f", {neu} +{ganz} Stück (Einstand {w_neu:,.2f}, angeschafft {angeschafft or '–'})" if neu and ganz else "")
+                + (f", {POSTEN_ARTEN[barart]} {bar_aktie_je[b]:+,.2f} {bar_w}" if b in bar_aktie_je else "")
+                + (f", Spitze {f:+.4f} Stück nach größtem Rest, {POSTEN_ARTEN['spitzenausgleich']} {spitze_je[b]:+,.2f} {bar_w}" if b in spitze_je else "")
+                + (", Einstand ausgebucht (Verlust)" if art == "delisting" else "") + f"; Steuer {STEUER[art]}")
+        ereignisse.append(("kapitalmassnahme_gebucht", text, b))
+        zeilen.append(text)
+    zustaende = {}
+    for b in buecher:
+        z = journal.zustand(b)
+        if not z:
+            continue
+        z_neu, aend = zustand_entfernen(z, alt)
+        if aend:
+            zustaende[b] = z_neu
+            ereignisse.append(("kurseinheiten", f"{kopf}: Strategiezustand {b}: " + "; ".join(aend), b))
+    return _abschliessen(journal, k, alt, neu, r, vorher, posten_je_buch, zustaende, ereignisse, zeilen, meldungen, jetzt_text, umrechnen=False)

@@ -21,7 +21,7 @@ from datetime import datetime, time, timedelta
 
 import pandas as pd
 
-from tradingbot.betrieb.buecher import BuchVorschlag, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
+from tradingbot.betrieb.buecher import BuchVorschlag, _verkauf, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
 from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung, pruefe_tageskurse
 from tradingbot.broker.basis import Auftrag, KontraktUnbekannt, SendeErgebnis, SendenGesperrt
 from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urteil
@@ -618,7 +618,29 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.sofort += warnungen
             erg.meldungen += warnungen or [f"{buch}: gestoppt – kein Stop gerissen"]
             continue
-        werte_buch[buch] = journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
+        # Fremdtitel aus Kapitalmaßnahmen (nicht im Universum): Ausstiegsvorschlag im nächsten Lauf (A3, Jakob 12.11.2026)
+        fremd = {t: s for t, s in bestand.items() if t not in k_tech}
+        fremd_kurse, fremd_v = {}, []
+        for t, s in sorted(fremd.items()):
+            try:
+                usd = not t.endswith(".DE")
+                k_f = kurse_laden(t, tag.date(), "aktie_usd" if usd else "etf")
+                fremd_kurse[t] = float(k_f["close"].iloc[-1]) / (eurusd if usd else 1.0)
+            except Exception as f:  # noqa: BLE001
+                erg.meldungen.append(f"{buch}: Fremdtitel {t} ohne Kurs ({type(f).__name__}) – kein Ausstiegsvorschlag, Buchwert ohne ihn")
+                continue
+            if s > 0 and t not in {u["ticker"] for u in journal.unterwegs(buch)}:
+                bv = _verkauf(buch, tag, t, s, fremd_kurse[t], "USD" if usd else "EUR", "aktie" if usd else "etf",
+                              f"Fremdtitel {t} aus einer Kapitalmaßnahme, nicht im Technik-Universum – Ausstieg (Jakob 12.11.2026).",
+                              fx=eurusd if usd else 1.0, plan="USD" if usd else "EUR")
+                bv.kern = f"Ausstieg: {t} kam durch eine Kapitalmaßnahme ins Buch und gehört nicht zum Universum."
+                fremd_v.append(bv)
+        if fremd:
+            erg.meldungen.append(f"{buch}: Fremdtitel aus Kapitalmaßnahme {', '.join(sorted(fremd))} – Ausstiegsvorschlag")
+        bestand = {t: s for t, s in bestand.items() if t in k_tech}
+        werte_buch[buch] = (journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
+                            + sum(s * fremd_kurse[t] for t, s in fremd.items() if t in fremd_kurse))
+        roh += fremd_v
         vor = journal.zustand_fuer_signaltag(buch, tag)
         if vor and not any(x > 0 for x in bestand.values()) and not journal.unterwegs(buch):
             # aufgebaut erst mit Bestand oder Orders unterwegs (wie Fundamental, Korrektur 04.11.2026): Zustände aus Läufen

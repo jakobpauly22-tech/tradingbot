@@ -287,6 +287,20 @@ class Tagesfenster:
             knopf.pack(side="left", padx=8)
             self.stopp_knoepfe[buch] = knopf
         from tradingbot.betrieb import kapitalmassnahmen
+        if not hasattr(self, "bestaetigen_knoepfe"):
+            self.bestaetigen_knoepfe: dict[str, dict[str, ttk.Button]] = {}
+        for m in kapitalmassnahmen.bestaetigung_offen(self.journal, buch):     # A3: Übernahme/Delisting bestätigen oder ablehnen
+            zeile = ttk.Frame(rahmen)
+            zeile.pack(fill="x", pady=(2, 0))
+            ttk.Label(zeile, text=m["text"], wraplength=900, justify="left").pack(side="left")
+            knoepfe = {}
+            if m["bestaetigbar"]:
+                knoepfe["bestaetigen"] = ttk.Button(zeile, text="Bestätigen", command=lambda b=m["beleg_id"]: self.massnahme_entscheiden(b, True))
+                knoepfe["bestaetigen"].pack(side="left", padx=6)
+            knoepfe["ablehnen"] = ttk.Button(zeile, text="Ablehnen" if m["bestaetigbar"] else "Ablehnen (nicht buchen)",
+                                             command=lambda b=m["beleg_id"]: self.massnahme_entscheiden(b, False))
+            knoepfe["ablehnen"].pack(side="left", padx=6)
+            self.bestaetigen_knoepfe[m["beleg_id"]] = knoepfe
         if not hasattr(self, "flex_split_knoepfe"):
             self.flex_split_knoepfe: dict[str, ttk.Button] = {}
         for beleg, v in sorted(kapitalmassnahmen.flex_split_offen(self.journal, buch).items()):
@@ -294,6 +308,18 @@ class Tagesfenster:
                                command=lambda beleg=beleg: self.flex_split_quittieren(beleg))
             knopf.pack(side="left", padx=8)
             self.flex_split_knoepfe[beleg] = knopf
+
+    def massnahme_entscheiden(self, beleg: str, bestaetigt: bool) -> str:
+        """A3: Übernahme/Delisting bestätigen (Buchung im nächsten Tageslauf) oder ablehnen (Buch bleibt gestoppt bis zur Quittung)."""
+        from tradingbot.betrieb import kapitalmassnahmen
+        try:
+            text = (kapitalmassnahmen.bestaetigen if bestaetigt else kapitalmassnahmen.ablehnen)(self.journal, beleg, self.jetzt_fn())
+        except ValueError as f:
+            text = str(f)
+        self._protokoll_schreiben([text])
+        self._uebersicht_bauen()
+        self._lampen_zeichnen()
+        return text
 
     def flex_split_quittieren(self, beleg: str) -> str:
         """SPYI-Fall (Jakob 12.11.2026): Split-Verhältnis aus dem Flex-Beleg für die Aktienzahl übernehmen – Quittung mit
