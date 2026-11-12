@@ -228,6 +228,7 @@ class Tagesfenster:
                 self.differenz_labels[k.buch] = tk.Label(z, text=f"Differenz {diff * 100:+.2f} Pp.", font=("Segoe UI", 9, "bold"),
                                                          fg="#2e7d32" if diff >= 0 else "#c62828")
                 self.differenz_labels[k.buch].pack(side="left", padx=6)
+        self._stopp_zeile(rahmen, k.buch)
         # Positionen (einklappbar, Jakob 10.11.2026)
         kopf = ttk.Frame(rahmen)
         kopf.pack(fill="x", pady=(4, 0))
@@ -269,6 +270,34 @@ class Tagesfenster:
                 o.insert("", "end", values=(z["order_id"], z["art"], z["ticker"], z["stueck"],
                                             "ohne" if z["limit"] is None else f"{z['limit']:,.2f} {z['waehrung']}", z["status"]))
             o.pack(fill="x")
+
+    def _stopp_zeile(self, rahmen, buch: str):
+        """Stopp je Buch (A1, Jakob 12.11.2026): rote Zeile; Quittieren nur, wenn die Abweichung ohne Beleg verschwunden ist."""
+        from tradingbot.betrieb import buchstopp
+        e = buchstopp.gestoppt(self.journal).get(buch)
+        if not hasattr(self, "stopp_knoepfe"):
+            self.stopp_knoepfe: dict[str, ttk.Button] = {}
+        if e is None:
+            return
+        z = ttk.Frame(rahmen)
+        z.pack(fill="x", pady=(2, 0))
+        tk.Label(z, text=buchstopp.kurz(buch, e), fg="white", bg=ansicht.ROT, wraplength=1000, justify="left", padx=6).pack(side="left")
+        if e.get("abweichung_weg"):
+            knopf = ttk.Button(z, text="Stopp quittieren", command=lambda: self.stopp_quittieren(buch))
+            knopf.pack(side="left", padx=8)
+            self.stopp_knoepfe[buch] = knopf
+
+    def stopp_quittieren(self, buch: str) -> str:
+        """Quittung mit Zeitstempel im Journal (Ereignis „stopp_quittiert“); danach Übersicht und Ampel neu."""
+        from tradingbot.betrieb import buchstopp
+        try:
+            text = buchstopp.quittieren(self.journal, buch, self.jetzt_fn())
+        except ValueError as f:
+            text = str(f)
+        self._protokoll_schreiben([text])
+        self._uebersicht_bauen()
+        self._lampen_zeichnen()
+        return text
 
     def positionen_umschalten(self, buch: str, offen: bool | None = None):
         rahmen, knopf = self.positionen_rahmen[buch], self.positionen_knoepfe[buch]

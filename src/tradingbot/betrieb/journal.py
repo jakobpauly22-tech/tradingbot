@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS kassenbuchungen (
     beleg_id TEXT NOT NULL, buch TEXT NOT NULL, art TEXT NOT NULL, ticker TEXT, conid INTEGER, action_id TEXT, ex_tag TEXT,
     zahltag TEXT, waehrung TEXT NOT NULL, betrag REAL NOT NULL, betrag_eur REAL NOT NULL, stueck REAL, satz REAL, steuer TEXT,
     quelle TEXT, gebucht TEXT NOT NULL, PRIMARY KEY (beleg_id, buch));
+CREATE TABLE IF NOT EXISTS kapitalmassnahmen (
+    beleg_id TEXT NOT NULL, buch TEXT NOT NULL, code TEXT, art TEXT NOT NULL, tag TEXT, beschreibung TEXT, status TEXT NOT NULL,
+    steuer TEXT, quelle TEXT, erkannt TEXT NOT NULL, aktualisiert TEXT, PRIMARY KEY (beleg_id, buch));
+CREATE TABLE IF NOT EXISTS kapitalmassnahmen_posten (
+    beleg_id TEXT NOT NULL, buch TEXT NOT NULL, nr INTEGER NOT NULL, ticker TEXT, conid INTEGER, symbol TEXT, isin TEXT,
+    stueck REAL NOT NULL DEFAULT 0, waehrung TEXT, betrag REAL NOT NULL DEFAULT 0, betrag_eur REAL NOT NULL DEFAULT 0,
+    einstand REAL, einstand_eur REAL, angeschafft TEXT, PRIMARY KEY (beleg_id, buch, nr));
+CREATE TABLE IF NOT EXISTS conid_vorschlaege (conid INTEGER PRIMARY KEY, symbol TEXT, isin TEXT, waehrung TEXT, ticker_vorschlag TEXT,
+    beleg_id TEXT, status TEXT NOT NULL, erstellt TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS tausche (exec_id TEXT PRIMARY KEY, order_ref TEXT, buch TEXT, von TEXT, nach TEXT, betrag_von REAL,
     betrag_nach REAL, gebuehr_eur REAL, zeit TEXT);
 """
@@ -89,9 +98,24 @@ class Journal:
         return float(self.db.execute("SELECT startkapital FROM buecher WHERE buch=?", (buch,)).fetchone()["startkapital"])
 
     # --- Bestand und Kasse ---------------------------------------------------------------------------------
+    # gebuchte Posten von Kapitalmaßnahmen (A1, Jakob 12.11.2026): Stückänderungen, Barkomponente, übertragener Einstand
+    _POSTEN_GEBUCHT = ("FROM kapitalmassnahmen_posten p JOIN kapitalmassnahmen k ON k.beleg_id=p.beleg_id AND k.buch=p.buch "
+                       "WHERE p.buch=? AND k.status='gebucht'")
+
     def bestand(self, buch: str) -> dict[str, float]:
-        zeilen = self.db.execute("SELECT ticker, SUM(richtung * stueck) AS s FROM ausfuehrungen WHERE buch=? GROUP BY ticker", (buch,))
+        """Bestand je Titel aus Ausführungen und gebuchten Kapitalmaßnahmen (Split, Tickerwechsel, Übernahme, Abspaltung)."""
+        zeilen = self.db.execute("SELECT ticker, SUM(s) AS s FROM (SELECT ticker, richtung * stueck AS s FROM ausfuehrungen WHERE buch=? "
+                                 f"UNION ALL SELECT p.ticker, p.stueck {self._POSTEN_GEBUCHT} AND p.ticker IS NOT NULL) GROUP BY ticker",
+                                 (buch, buch))
         return {z["ticker"]: z["s"] for z in zeilen if abs(z["s"]) > 1e-9}
+
+    def massnahmen_posten(self, buch: str, *, bis: str | None = None) -> list[sqlite3.Row]:
+        """Gebuchte Posten von Kapitalmaßnahmen des Buchs (optional nur mit Stichtag vor `bis`)."""
+        sql, par = f"SELECT p.*, k.tag, k.art {self._POSTEN_GEBUCHT}", [buch]
+        if bis is not None:
+            sql += " AND k.tag < ?"
+            par.append(bis)
+        return self.db.execute(sql + " ORDER BY k.tag, p.beleg_id, p.nr", par).fetchall()
 
     def kasse(self, buch: str) -> float:
         """Kasse des Buchs gesamt in EUR (Fremdwährung zum Kurs der jeweiligen Ausführung bzw. des Tauschs)."""
@@ -100,7 +124,8 @@ class Journal:
         div = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
         tausch = self.db.execute("SELECT COALESCE(SUM(gebuehr_eur), 0) AS t FROM tausche WHERE buch=?", (buch,)).fetchone()["t"]
         bar = self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) FROM kassenbuchungen WHERE buch=?", (buch,)).fetchone()[0]
-        return self.startkapital(buch) + handel + div - tausch + bar
+        massnahmen = self.db.execute(f"SELECT COALESCE(SUM(p.betrag_eur), 0) {self._POSTEN_GEBUCHT}", (buch,)).fetchone()[0]
+        return self.startkapital(buch) + handel + div - tausch + bar + massnahmen
 
     def gebuehren_differenz(self, buch: str) -> float:
         """Gebucht (IBKR) minus Modellgebühr in EUR, über alle Ausführungen und Tausche des Buchs (fehlende Modellwerte = 0)."""
@@ -135,6 +160,9 @@ class Journal:
         kassen["EUR"] += self.db.execute("SELECT COALESCE(SUM(betrag_eur), 0) AS d FROM dividenden WHERE buch=?", (buch,)).fetchone()["d"]
         for z in self.db.execute("SELECT waehrung, SUM(betrag) AS b FROM kassenbuchungen WHERE buch=? GROUP BY waehrung", (buch,)):
             kassen[z["waehrung"]] = kassen.get(z["waehrung"], 0.0) + z["b"]   # Dividenden/Quellensteuer in Originalwährung (A0)
+        for z in self.db.execute(f"SELECT p.waehrung, SUM(p.betrag) AS b {self._POSTEN_GEBUCHT} AND p.waehrung IS NOT NULL "
+                                 "GROUP BY p.waehrung", (buch,)):
+            kassen[z["waehrung"]] = kassen.get(z["waehrung"], 0.0) + z["b"]   # Barkomponente von Kapitalmaßnahmen (A1)
         return kassen
 
     def tausch(self, exec_id, order_ref, von, nach, betrag_von, betrag_nach, gebuehr_eur, zeit, *, gebuehr_ibkr=None,
@@ -342,6 +370,43 @@ class Journal:
 
     def kassenbuchungen(self, where: str = "1", params: tuple = ()) -> list[sqlite3.Row]:
         return self.db.execute(f"SELECT * FROM kassenbuchungen WHERE {where} ORDER BY gebucht, beleg_id, buch", params).fetchall()
+
+    # --- Kapitalmaßnahmen (A1, Jakob 12.11.2026) ----------------------------------------------------------------
+    def massnahme(self, *, beleg_id: str, buch: str, art: str, status: str = "erkannt", posten: list[dict] = (), **felder) -> bool:
+        """Kapitalmaßnahme je Beleg und Buch („_konto“ = Flex-Posten des ganzen Kontos); einmal je Beleg und Buch. Status:
+        erkannt → bestätigt → gebucht | abgelehnt. Nur gebuchte Posten zählen in Bestand und Kasse."""
+        jetzt = datetime.now().isoformat(timespec="seconds")
+        z = {"beleg_id": beleg_id, "buch": buch, "art": art, "status": status, "erkannt": jetzt, "aktualisiert": jetzt, **felder}
+        neu = self.db.execute(f"INSERT OR IGNORE INTO kapitalmassnahmen ({', '.join(z)}) VALUES ({', '.join('?' * len(z))})",
+                              tuple(z.values())).rowcount > 0
+        if neu:
+            for nr, pz in enumerate(posten, 1):
+                q = {"beleg_id": beleg_id, "buch": buch, "nr": nr, **pz}
+                self.db.execute(f"INSERT INTO kapitalmassnahmen_posten ({', '.join(q)}) VALUES ({', '.join('?' * len(q))})", tuple(q.values()))
+        self.db.commit()
+        return neu
+
+    def massnahmen(self, where: str = "1", params: tuple = ()) -> list[sqlite3.Row]:
+        return self.db.execute(f"SELECT * FROM kapitalmassnahmen WHERE {where} ORDER BY tag, beleg_id, buch", params).fetchall()
+
+    def massnahme_posten(self, beleg_id: str, buch: str = "_konto") -> list[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM kapitalmassnahmen_posten WHERE beleg_id=? AND buch=? ORDER BY nr", (beleg_id, buch)).fetchall()
+
+    def massnahme_status(self, beleg_id: str, buch: str, status: str):
+        self.db.execute("UPDATE kapitalmassnahmen SET status=?, aktualisiert=? WHERE beleg_id=? AND buch=?",
+                        (status, datetime.now().isoformat(timespec="seconds"), beleg_id, buch))
+        self.db.commit()
+
+    def conid_vorschlag(self, conid: int, **felder) -> bool:
+        """Zuordnung neue Conid → Yahoo-Ticker nur als Vorschlag (Jakob 12.11.2026); config/kontrakte.yaml ändert Jakob selbst."""
+        z = {"conid": conid, "status": "offen", "erstellt": datetime.now().isoformat(timespec="seconds"), **felder}
+        neu = self.db.execute(f"INSERT OR IGNORE INTO conid_vorschlaege ({', '.join(z)}) VALUES ({', '.join('?' * len(z))})",
+                              tuple(z.values())).rowcount > 0
+        self.db.commit()
+        return neu
+
+    def conid_vorschlaege(self) -> list[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM conid_vorschlaege ORDER BY erstellt, conid").fetchall()
 
     def dividende(self, buch, ticker, ex_tag, stueck, betrag_eur) -> bool:
         neu = self.db.execute("INSERT OR IGNORE INTO dividenden VALUES (?,?,?,?,?)", (buch, ticker, str(ex_tag), stueck, betrag_eur)).rowcount > 0

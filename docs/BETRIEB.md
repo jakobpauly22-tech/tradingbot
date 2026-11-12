@@ -291,3 +291,54 @@ Modul `betrieb/dividenden.py`, Einstellungen in `config/betrieb.yaml` (`dividend
 - **„vermutet“-Übernahmen:** stehen in der Kurzfassung (Währung und Betrag; ohne Eurobeträge nur „Kassendifferenz
   übernommen“). Belegt Flex später eine Dividende im selben Zeitfenster mit gleichem Betrag, wird die Übernahme aus der
   Kassenbasis zurückgenommen (keine Doppelzählung).
+
+## Kapitalmaßnahmen: Erkennen und Stopp je Buch (A1, Jakob 12.11.2026)
+
+A1 erkennt Kapitalmaßnahmen und stoppt das betroffene Buch. **Gebucht wird noch nichts:** Split, Reverse-Split und Tickerwechsel kommen in A2, Übernahme und Delisting in A3, Abspaltung in A4.
+
+- **Quelle:** Flex-Abschnitt „Corporate Actions“ (`CorporateAction`, `betrieb/kapitalmassnahmen.py`). Die Typ-Kürzel stammen aus der IBKR-Referenz (geprüft 12.11.2026):
+
+  | Kürzel | Bedeutung | Art im Journal |
+  | --- | --- | --- |
+  | FS, FI | Split | split |
+  | RS | Reverse-Split | reverse_split |
+  | IC | Issue Change | tickerwechsel |
+  | TC | Merger | uebernahme |
+  | SO | Spin Off | abspaltung |
+  | DW | Delist Worthless | delisting |
+  | alle übrigen | | sonstige |
+
+  Achtung: **TC ist ein Merger, kein Tickerwechsel.**
+- **Annahmen, am ersten echten Beleg zu prüfen:**
+  - Die Zeilen einer Maßnahme werden über `actionID` gebündelt; ohne `actionID` über Typ, Stichtag und Beschreibung.
+  - Die Barkomponente steht in `proceeds`, die Stückänderung in `quantity`.
+- **Journal:**
+  - `kapitalmassnahmen` enthält eine Zeile je Beleg und Buch; `_konto` steht für die Flex-Posten des ganzen Kontos. Status: erkannt → bestätigt → gebucht oder abgelehnt.
+  - `kapitalmassnahmen_posten` enthält die Posten: Stück, Barbetrag in Originalwährung, übertragener Einstand und Anschaffungstag.
+  - Nur gebuchte Posten zählen. Sie gehen ein in:
+    - Bestand
+    - Kasse und Kasse je Währung
+    - Ø Kaufkurs und „gekauft am“
+    - Bestand vor dem Ex-Tag bei Dividenden
+  - Steuerhinweis immer „zu prüfen“.
+- **Neue Conids:** Sie stehen nur als Vorschlag in `conid_vorschlaege`, mit IBKR-Symbol, ISIN und vorgeschlagenem Yahoo-Ticker. `config/kontrakte.yaml` passt Jakob selbst an.
+- **Stopp je Buch** (`betrieb/buchstopp.py`, Zustand `_buchstopps` im Journal):
+  - Weicht ein Titel ab, stoppen die Bücher, die ihn halten oder eine Order dafür unterwegs haben. Hält ihn keines, stoppen die Bücher einer erkannten Maßnahme mit diesem Titel.
+  - Hält kein Buch die Position und passt keine Maßnahme: Stopp für alles.
+  - Bei der Kontokasse gilt ebenfalls Stopp für alles. Ausnahme: Die Differenz passt in Währung und Betrag (± 0,05) zur Barkomponente einer erkannten Maßnahme laut Flex. Dann stoppen nur deren Bücher, und die Kassenbasis bleibt bis zur Buchung unverändert.
+  - Ein gestopptes Buch:
+    - bekommt keine Vorschläge, keinen Buchwert und keinen neuen Strategiezustand;
+    - ist nicht freigebbar und wird beim Senden übersprungen;
+    - zeigt eine rote Lampe „Stopp &lt;Buch&gt;“ und „Senden &lt;Buch&gt;: gestoppt“;
+    - erscheint in der Kurzfassung mit Kategorie und Titeln, ohne Stück und Beträge;
+    - löst beim Eintritt eine Sofortmeldung aus.
+  - Die übrigen Bücher laufen weiter.
+- **Stop-Loss im gestoppten Technik-Buch:**
+  - Es gibt keinen Vorschlag, nur die Sofortmeldung „Stop gerissen in gestopptem Buch: &lt;Titel&gt;“.
+  - Ist der Titel von der Maßnahme betroffen, kommt der Zusatz „Werte vor Buchung der Maßnahme, ggf. Fehlalarm“.
+  - Titel außerhalb des Universums werden nicht geprüft; das steht im Protokoll.
+- **Aufhebung:**
+  - Automatisch mit Meldung „Stopp aufgehoben“, aber nur, wenn alle Belege des Stopps für das Buch gebucht sind und der Abgleich des Buchs sauber ist.
+  - Verschwindet die Abweichung ohne gebuchten Beleg, bleibt das Buch gestoppt, bis Jakob auf der Buchkarte „Stopp quittieren“ drückt. Die Quittung steht als Ereignis `stopp_quittiert` mit Zeitstempel im Journal.
+  - Solange die Abweichung besteht, ist keine Quittung möglich.
+- **Backlog (vor Echtgeld):** Ausstiege für nicht betroffene Titel im gestoppten Buch.

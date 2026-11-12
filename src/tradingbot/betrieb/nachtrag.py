@@ -148,7 +148,12 @@ def flex_aus_env():
         """Bargeldtransaktionen (Dividenden, Quellensteuer, Zinsen, Einzahlungen; A0, Jakob 12.11.2026)."""
         b = bericht()
         return [dict(t.attrib) for t in b["root"].iter("CashTransaction")], b["quelle"]
+    def kapitalmassnahmen() -> tuple[list[dict], str]:
+        """Kapitalmaßnahmen (Abschnitt Corporate Actions; A1, Jakob 12.11.2026)."""
+        b = bericht()
+        return [dict(t.attrib) for t in b["root"].iter("CorporateAction")], b["quelle"]
     laden.bargeld = bargeld
+    laden.kapitalmassnahmen = kapitalmassnahmen
     return laden
 
 

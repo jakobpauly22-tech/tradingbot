@@ -135,8 +135,15 @@ def ampel(erg, journal, betrieb: dict, *, probe: bool, gateway: dict, jetzt: dat
     if vormerkungen:                                 # A0 (Jakob 12.11.2026): Dividende am Zahltag, Flex-Beleg folgt
         lampen.append(Lampe("Dividenden", GELB, "vorgemerkt, Flex-Beleg folgt: " + ", ".join(
             f"{v['waehrung']} {float(v['betrag']):,.2f} seit {v['bis']}" for v in vormerkungen)))
+    from tradingbot.betrieb import buchstopp
+    gestoppt = buchstopp.gestoppt(journal)
+    for buch, e in sorted(gestoppt.items()):        # A1 (Jakob 12.11.2026): Stopp je Buch, die übrigen laufen weiter
+        lampen.append(Lampe(f"Stopp {buch}", ROT, buchstopp.kurz(buch, e).removeprefix(f"Buch {buch} gestoppt – ")))
     for buch in betrieb["buecher"]:
         an = buch_freigeschaltet(betrieb, buch)
+        if buch in gestoppt and not probe:
+            lampen.append(Lampe(f"Senden {buch}", ROT, "gestoppt"))
+            continue
         lampen.append(Lampe(f"Senden {buch}", GRAU if probe else (GRUEN if an else GRAU), "Probe" if probe else ("an" if an else "aus")))
     return lampen
 
@@ -229,14 +236,28 @@ def _kaufkurse(journal, buch: str) -> dict[str, dict]:
     zeilen = journal.db.execute("SELECT ticker, MAX(waehrung) waehrung, SUM(stueck * COALESCE(preis, preis_eur)) w, SUM(stueck) s, "
                                 "SUM(stueck * preis_eur + gebuehr_eur) k, MIN(zeit) erst FROM ausfuehrungen "
                                 "WHERE buch=? AND richtung>0 GROUP BY ticker", (buch,)).fetchall()
+    summen = {z["ticker"]: {"w": z["w"] or 0.0, "s": z["s"] or 0.0, "k": z["k"] or 0.0, "waehrung": z["waehrung"], "erst": z["erst"]}
+              for z in zeilen}
+    # gebuchte Kapitalmaßnahmen (A1): Stück und übertragener Einstand (Split: −alt/+neu bei gleichem Einstand → Ø Kurs geteilt)
+    for p in journal.massnahmen_posten(buch):
+        if not p["ticker"] or not p["stueck"]:
+            continue
+        s = summen.setdefault(p["ticker"], {"w": 0.0, "s": 0.0, "k": 0.0, "waehrung": p["waehrung"], "erst": None})
+        s["s"] += float(p["stueck"])
+        s["w"] += float(p["einstand"] or 0.0)
+        s["k"] += float(p["einstand_eur"] or 0.0)
+        erst = p["angeschafft"] or p["tag"]
+        if erst and (s["erst"] is None or str(erst) < str(s["erst"])):
+            s["erst"] = erst
     erg = {}
-    for z in zeilen:
+    for t, z in summen.items():
         tag = None
         if z["erst"]:
             ts = pd.Timestamp(str(z["erst"]))
             tag = (ts.tz_convert("Europe/Berlin") if ts.tzinfo is not None else ts).date().isoformat()
-        erg[z["ticker"]] = {"kaufkurs": z["w"] / z["s"] if z["s"] else None, "kosten_je_stueck_eur": z["k"] / z["s"] if z["s"] else None,
-                            "waehrung": z["waehrung"] or "EUR", "erst": tag}
+        menge = z["s"] if abs(z["s"]) > 1e-9 else 0.0
+        erg[t] = {"kaufkurs": z["w"] / menge if menge else None, "kosten_je_stueck_eur": z["k"] / menge if menge else None,
+                  "waehrung": z["waehrung"] or "EUR", "erst": tag}
     return erg
 
 

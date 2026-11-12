@@ -109,10 +109,11 @@ def belege_aus_flex(zeilen: list[dict]) -> list[Beleg]:
 
 
 def stueck_vor(journal, buch: str, ticker: str, ex_tag: str) -> float:
-    """Bestand des Buchs zum Handelsschluss vor dem Ex-Tag (Ausführungen mit Datum vor dem Ex-Tag)."""
+    """Bestand des Buchs zum Handelsschluss vor dem Ex-Tag (Ausführungen und gebuchte Kapitalmaßnahmen mit Datum vor dem Ex-Tag)."""
     z = journal.db.execute("SELECT COALESCE(SUM(richtung * stueck), 0) FROM ausfuehrungen WHERE buch=? AND ticker=? AND substr(zeit, 1, 10) < ?",
                            (buch, ticker, ex_tag)).fetchone()[0]
-    return float(z)
+    km = sum(float(p["stueck"]) for p in journal.massnahmen_posten(buch, bis=ex_tag) if p["ticker"] == ticker)
+    return float(z) + km
 
 
 def aufteilen(betrag: float, gewichte: dict[str, float]) -> dict[str, float]:

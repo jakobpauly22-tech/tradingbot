@@ -95,7 +95,10 @@ def _buchwerte(journal, buch: str) -> list[sqlite3.Row]:
 def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit: str | None = None) -> str:
     """(a) Kurzfassung eines Tageslaufs; bei Stopp mit Kopfzeile „GESTOPPT“ (zugleich Sofortmeldung c)."""
     jetzt = erg.jetzt
-    kopf = f"⛔ Tageslauf GESTOPPT {jetzt:%d.%m.%Y %H:%M}" if erg.gestoppt else f"✅ Tageslauf {jetzt:%d.%m.%Y %H:%M}"
+    buchstopps = getattr(erg, "buchstopps", None) or {}
+    kopf = (f"⛔ Tageslauf GESTOPPT {jetzt:%d.%m.%Y %H:%M}" if erg.gestoppt else
+            f"⚠️ Tageslauf {jetzt:%d.%m.%Y %H:%M} – gestoppt: {', '.join(sorted(buchstopps))}" if buchstopps else
+            f"✅ Tageslauf {jetzt:%d.%m.%Y %H:%M}")
     zeilen = [kopf]
     if erg.xetra is not None and erg.nyse is not None:
         zeilen.append(f"Signaltag Xetra {erg.xetra:%d.%m.}, NYSE {erg.nyse:%d.%m.}")
@@ -104,6 +107,8 @@ def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit:
         zeilen.append(f"Abgleich: GESTOPPT – {stopp_kurz(erg.gestoppt)}. Keine Vorschläge; Details im Protokoll am Laptop.")
     elif abgleich == "ok":
         zeilen.append("Abgleich: ok")
+    elif abgleich == "teilweise":
+        zeilen.append("Abgleich: ok außer in gestoppten Büchern")
     else:
         zeilen.append("Abgleich: nicht geprüft (Gateway nicht verbunden), wird vor dem Senden nachgeholt")
 
@@ -118,6 +123,9 @@ def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit:
             zeilen += [f"  {b}: {f + v} ({f} frei" + (f", {v} Veto)" if v else ")") for b, (f, v) in sorted(je_buch.items())]
         else:
             zeilen.append("Vorschläge: keine")
+    if not erg.gestoppt:                             # A1: Stopp je Buch – Kategorie und Titel, ohne Stück und Beträge
+        from tradingbot.betrieb.buchstopp import kurz
+        zeilen += [kurz(b, e) + " – keine Vorschläge" for b, e in sorted(buchstopps.items())]
     for b, befunde in sorted(erg.befunde.items()):
         zeilen.append(f"Datenprüfung: {b} ohne Vorschläge ({len(befunde)} Befund{'e' if len(befunde) != 1 else ''})")
 
@@ -296,6 +304,9 @@ def nach_tageslauf(erg, journal, betrieb: dict, melder: Melder) -> list[str]:
         zeilen = [melder.melden(text)]
     except Exception as f:  # noqa: BLE001
         zeilen = [f"Benachrichtigung: Kurzfassung nicht erstellt ({type(f).__name__})"]
+    sofort = getattr(erg, "sofort", None) or []
+    if sofort:                                       # A1: Buchstopp, Stop gerissen im gestoppten Buch, Aufhebung
+        zeilen.append(melder.melden("⛔ Sofortmeldung\n" + "\n".join(sofort[:15])))
     zeilen.append(melder.lebenszeichen())
     try:
         journal.ereignis("benachrichtigung", "; ".join(zeilen))

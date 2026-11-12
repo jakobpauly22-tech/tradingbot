@@ -270,3 +270,23 @@ def test_positionstabelle_spalten_farben_sortierung(wurzel, journal):
     dpz = a.item("DPZ")["values"]
     assert dpz[3] == "356.50 USD" and dpz[4] == "310.00" and dpz[5] == "+9.00" and a.item("DPZ", "tags") == ("gewinn",)
     assert a.item("BBY", "tags") == ("verlust",) and str(a.item("BBY")["values"][5]).startswith("-")
+
+
+def test_stopp_quittieren_in_der_oberflaeche(wurzel, journal):
+    """A1 (Jakob 12.11.2026): Knopf nur, wenn die Abweichung ohne Beleg verschwunden ist; Quittung mit Zeitstempel im Journal."""
+    from tradingbot.betrieb import buchstopp
+
+    buchstopp.aktualisieren(journal, {"crossover": {"titel": {"EUNK.DE"}, "belege": set(), "details": ["EUNK.DE: Bücher 10, IBKR 20"]}},
+                            datetime(2026, 11, 9, 23, 0))
+    f = fenster(wurzel, journal)
+    assert "crossover" not in f.stopp_knoepfe and ansicht.ROT == lampe_farbe(f, "Stopp crossover")
+    buchstopp.aktualisieren(journal, {}, datetime(2026, 11, 10, 23, 0))            # Abweichung ohne Beleg verschwunden
+    f = fenster(wurzel, journal)
+    f.stopp_knoepfe["crossover"].invoke()
+    assert buchstopp.gestoppt(journal) == {} and "Stopp crossover" not in {la.name for la in f.lampen}
+    z = journal.db.execute("SELECT zeit FROM ereignisse WHERE art='stopp_quittiert' AND buch='crossover'").fetchone()
+    assert z["zeit"] == "2026-11-10T22:10:00"
+
+
+def lampe_farbe(f, name):
+    return next(la.farbe for la in f.lampen if la.name == name)

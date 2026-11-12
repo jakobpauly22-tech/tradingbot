@@ -47,7 +47,9 @@ class Laufergebnis:
     kurse_eur: dict[str, float] = field(default_factory=dict)         # letzter Schluss je Titel in EUR
     spyi: object = None                                               # Schlusskurse SPYI in EUR (Vergleich je Buch)
     fx: dict[str, float] = field(default_factory=dict)                # Devisenkurse des Laufs (Fremdwährung je EUR)
-    abgleich: str = "nicht_geprueft"                                  # ok | gestoppt | nicht_geprueft (Benachrichtigung, 12.11.2026)
+    abgleich: str = "nicht_geprueft"                                  # ok | teilweise | gestoppt | nicht_geprueft (Benachrichtigung)
+    buchstopps: dict[str, dict] = field(default_factory=dict)         # gestoppte Bücher (A1, betrieb/buchstopp.py)
+    sofort: list[str] = field(default_factory=list)                   # Sofortmeldungen (Buchstopp, Stop gerissen, Aufhebung)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -208,7 +210,8 @@ def zinsbuchung_belegt(d: float, vorher: float, jetzt: float, tageszins: float, 
     return d > 0 and jetzt < vorher - 1e-9 and -toleranz - 1e-9 <= zinsbilanz(d, vorher, jetzt) <= zinsbilanz_grenze(tageszins, tage) + 1e-9
 
 
-def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> tuple[list[str], str]:
+def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None, *, offen_massnahmen: list[dict] | None = None,
+                   buch_stopps: dict | None = None) -> tuple[list[str], str]:
     """Kasse je Währung (Jakob 04.11.2026): Summe der Buchkassen gegen die IBKR-Kontokasse, bezogen auf die Kassenbasis
     (Kontokasse ohne Bot-Bewegungen, einmalig festgehalten). Toleranz `abgleich_kasse_toleranz` (Standard 0,05).
 
@@ -224,8 +227,11 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
       Rest nach der Dividende muss die Zinsregel erfüllen.
     - Buchung ohne Buchbezug bis `abgleich_buchung_ohne_buchbezug_max` (10 €) → Kassenbasis, als „vermutet“ protokolliert
       (mit Zeitfenster, damit ein späterer Flex-Beleg die Übernahme wieder ausgleicht).
+    - Barkomponente einer erkannten Kapitalmaßnahme (A1, Jakob 12.11.2026): Differenz passt in Währung und Betrag (± 0,05)
+      zur Barkomponente laut Flex-Beleg (`offen_massnahmen`) → nur deren Bücher stoppen (Eintrag in `buch_stopps`), die
+      Kassenbasis bleibt unverändert, bis die Maßnahme gebucht ist.
     - Alles andere über 10 € stoppt."""
-    from tradingbot.betrieb import dividenden
+    from tradingbot.betrieb import buchstopp, dividenden, kapitalmassnahmen
 
     if not hasattr(broker, "kasse_je_waehrung"):
         return [], ""
@@ -269,6 +275,13 @@ def kassenabgleich(journal, buecher: list[str], broker, b: dict, heute=None) -> 
         soll = basis.get(w, 0.0) + bot.get(w, 0.0) + vorgemerkt.get(w, 0.0)
         d = ibkr.get(w, 0.0) - soll
         if abs(d) <= tol:
+            continue
+        treffer = kapitalmassnahmen.bar_passend(offen_massnahmen or [], w, d, tol) if buch_stopps is not None else []
+        if treffer and all(m["buecher"] for m in treffer):
+            for m in treffer:
+                for buch in m["buecher"]:
+                    buchstopp.eintragen(buch_stopps, buch, f"Kasse {w}", [m["beleg_id"]],
+                                        f"Kasse {w}: Abweichung {d:+,.2f} passt zur Barkomponente von {m['beleg_id']} ({m['art']})")
             continue
         abnahme = (vorher.get(w, 0.0) - zinsen.get(w, 0.0)) if (vorher is not None and zinsen is not None) else None
         grenze_bilanz = zinsbilanz_grenze(tageszins.get(w, 0.0), tage)
@@ -482,21 +495,27 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             offen_liste = broker.offene_orders()
             offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offen_liste]
             positionen = broker.positionen()
-            from tradingbot.betrieb import dividenden, nachtrag
+            from tradingbot.betrieb import buchstopp, dividenden, kapitalmassnahmen, nachtrag
             flex = nachtrag.flex_aus_env() if flex == "env" else flex          # ein Flex-Bericht je Lauf
             # Ausführungen außerhalb des API-Zeitfensters (verpasste Abende, Jakob 09.11.2026): erst klären, dann verfallen
             stopp = ausfuehrungen_klaeren(journal, b, offen_liste, positionen, broker, xetra, fx, risk, kurse_laden, flex, erg, jetzt)
             if not stopp:                                  # Bardividenden mit Flex-Beleg vor dem Kassenabgleich (A0, 12.11.2026)
                 stopp = dividenden.dividenden_klaeren(journal, b, flex, fx, jetzt.date(), erg.meldungen)
+            if not stopp:                                  # Kapitalmaßnahmen nur erkennen und melden (A1, 12.11.2026)
+                kapitalmassnahmen.erkennen(journal, list(b["buecher"]), flex, erg.meldungen)
             if stopp:
                 erg.gestoppt = stopp
                 erg.abgleich = "gestoppt"
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
                 return erg
-            diff = abgleich(journal, list(b["buecher"]), positionen)
-            if not diff:                                     # Kassenbasis erst festhalten, wenn die Bestände stimmen
-                kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b, heute=jetzt.date())
+            # Titelabgleich je Buch (A1, Jakob 12.11.2026): nicht zuordenbar → Stopp für alles, sonst nur die betroffenen Bücher
+            diff, je_buch = buchstopp.zuordnen(journal, list(b["buecher"]), positionen)
+            if not diff and je_buch and journal.zustand("_konto").get("kassenbasis") is None:
+                erg.meldungen.append("Kassen-Abgleich: ausgesetzt – die Kassenbasis wird erst bei sauberem Abgleich aller Bücher festgehalten")
+            elif not diff:                                   # Kassenbasis erst festhalten, wenn die Bestände stimmen
+                kasse_diff, kasse_text = kassenabgleich(journal, list(b["buecher"]), broker, b, heute=jetzt.date(),
+                                                        offen_massnahmen=kapitalmassnahmen.offene(journal), buch_stopps=je_buch)
                 if kasse_text:
                     erg.meldungen.append(kasse_text)
                 diff += kasse_diff
@@ -506,9 +525,17 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
                 return erg
-            journal.ereignis("abgleich", "Bestände aller Bücher stimmen mit IBKR überein")
-            erg.abgleich = "ok"
-            erg.meldungen.append(f"Abgleich: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
+            stopp_zeilen, stopp_sofort = buchstopp.aktualisieren(journal, je_buch, jetzt)
+            erg.meldungen += stopp_zeilen
+            erg.sofort += stopp_sofort
+            if je_buch:
+                journal.ereignis("abgleich", "Bestände stimmen mit IBKR überein außer in gestoppten Büchern: " + ", ".join(sorted(je_buch)))
+                erg.abgleich = "teilweise"
+                erg.meldungen.append(f"Abgleich: Bestände stimmen mit IBKR überein außer in {', '.join(sorted(je_buch))} (gestoppt)")
+            else:
+                journal.ereignis("abgleich", "Bestände aller Bücher stimmen mit IBKR überein")
+                erg.abgleich = "ok"
+                erg.meldungen.append(f"Abgleich: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
         except Exception as f:  # noqa: BLE001 – Gateway nicht erreichbar: Vorschläge trotzdem, Abgleich vor dem Senden
             erg.meldungen.append(f"Gateway nicht verbunden ({type(f).__name__}): Ausführungen nicht eingelesen; Abgleich vor dem Senden")
             erg.meldungen.append("Abgleich: nicht möglich (Gateway nicht verbunden), wird vor dem Senden nachgeholt")
@@ -518,6 +545,13 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
 
     def gebuehr_fuer(plan, f=1.0):
         return lambda n, wert_eur: risk.kosten.gebuehren_eur(plan, n, wert_eur, f)
+
+    # gestoppte Bücher (A1, betrieb/buchstopp.py): keine Vorschläge, kein Buchwert; Technik meldet nur gerissene Stops
+    from tradingbot.betrieb import buchstopp as _buchstopp
+    gest = _buchstopp.gestoppt(journal)
+    erg.buchstopps = gest
+    for n in sorted(gest):
+        erg.meldungen.append(_buchstopp.kurz(n, gest[n]) + " – keine Vorschläge, nicht freigebbar")
 
     roh: list[BuchVorschlag] = []
     fundamental_gruende: dict[str, list[str]] = {}
@@ -535,7 +569,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     erg.spyi = k_real[etf]["close"]
     erg.kurse_eur[etf] = float(k_real[etf]["close"].iloc[-1])
     werte_buch = {}
-    if pruefen("real", k_real, xetra):
+    if "real" not in gest and pruefen("real", k_real, xetra):
         kurs = float(k_real[etf]["close"].iloc[-1])
         werte_buch["real"] = journal.kasse("real") + sum(s * kurs for t, s in journal.bestand("real").items())
         frei_real, _ = kasse_frei(journal, "real", fx)
@@ -556,6 +590,23 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.befunde[buch] = erg.befunde.get("technik", [])
             continue
         bestand = journal.bestand(buch)
+        if buch in gest:                             # gestoppt (A1): nur Stop-Prüfung, Titel evtl. außerhalb des Universums
+            bestand_stop = {t: s for t, s in bestand.items() if t in k_tech}
+            fremd = sorted(set(bestand) - set(bestand_stop))
+            try:
+                frei_buch, _ = kasse_frei(journal, buch, fx)
+                v, _ = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand_stop,
+                                   journal.zustand_fuer_signaltag(buch, tag), kt, aufschlag, gebuehr_fuer("EUR"),
+                                   gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)}, reserviert=0.0, nachkauf=set())
+                warnungen = _buchstopp.stop_warnungen(buch, v, gest[buch])
+            except Exception as f:  # noqa: BLE001 – Stop-Prüfung darf den Lauf der übrigen Bücher nie abbrechen
+                warnungen = []
+                erg.meldungen.append(f"{buch}: gestoppt – Stop-Prüfung nicht möglich ({type(f).__name__}: {f})")
+            if fremd:
+                erg.meldungen.append(f"{buch}: gestoppt – ohne Stop-Prüfung (Titel außerhalb des Universums): {', '.join(fremd)}")
+            erg.sofort += warnungen
+            erg.meldungen += warnungen or [f"{buch}: gestoppt – kein Stop gerissen"]
+            continue
         werte_buch[buch] = journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
         vor = journal.zustand_fuer_signaltag(buch, tag)
         if vor and not any(x > 0 for x in bestand.values()) and not journal.unterwegs(buch):
@@ -580,7 +631,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     erg.befunde.pop("technik", None)
 
     # Fundamental-Bücher (Bewertung nur, wenn ein Buch sie heute braucht)
-    fb = {n: v for n, v in (("fundamental_a", "A"), ("fundamental_b", "B")) if n in b["buecher"]}
+    fb = {n: v for n, v in (("fundamental_a", "A"), ("fundamental_b", "B")) if n in b["buecher"] and n not in gest}
     def _nachkauf(n):
         seit = (journal.zustand(n) or {}).get("letzter_signaltag")
         return journal.nachkauf_kandidaten(n, seit) if seit else set()
@@ -714,6 +765,11 @@ def kontrakte_pruefen(urteile, nach_id, broker, b, meldungen) -> list:
 
 
 # --- Freigabe und Senden ----------------------------------------------------------------------------------------------
+def _gestoppte(journal) -> set[str]:
+    from tradingbot.betrieb import buchstopp
+    return set(buchstopp.gestoppt(journal))
+
+
 READ_ONLY_MELDUNG = "Read-Only im Gateway ist aktiv – bitte ausschalten und Tageslauf neu starten"
 
 
@@ -746,6 +802,9 @@ def freigeben_und_senden(journal, ids: list[str], broker, jetzt: datetime, *, ri
     for i in ids:
         z = journal.db.execute("SELECT buch FROM vorschlaege WHERE id=?", (i,)).fetchone()
         buch_an = bool(z) and buch_freigeschaltet(b, z["buch"])
+        if z and z["buch"] in _gestoppte(journal):
+            meldungen.append(f"{i}: Buch {z['buch']} ist gestoppt (Abgleich) – nicht freigebbar")
+            continue
         if not probe and z and not buch_an:
             meldungen.append(f"{i}: Buch {z['buch']} ist zum Senden noch nicht freigeschaltet – nicht freigebbar")
             continue
@@ -810,10 +869,18 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
     betroffen = {z["buch"] for z in freigegeben} & set(neu)
     if betroffen:
         meldungen.append(f"Neue Ausführungen in {sorted(betroffen)} seit dem Tageslauf – Tageslauf neu starten, diese Bücher werden nicht gesendet")
-    diff = abgleich(journal, list(b["buecher"]), broker.positionen())
+    from tradingbot.betrieb import buchstopp
+    diff, je_buch = buchstopp.zuordnen(journal, list(b["buecher"]), broker.positionen())
     if diff:
         return meldungen + ["Abgleich mit IBKR weicht ab – nichts gesendet: " + "; ".join(diff)]
-    meldungen.append(f"Abgleich vor dem Senden: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
+    if je_buch:                                       # neue Abweichung seit dem Tageslauf: nur dieses Buch (A1)
+        meldungen += buchstopp.aktualisieren(journal, je_buch, jetzt, aufheben=False)[0]
+    gestoppte = _gestoppte(journal)
+    if gestoppte:
+        meldungen.append(f"Abgleich vor dem Senden: Bestände stimmen außer in gestoppten Büchern ({', '.join(sorted(gestoppte))}) – "
+                         "diese werden nicht gesendet")
+    else:
+        meldungen.append(f"Abgleich vor dem Senden: Bestände aller Bücher stimmen mit IBKR überein ({_bestand_text(journal, b)})")
     offene_liste = broker.offene_orders()
     offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offene_liste]
     gesendet = journal.gesendete_refs()
@@ -822,6 +889,9 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
     for z in sorted(freigegeben, key=reihenfolge):
         weiter()
         if z["buch"] in betroffen:
+            continue
+        if z["buch"] in gestoppte:
+            meldungen.append(f"{z['id']}: Buch {z['buch']} gestoppt – nicht gesendet")
             continue
         letzte = journal.buchwerte(z["buch"])
         wert = float(letzte.iloc[-1]) if len(letzte) else journal.kasse(z["buch"])
