@@ -257,3 +257,22 @@ def test_eurobetraege_schalter_in_konfiguration():
     k = lade_konfiguration("betrieb")["benachrichtigung"]
     assert set(k) >= {"telegram", "healthchecks", "eurobetraege"}
     assert re.fullmatch(r"\d+", str(k["zeitlimit_s"]))
+
+
+def test_verbindungstest_fester_text_und_ping_ohne_statuswechsel():
+    gesendet, urls = [], []
+
+    def oeffnen(anfrage, timeout):
+        urls.append(anfrage.full_url)
+        return Antwort()
+
+    m = bn.Melder([SimpleNamespace(senden=gesendet.append)], lebenszeichen_url="https://hc-ping.com/uuid", oeffnen=oeffnen)
+    zeilen = bn.verbindungstest(m)
+    assert gesendet == ["Verbindung ok"]
+    assert urls == ["https://hc-ping.com/uuid/log"]
+    assert "gesendet" in zeilen[0] and "nur Protokoll" in zeilen[1]
+
+
+def test_verbindungstest_ohne_einrichtung_meldet_es():
+    zeilen = bn.verbindungstest(bn.Melder())
+    assert "kein Kanal eingerichtet" in zeilen[0] and "nicht eingerichtet" in zeilen[1]

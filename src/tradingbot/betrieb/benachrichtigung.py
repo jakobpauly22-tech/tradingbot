@@ -217,15 +217,20 @@ class Melder:
                 ergebnis.append(f"{type(k).__name__} fehlgeschlagen ({bereinigen(type(f).__name__)})")
         return "Benachrichtigung: " + ", ".join(ergebnis)
 
-    def lebenszeichen(self, fehler: bool = False) -> str:
-        """Ping an Healthchecks.io (ohne Inhalt); `fehler` meldet den Lauf als fehlgeschlagen (…/fail)."""
+    def lebenszeichen(self, fehler: bool = False, *, nur_protokoll: bool = False) -> str:
+        """Ping an Healthchecks.io (ohne Inhalt); `fehler` meldet den Lauf als fehlgeschlagen (…/fail).
+
+        `nur_protokoll` (…/log): Eintrag im Healthchecks-Protokoll ohne Statuswechsel – für den Verbindungstest, damit ein
+        Testping am Abend keinen ausgefallenen Tageslauf überdeckt.
+        """
         if not self.lebenszeichen_url:
             return "Lebenszeichen: nicht eingerichtet (HEALTHCHECKS_PING_URL in .env)"
-        url = self.lebenszeichen_url.rstrip("/") + ("/fail" if fehler else "")
+        url = self.lebenszeichen_url.rstrip("/") + ("/fail" if fehler else "/log" if nur_protokoll else "")
         try:
             with self.oeffnen(urllib.request.Request(url, data=b"", method="POST"), timeout=self.zeitlimit):
                 pass
-            return "Lebenszeichen an Healthchecks gesendet" + (" (Fehler)" if fehler else "")
+            zusatz = " (Fehler)" if fehler else " (nur Protokoll)" if nur_protokoll else ""
+            return "Lebenszeichen an Healthchecks gesendet" + zusatz
         except Exception as f:  # noqa: BLE001
             return f"Lebenszeichen fehlgeschlagen ({type(f).__name__})"
 
@@ -241,6 +246,14 @@ def melder_aus_env(betrieb: dict, umgebung: dict | None = None) -> Melder:
         kanaele.append(Telegram(token, chat, zeitlimit=zeitlimit))
     url = (umgebung.get("HEALTHCHECKS_PING_URL") or "").strip() if k.get("healthchecks", False) else ""
     return Melder(kanaele, url or None, bool(k.get("eurobetraege", True)), zeitlimit)
+
+
+VERBINDUNG_OK = "Verbindung ok"
+
+
+def verbindungstest(melder: Melder) -> list[str]:
+    """Testnachricht „Verbindung ok“ (fester Text, keine Kontodaten) und ein Healthchecks-Ping ohne Statuswechsel."""
+    return [melder.melden(VERBINDUNG_OK), melder.lebenszeichen(nur_protokoll=True)]
 
 
 # --- Abläufe ------------------------------------------------------------------------------------------------------

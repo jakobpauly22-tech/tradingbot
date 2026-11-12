@@ -261,3 +261,6 @@ Modul `betrieb/benachrichtigung.py`, Schalter in `config/betrieb.yaml` (`benachr
   schreiben und die Chat-ID einmalig über `https://api.telegram.org/bot<Token>/getUpdates` im Browser ablesen, als
   `TELEGRAM_CHAT_ID` eintragen (der Bot selbst ruft getUpdates nie auf). Check bei Healthchecks.io anlegen, Ping-URL als
   `HEALTHCHECKS_PING_URL`.
+- **Verbindungstest:** `.venv\Scripts\python tools\verbindungstest.py` schickt nur „Verbindung ok“ per Telegram und
+  pingt Healthchecks über `…/log` (Eintrag im Protokoll ohne Statuswechsel, überdeckt also keinen ausgefallenen
+  Abendlauf). Liest weder Journal noch Gateway; Exit-Code 1, wenn etwas nicht eingerichtet ist oder fehlschlägt.
