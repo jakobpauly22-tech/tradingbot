@@ -1,0 +1,2935 @@
+# Einordnung der „Split“-Ereignisse der Kursreihen (tools/split_ereignisse_einordnen.py, Jakob 13.11.2026).
+# art: split | abspaltung | kombiniert | unklar; split_faktor gilt für die Aktienzahl (Abspaltung: 1).
+# Einträge mit geprueft: true hat Jakob bestätigt; sie bleiben bei neuen Läufen unverändert.
+# Backtests lesen nur Ereignisse bis zur Datumsgrenze des Tresors.
+stand: '2026-11-13T10:55:52'
+ereignisse:
+- cik: 107263
+  ticker: WMB
+  datum: '2012-01-03'
+  faktor_kursreihe: 1.226693
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2011-02-25 → 2012-02-28
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1001250
+  ticker: EL
+  datum: '2012-01-23'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-02-04 → 2012-02-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 858470
+  ticker: CTRA
+  datum: '2012-01-26'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000008
+  sec_einreichungen: 2011-02-28 → 2012-02-28
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 109198
+  ticker: TJX
+  datum: '2012-02-03'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000002
+  sec_einreichungen: 2011-03-30 → 2012-03-27
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 865752
+  ticker: MNST
+  datum: '2012-02-16'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-03-01 → 2012-02-29
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 766421
+  ticker: ALK
+  datum: '2012-03-19'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-05-04 → 2012-05-03
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 900075
+  ticker: CPRT
+  datum: '2012-03-29'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-06-09 → 2012-06-11
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1163165
+  ticker: COP
+  datum: '2012-05-01'
+  faktor_kursreihe: 1.311791
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2011-08-02 → 2012-07-31
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 37785
+  ticker: FMC
+  datum: '2012-05-25'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-08-03 → 2012-08-01
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1039684
+  ticker: OKE
+  datum: '2012-06-04'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-08-03 → 2012-08-01
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 935703
+  ticker: DLTR
+  datum: '2012-06-27'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2000816.993464
+  sec_einreichungen: 2011-08-18 → 2012-08-16
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 2.001e+06: Skalierungsfehler (Tausend statt Stück), bereinigt
+    2.0008; Vorschlag: split, Split-Faktor 2'
+- cik: 1037868
+  ticker: AME
+  datum: '2012-07-02'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.499997
+  sec_einreichungen: 2011-08-04 → 2012-08-02
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1326160
+  ticker: DUK
+  datum: '2012-07-03'
+  faktor_kursreihe: 0.333333
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: dieselbe Periode davor nicht gemeldet
+- cik: 1336917
+  ticker: UAA
+  datum: '2012-07-10'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000019
+  sec_einreichungen: 2011-08-05 → 2012-08-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1156375
+  ticker: CME
+  datum: '2012-07-23'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 4.99997
+  sec_einreichungen: 2011-08-05 → 2012-08-08
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 14693
+  ticker: BF.B
+  datum: '2012-08-13'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2011-09-08 → 2012-09-05
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 21344
+  ticker: KO
+  datum: '2012-08-13'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000437
+  sec_einreichungen: 2011-10-27 → 2012-10-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 878927
+  ticker: ODFL
+  datum: '2012-09-10'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2011-11-08 → 2012-11-06
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1065696
+  ticker: LKQ
+  datum: '2012-09-19'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2011-10-28 → 2012-10-26
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 833444
+  ticker: JCI
+  datum: '2012-10-01'
+  faktor_kursreihe: 2.011668
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2011-11-16 → 2012-11-16
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 320187
+  ticker: NKE
+  datum: '2012-12-26'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-01-05 → 2013-01-09
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1800
+  ticker: ABT
+  datum: '2013-01-02'
+  faktor_kursreihe: 2.084202
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2012-02-21 → 2013-02-15
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 882095
+  ticker: GILD
+  datum: '2013-01-28'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-02-23 → 2013-02-27
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 96223
+  ticker: JEF
+  datum: '2013-02-26'
+  faktor_kursreihe: 1.027
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-02-25 → 2013-05-09
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 864749
+  ticker: TRMB
+  datum: '2013-03-21'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-05-08 → 2013-05-02
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1108524
+  ticker: CRM
+  datum: '2013-04-18'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2012-05-25 → 2013-05-24
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1283699
+  ticker: TMUS
+  datum: '2013-05-01'
+  faktor_kursreihe: 0.5
+  sec_verhaeltnis: 1.474653
+  sec_einreichungen: 2012-07-26 → 2013-08-08
+  art: kombiniert
+  split_faktor: 1.474653
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 1.4747: Split-Anteil, Rest Abspaltung (Vorschlag, zu
+    prüfen)'
+- cik: 1035002
+  ticker: VLO
+  datum: '2013-05-02'
+  faktor_kursreihe: 1.094
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2012-05-08 → 2013-05-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 91142
+  ticker: AOS
+  datum: '2013-05-16'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-08-03 → 2013-08-05
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 21665
+  ticker: CL
+  datum: '2013-05-16'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-07-26 → 2013-07-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 72207
+  ticker: NBL
+  datum: '2013-05-29'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.994382
+  sec_einreichungen: 2012-07-26 → 2013-07-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 865436
+  ticker: WFM
+  datum: '2013-05-30'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.99978
+  sec_einreichungen: 2012-08-03 → 2013-08-09
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 943452
+  ticker: WAB
+  datum: '2013-06-12'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999979
+  sec_einreichungen: 2012-08-02 → 2013-07-26
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 30625
+  ticker: FLS
+  datum: '2013-06-24'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 2.999982
+  sec_einreichungen: 2012-07-30 → 2013-07-24
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 804753
+  ticker: CERN
+  datum: '2013-07-01'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999994
+  sec_einreichungen: 2012-07-27 → 2013-07-26
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 38777
+  ticker: BEN
+  datum: '2013-07-26'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.000112
+  sec_einreichungen: 2012-07-30 → 2013-07-29
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 858470
+  ticker: CTRA
+  datum: '2013-08-15'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-10-26 → 2013-10-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 717423
+  ticker: MUR
+  datum: '2013-09-03'
+  faktor_kursreihe: 1.158
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2012-11-06 → 2013-11-06
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 927066
+  ticker: DVA
+  datum: '2013-09-09'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-10-31 → 2013-11-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 916365
+  ticker: TSCO
+  datum: '2013-09-27'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-11-05 → 2013-11-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 105770
+  ticker: WST
+  datum: '2013-09-27'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2012-11-05 → 2013-11-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1336920
+  ticker: LDOS
+  datum: '2013-09-30'
+  faktor_kursreihe: 0.405
+  sec_verhaeltnis: 0.249249
+  sec_einreichungen: 2012-12-06 → 2013-12-10
+  art: kombiniert
+  split_faktor: 0.249249
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 0.2492: Split-Anteil, Rest Abspaltung (Vorschlag, zu
+    prüfen)'
+- cik: 921738
+  ticker: PENN
+  datum: '2013-11-04'
+  faktor_kursreihe: 4.423
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2012-11-05 → 2013-11-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1466258
+  ticker: TT
+  datum: '2013-12-02'
+  faktor_kursreihe: 1.252
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-02-14 → 2014-02-14
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 908255
+  ticker: BWA
+  datum: '2013-12-17'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-02-14 → 2014-02-13
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 798354
+  ticker: FISV
+  datum: '2013-12-17'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-02-22 → 2014-02-20
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 103379
+  ticker: VFC
+  datum: '2013-12-23'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2013-02-27 → 2014-02-26
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1141391
+  ticker: MA
+  datum: '2014-01-22'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 9.958678
+  sec_einreichungen: 2013-10-31 → 2014-02-14
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1039684
+  ticker: OKE
+  datum: '2014-02-03'
+  faktor_kursreihe: 1.1422
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-02-26 → 2014-02-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 29905
+  ticker: DOV
+  datum: '2014-03-03'
+  faktor_kursreihe: 1.205
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-04-17 → 2014-04-17
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1058290
+  ticker: CTSH
+  datum: '2014-03-10'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-02-25 → 2014-05-08
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1652044
+  ticker: GOOG
+  datum: '2014-03-27'
+  faktor_kursreihe: 2.002
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-04-25 → 2014-04-24
+  art: split
+  split_faktor: 2.002
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 821189
+  ticker: EOG
+  datum: '2014-04-01'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000004
+  sec_einreichungen: 2014-02-24 → 2014-05-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1336917
+  ticker: UAA
+  datum: '2014-04-15'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-05-01 → 2014-05-07
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1063761
+  ticker: SPG
+  datum: '2014-05-29'
+  faktor_kursreihe: 1.063
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-08-07 → 2014-08-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1021860
+  ticker: NOV
+  datum: '2014-06-02'
+  faktor_kursreihe: 1.109
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-08-05 → 2014-08-04
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 320193
+  ticker: AAPL
+  datum: '2014-06-09'
+  faktor_kursreihe: 7.0
+  sec_verhaeltnis: 6.999998
+  sec_einreichungen: 2013-07-24 → 2014-07-23
+  art: split
+  split_faktor: 7.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 100885
+  ticker: UNP
+  datum: '2014-06-09'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999786
+  sec_einreichungen: 2013-07-19 → 2014-07-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 816284
+  ticker: CELG
+  datum: '2014-06-26'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-07-30 → 2014-07-29
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 320335
+  ticker: GL
+  datum: '2014-07-02'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2013-08-08 → 2014-08-08
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 51434
+  ticker: IP
+  datum: '2014-07-02'
+  faktor_kursreihe: 1.014
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-08-07 → 2014-08-06
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 766421
+  ticker: ALK
+  datum: '2014-07-10'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999989
+  sec_einreichungen: 2013-08-07 → 2014-08-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1020569
+  ticker: IRM
+  datum: '2014-09-26'
+  faktor_kursreihe: 1.082
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-10-31 → 2014-10-31
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 8670
+  ticker: ADP
+  datum: '2014-10-01'
+  faktor_kursreihe: 1.139
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-11-01 → 2014-10-30
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 820313
+  ticker: APH
+  datum: '2014-10-10'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2013-11-01 → 2014-11-05
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1090872
+  ticker: A
+  datum: '2014-11-03'
+  faktor_kursreihe: 1.398
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2013-12-19 → 2014-12-22
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 55785
+  ticker: KMB
+  datum: '2014-11-03'
+  faktor_kursreihe: 1.043
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-02-14 → 2015-02-18
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 797468
+  ticker: OXY
+  datum: '2014-12-01'
+  faktor_kursreihe: 1.042
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-03-03 → 2015-02-23
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 899689
+  ticker: VNO
+  datum: '2015-01-16'
+  faktor_kursreihe: 1.104972
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-02-24 → 2015-02-17
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1071739
+  ticker: CNC
+  datum: '2015-02-20'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-02-21 → 2015-02-23
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1359841
+  ticker: HBI
+  datum: '2015-03-04'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2015-02-06 → 2015-05-01
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 84839
+  ticker: ROL
+  datum: '2015-03-11'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1499.996575
+  sec_einreichungen: 2014-04-25 → 2015-04-30
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 1500: Skalierungsfehler (Tausend statt Stück), bereinigt
+    1.5000; Vorschlag: split, Split-Faktor 1.5'
+- cik: 1403161
+  ticker: V
+  datum: '2015-03-19'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: keine SEC-Aktienzahlen
+- cik: 829224
+  ticker: SBUX
+  datum: '2015-04-09'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000132
+  sec_einreichungen: 2014-04-29 → 2015-04-28
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1652044
+  ticker: GOOG
+  datum: '2015-04-27'
+  faktor_kursreihe: 1.002746
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-04-24 → 2015-04-29
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 922224
+  ticker: PPL
+  datum: '2015-06-02'
+  faktor_kursreihe: 1.073653
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-07-31 → 2015-08-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1510295
+  ticker: MPC
+  datum: '2015-06-11'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-08-04 → 2015-08-03
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 745732
+  ticker: ROST
+  datum: '2015-06-12'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-09-10 → 2015-09-09
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 79879
+  ticker: PPG
+  datum: '2015-06-15'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-07-23 → 2015-07-27
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 874716
+  ticker: IDXX
+  datum: '2015-06-16'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000019
+  sec_einreichungen: 2014-07-25 → 2015-07-30
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1324404
+  ticker: CF
+  datum: '2015-06-18'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 5.0
+  sec_einreichungen: 2014-08-07 → 2015-08-06
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 10456
+  ticker: BAX
+  datum: '2015-07-01'
+  faktor_kursreihe: 1.841
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-07-30 → 2015-08-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 62996
+  ticker: MAS
+  datum: '2015-07-01'
+  faktor_kursreihe: 1.138
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-07-29 → 2015-07-28
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1111711
+  ticker: NI
+  datum: '2015-07-02'
+  faktor_kursreihe: 2.545
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-07-31 → 2015-08-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 56873
+  ticker: KR
+  datum: '2015-07-14'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-09-23 → 2015-09-22
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1065280
+  ticker: NFLX
+  datum: '2015-07-15'
+  faktor_kursreihe: 7.0
+  sec_verhaeltnis: 7.0
+  sec_einreichungen: 2014-07-22 → 2015-07-17
+  art: split
+  split_faktor: 7.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1065088
+  ticker: EBAY
+  datum: '2015-07-20'
+  faktor_kursreihe: 2.376
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-07-18 → 2015-07-21
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 740260
+  ticker: VTR
+  datum: '2015-08-18'
+  faktor_kursreihe: 0.8757
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-10-24 → 2015-10-26
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1275283
+  ticker: RAI
+  datum: '2015-09-01'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2014-10-21 → 2015-10-27
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 47217
+  ticker: HPQ
+  datum: '2015-11-02'
+  faktor_kursreihe: 2.202
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-12-18 → 2015-12-16
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1123360
+  ticker: GPN
+  datum: '2015-11-03'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-01-08 → 2016-01-11
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 940944
+  ticker: DRI
+  datum: '2015-11-10'
+  faktor_kursreihe: 1.118693
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2014-12-31 → 2016-01-06
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1688568
+  ticker: DXC
+  datum: '2015-11-30'
+  faktor_kursreihe: 1.7412
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht davor
+- cik: 1099800
+  ticker: EW
+  datum: '2015-12-14'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-02-20 → 2016-02-19
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 320187
+  ticker: NKE
+  datum: '2015-12-24'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-01-07 → 2016-01-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1140536
+  ticker: WTW
+  datum: '2016-01-05'
+  faktor_kursreihe: 0.3775
+  sec_verhaeltnis: 0.376404
+  sec_einreichungen: 2015-02-24 → 2016-02-29
+  art: split
+  split_faktor: 0.3775
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 48465
+  ticker: HRL
+  datum: '2016-02-10'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-03-06 → 2016-03-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 797468
+  ticker: OXY
+  datum: '2016-02-25'
+  faktor_kursreihe: 1.001703
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2015-02-23 → 2016-02-26
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 nicht eindeutig
+- cik: 1336917
+  ticker: UAA
+  datum: '2016-04-08'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-05-01 → 2016-04-29
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 352541
+  ticker: LNT
+  datum: '2016-05-20'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: erster Periodenbericht danach erst 2019-05-03
+- cik: 313616
+  ticker: DHR
+  datum: '2016-07-05'
+  faktor_kursreihe: 1.319
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2015-07-23 → 2016-07-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 14693
+  ticker: BF.B
+  datum: '2016-08-19'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-08-26 → 2016-08-31
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 313927
+  ticker: CHD
+  datum: '2016-09-02'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-11-02 → 2016-11-03
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 833444
+  ticker: JCI
+  datum: '2016-09-06'
+  faktor_kursreihe: 0.955
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: dieselbe Periode davor nicht gemeldet
+- cik: 2969
+  ticker: APD
+  datum: '2016-10-03'
+  faktor_kursreihe: 1.081
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2015-11-24 → 2016-11-21
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 773840
+  ticker: HON
+  datum: '2016-10-03'
+  faktor_kursreihe: 1.005328
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2015-10-16 → 2016-10-21
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 91142
+  ticker: AOS
+  datum: '2016-10-06'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2015-11-09 → 2016-11-08
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 765880
+  ticker: DOC
+  datum: '2016-11-01'
+  faktor_kursreihe: 1.098
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-02-09 → 2017-02-13
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1041061
+  ticker: YUM
+  datum: '2016-11-01'
+  faktor_kursreihe: 1.391
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-02-16 → 2017-02-22
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1571949
+  ticker: ICE
+  datum: '2016-11-04'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 5.009009
+  sec_einreichungen: 2016-02-04 → 2017-02-07
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 23217
+  ticker: CAG
+  datum: '2016-11-10'
+  faktor_kursreihe: 1.285
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-01-06 → 2017-01-04
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 865752
+  ticker: MNST
+  datum: '2016-11-10'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2016-02-29 → 2017-03-01
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1678531
+  ticker: EVHC
+  datum: '2016-12-02'
+  faktor_kursreihe: 0.334
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht davor
+- cik: 1585689
+  ticker: HLT
+  datum: '2017-01-04'
+  faktor_kursreihe: 0.487329
+  sec_verhaeltnis: 0.333671
+  sec_einreichungen: 2016-02-26 → 2017-02-15
+  art: kombiniert
+  split_faktor: 0.333671
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 0.3337: Split-Anteil, Rest Abspaltung (Vorschlag, zu
+    prüfen)'
+- cik: 1166691
+  ticker: CMCSA
+  datum: '2017-02-21'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2016-04-27 → 2017-04-27
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1645590
+  ticker: HPE
+  datum: '2017-04-03'
+  faktor_kursreihe: 1.3348
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-06-08 → 2017-06-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 900075
+  ticker: CPRT
+  datum: '2017-04-11'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2016-05-26 → 2017-05-25
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 9389
+  ticker: BALL
+  datum: '2017-05-17'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2016-08-12 → 2017-08-09
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 108772
+  ticker: XRX
+  datum: '2017-06-15'
+  faktor_kursreihe: 0.25
+  sec_verhaeltnis: 0.25
+  sec_einreichungen: 2016-08-04 → 2017-08-07
+  art: split
+  split_faktor: 0.25
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 899689
+  ticker: VNO
+  datum: '2017-07-18'
+  faktor_kursreihe: 1.237
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-08-01 → 2017-07-31
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1099219
+  ticker: MET
+  datum: '2017-08-07'
+  faktor_kursreihe: 1.122
+  sec_verhaeltnis: 1.000038
+  sec_einreichungen: 2016-11-03 → 2017-11-06
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1645590
+  ticker: HPE
+  datum: '2017-09-01'
+  faktor_kursreihe: 1.289
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2016-09-08 → 2017-09-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1 (zusammen mit 1 weiteren Ereignissen im Fenster,
+    Produkt 1.721)
+- cik: 1000228
+  ticker: HSIC
+  datum: '2017-09-15'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2016-11-02 → 2017-11-06
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1035267
+  ticker: ISRG
+  datum: '2017-10-06'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2016-10-19 → 2017-10-20
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 920760
+  ticker: LEN
+  datum: '2017-11-09'
+  faktor_kursreihe: 1.017
+  sec_verhaeltnis: 1.021326
+  sec_einreichungen: 2017-01-20 → 2018-01-25
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0213 nicht eindeutig
+- cik: 1521332
+  ticker: APTV
+  datum: '2017-12-05'
+  faktor_kursreihe: 1.193
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-11-02 → 2018-02-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 14693
+  ticker: BF.B
+  datum: '2018-03-01'
+  faktor_kursreihe: 1.25
+  sec_verhaeltnis: 1.25
+  sec_einreichungen: 2017-03-07 → 2018-03-07
+  art: split
+  split_faktor: 1.25
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 4977
+  ticker: AFL
+  datum: '2018-03-19'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999998
+  sec_einreichungen: 2017-05-03 → 2018-05-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 798354
+  ticker: FISV
+  datum: '2018-03-20'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000466
+  sec_einreichungen: 2017-04-27 → 2018-05-02
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 79282
+  ticker: BRO
+  datum: '2018-03-29'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999993
+  sec_einreichungen: 2017-05-05 → 2018-05-10
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 77360
+  ticker: PNR
+  datum: '2018-05-01'
+  faktor_kursreihe: 1.489
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-07-25 → 2018-07-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 29905
+  ticker: DOV
+  datum: '2018-05-09'
+  faktor_kursreihe: 1.238
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-07-20 → 2018-07-19
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1688568
+  ticker: DXC
+  datum: '2018-06-01'
+  faktor_kursreihe: 1.156
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-08-09 → 2018-08-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1361658
+  ticker: WYN
+  datum: '2018-06-01'
+  faktor_kursreihe: 2.215
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-08-03 → 2018-08-09
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 2011641
+  ticker: FERG
+  datum: '2018-06-11'
+  faktor_kursreihe: 0.947
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht davor
+- cik: 947484
+  ticker: ACGL
+  datum: '2018-06-21'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2017-08-04 → 2018-08-08
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 773840
+  ticker: HON
+  datum: '2018-10-01'
+  faktor_kursreihe: 1.011
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2017-10-20 → 2018-10-19
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 773840
+  ticker: HON
+  datum: '2018-10-29'
+  faktor_kursreihe: 1.032
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-02-09 → 2019-02-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1 (zusammen mit 1 weiteren Ereignissen im Fenster,
+    Produkt 1.043)
+- cik: 109198
+  ticker: TJX
+  datum: '2018-11-07'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000002
+  sec_einreichungen: 2017-11-28 → 2018-12-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 33213
+  ticker: EQT
+  datum: '2018-11-13'
+  faktor_kursreihe: 1.837
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-02-15 → 2019-02-14
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 84839
+  ticker: ROL
+  datum: '2018-12-11'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2018-02-26 → 2019-03-01
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1571996
+  ticker: DELL
+  datum: '2018-12-28'
+  faktor_kursreihe: 1.806
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: dieselbe Periode davor nicht gemeldet
+- cik: 1071739
+  ticker: CNC
+  datum: '2019-02-07'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999994
+  sec_einreichungen: 2018-02-20 → 2019-02-19
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1000228
+  ticker: HSIC
+  datum: '2019-02-08'
+  faktor_kursreihe: 1.275
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-02-21 → 2019-02-20
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 40545
+  ticker: GE
+  datum: '2019-02-26'
+  faktor_kursreihe: 1.04
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-05-01 → 2019-04-30
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 37785
+  ticker: FMC
+  datum: '2019-03-04'
+  faktor_kursreihe: 1.153
+  sec_verhaeltnis: 0.999918
+  sec_einreichungen: 2019-02-28 → 2019-05-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1666700
+  ticker: DD
+  datum: '2019-04-02'
+  faktor_kursreihe: 1.487
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-05-04 → 2019-05-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 30554
+  ticker: DD
+  datum: '2019-04-02'
+  faktor_kursreihe: 1.487
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht danach
+- cik: 11544
+  ticker: WRB
+  datum: '2019-04-03'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.500004
+  sec_einreichungen: 2018-05-07 → 2019-05-08
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 815556
+  ticker: FAST
+  datum: '2019-05-23'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2018-07-16 → 2019-07-16
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 103379
+  ticker: VFC
+  datum: '2019-05-23'
+  faktor_kursreihe: 1.062
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-02-28 → 2019-05-24
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1666700
+  ticker: DD
+  datum: '2019-06-03'
+  faktor_kursreihe: 0.4725
+  sec_verhaeltnis: 0.333348
+  sec_einreichungen: 2018-08-03 → 2019-08-06
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis 0.3333 passt weder zu 1 noch zum Produkt (zusammen 
+    mit 1 weiteren Ereignissen im Fenster, Produkt 0.7026)
+- cik: 30554
+  ticker: DD
+  datum: '2019-06-03'
+  faktor_kursreihe: 0.333333
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht danach
+- cik: 1415404
+  ticker: ECHO
+  datum: '2019-09-11'
+  faktor_kursreihe: 1.234
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-11-08 → 2019-11-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 96223
+  ticker: JEF
+  datum: '2019-09-27'
+  faktor_kursreihe: 1.068
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2018-11-01 → 2019-10-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1466258
+  ticker: TT
+  datum: '2020-03-02'
+  faktor_kursreihe: 1.289
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2019-05-01 → 2020-05-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 878927
+  ticker: ODFL
+  datum: '2020-03-25'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2019-05-07 → 2020-05-05
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 101829
+  ticker: RTX
+  datum: '2020-04-03'
+  faktor_kursreihe: 1.589
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2019-04-26 → 2020-05-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1099800
+  ticker: EW
+  datum: '2020-06-01'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.000481
+  sec_einreichungen: 2019-07-26 → 2020-07-27
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 891103
+  ticker: MTCH
+  datum: '2020-07-01'
+  faktor_kursreihe: 3.502
+  sec_verhaeltnis: 2.158385
+  sec_einreichungen: 2019-08-09 → 2020-08-10
+  art: kombiniert
+  split_faktor: 2.158385
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis 2.1584: Split-Anteil, Rest Abspaltung (Vorschlag, zu
+    prüfen)'
+- cik: 320193
+  ticker: AAPL
+  datum: '2020-08-31'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2019-10-31 → 2020-10-30
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1318605
+  ticker: TSLA
+  datum: '2020-08-31'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 5.011364
+  sec_einreichungen: 2019-10-29 → 2020-10-26
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1659166
+  ticker: FTV
+  datum: '2020-10-09'
+  faktor_kursreihe: 1.195
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2019-10-25 → 2020-10-27
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 753308
+  ticker: NEE
+  datum: '2020-10-27'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 3.999793
+  sec_einreichungen: 2020-02-14 → 2021-02-12
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 78003
+  ticker: PFE
+  datum: '2020-11-17'
+  faktor_kursreihe: 1.054
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-02-27 → 2021-02-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 63754
+  ticker: MKC
+  datum: '2020-12-01'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999246
+  sec_einreichungen: 2020-01-28 → 2021-01-28
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 84839
+  ticker: ROL
+  datum: '2020-12-11'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.500002
+  sec_einreichungen: 2020-02-28 → 2021-02-26
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1040971
+  ticker: SLG
+  datum: '2021-01-21'
+  faktor_kursreihe: 0.971
+  sec_verhaeltnis: 0.971639
+  sec_einreichungen: 2020-02-28 → 2021-02-26
+  art: split
+  split_faktor: 0.971
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 0.9716 = Faktor (Aktiendividende)
+- cik: 1681459
+  ticker: FTI
+  datum: '2021-02-16'
+  faktor_kursreihe: 1.344
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-03-03 → 2021-03-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 820313
+  ticker: APH
+  datum: '2021-03-05'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000336
+  sec_einreichungen: 2020-04-24 → 2021-04-30
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 89800
+  ticker: SHW
+  datum: '2021-04-01'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 2.999693
+  sec_einreichungen: 2020-04-29 → 2021-04-28
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 310158
+  ticker: MRK
+  datum: '2021-06-03'
+  faktor_kursreihe: 1.048
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-08-05 → 2021-08-09
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1671933
+  ticker: TTD
+  datum: '2021-06-17'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 10.000087
+  sec_einreichungen: 2020-08-07 → 2021-08-09
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1057352
+  ticker: CSGP
+  datum: '2021-06-28'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 9.999784
+  sec_einreichungen: 2020-07-29 → 2021-07-28
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 277948
+  ticker: CSX
+  datum: '2021-06-29'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 2.9987
+  sec_einreichungen: 2020-07-23 → 2021-07-22
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 936340
+  ticker: DTE
+  datum: '2021-07-01'
+  faktor_kursreihe: 1.175
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-07-28 → 2021-07-27
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1045810
+  ticker: NVDA
+  datum: '2021-07-20'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2020-08-19 → 2021-08-20
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 40545
+  ticker: GE
+  datum: '2021-08-02'
+  faktor_kursreihe: 0.125
+  sec_verhaeltnis: 0.125043
+  sec_einreichungen: 2020-10-28 → 2021-10-26
+  art: split
+  split_faktor: 0.125
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 701985
+  ticker: BBWI
+  datum: '2021-08-03'
+  faktor_kursreihe: 1.237
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-09-03 → 2021-09-02
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 720005
+  ticker: RJF
+  datum: '2021-09-22'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2020-11-24 → 2021-11-23
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 51434
+  ticker: IP
+  datum: '2021-10-01'
+  faktor_kursreihe: 1.056
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-10-30 → 2021-10-28
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1035267
+  ticker: ISRG
+  datum: '2021-10-05'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.000856
+  sec_einreichungen: 2020-10-19 → 2021-10-20
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 827054
+  ticker: MCHP
+  datum: '2021-10-13'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999603
+  sec_einreichungen: 2020-11-05 → 2021-11-04
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1571996
+  ticker: DELL
+  datum: '2021-11-02'
+  faktor_kursreihe: 1.973
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-12-07 → 2021-12-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 51143
+  ticker: IBM
+  datum: '2021-11-04'
+  faktor_kursreihe: 1.046
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2020-10-27 → 2021-11-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1101215
+  ticker: ADS
+  datum: '2021-11-08'
+  faktor_kursreihe: 1.253
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-02-26 → 2022-02-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 726728
+  ticker: O
+  datum: '2021-11-15'
+  faktor_kursreihe: 1.032
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-02-23 → 2022-02-23
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1596532
+  ticker: ANET
+  datum: '2021-11-18'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2021-02-19 → 2022-02-15
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1040971
+  ticker: SLG
+  datum: '2022-01-24'
+  faktor_kursreihe: 0.97
+  sec_verhaeltnis: 0.970297
+  sec_einreichungen: 2021-02-26 → 2022-02-18
+  art: split
+  split_faktor: 0.97
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1109357
+  ticker: EXC
+  datum: '2022-02-02'
+  faktor_kursreihe: 1.402
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-02-24 → 2022-02-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1136869
+  ticker: ZBH
+  datum: '2022-03-01'
+  faktor_kursreihe: 1.03
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-05-04 → 2022-05-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 11544
+  ticker: WRB
+  datum: '2022-03-24'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.500003
+  sec_einreichungen: 2021-05-05 → 2022-05-03
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 10795
+  ticker: BDX
+  datum: '2022-04-01'
+  faktor_kursreihe: 1.025
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-05-06 → 2022-05-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 732717
+  ticker: T
+  datum: '2022-04-11'
+  faktor_kursreihe: 1.324
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2021-05-06 → 2022-05-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1018724
+  ticker: AMZN
+  datum: '2022-06-06'
+  faktor_kursreihe: 20.0
+  sec_verhaeltnis: 19.978218
+  sec_einreichungen: 2021-07-30 → 2022-07-29
+  art: split
+  split_faktor: 20.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1093557
+  ticker: DXCM
+  datum: '2022-06-13'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.001036
+  sec_einreichungen: 2021-07-29 → 2022-07-28
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1262039
+  ticker: FTNT
+  datum: '2022-06-23'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 4.999387
+  sec_einreichungen: 2021-08-02 → 2022-08-05
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1652044
+  ticker: GOOG
+  datum: '2022-07-18'
+  faktor_kursreihe: 20.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: erster Periodenbericht danach erst 2024-07-24
+- cik: 1318605
+  ticker: TSLA
+  datum: '2022-08-25'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2021-10-25 → 2022-10-24
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1120193
+  ticker: NDAQ
+  datum: '2022-08-29'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2021-11-04 → 2022-11-02
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1327567
+  ticker: PANW
+  datum: '2022-09-14'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: dieselbe Periode davor nicht gemeldet
+- cik: 900075
+  ticker: CPRT
+  datum: '2022-11-04'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2021-11-19 → 2022-11-18
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 842023
+  ticker: TECH
+  datum: '2022-11-30'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2022-02-07 → 2023-02-07
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1519751
+  ticker: FBHS
+  datum: '2022-12-15'
+  faktor_kursreihe: 1.17
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-10-27 → 2023-02-28
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 40545
+  ticker: GE
+  datum: '2023-01-04'
+  faktor_kursreihe: 1.281
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-02-11 → 2023-02-10
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 96223
+  ticker: JEF
+  datum: '2023-01-17'
+  faktor_kursreihe: 1.046
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-01-28 → 2023-01-27
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 75362
+  ticker: PCAR
+  datum: '2023-02-08'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.5
+  sec_einreichungen: 2022-02-23 → 2023-02-22
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 865752
+  ticker: MNST
+  datum: '2023-03-28'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2022-05-06 → 2023-05-05
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 920148
+  ticker: LH
+  datum: '2023-07-03'
+  faktor_kursreihe: 1.164
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-08-01 → 2023-08-04
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 908255
+  ticker: BWA
+  datum: '2023-07-05'
+  faktor_kursreihe: 1.136
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-08-03 → 2023-08-02
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 900075
+  ticker: CPRT
+  datum: '2023-08-22'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2022-09-27 → 2023-09-28
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor (zusammen mit 1 weiteren Ereignissen im 
+    Fenster, Produkt 4)
+- cik: 1032208
+  ticker: SRE
+  datum: '2023-08-22'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.000003
+  sec_einreichungen: 2022-11-03 → 2023-11-03
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 313616
+  ticker: DHR
+  datum: '2023-10-02'
+  faktor_kursreihe: 1.128
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-10-20 → 2023-10-24
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 55067
+  ticker: K
+  datum: '2023-10-02'
+  faktor_kursreihe: 1.065
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2022-11-03 → 2023-11-08
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 866374
+  ticker: FLEX
+  datum: '2024-01-03'
+  faktor_kursreihe: 1.327
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2023-01-27 → 2024-02-02
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 711404
+  ticker: COO
+  datum: '2024-02-20'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 3.997976
+  sec_einreichungen: 2023-03-03 → 2024-03-01
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 104169
+  ticker: WMT
+  datum: '2024-02-26'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 2.999633
+  sec_einreichungen: 2023-03-17 → 2024-03-15
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1811074
+  ticker: TPL
+  datum: '2024-03-27'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2023-05-03 → 2024-05-08
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 878927
+  ticker: ODFL
+  datum: '2024-03-28'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2023-05-08 → 2024-05-07
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 66740
+  ticker: MMM
+  datum: '2024-04-01'
+  faktor_kursreihe: 1.196
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2023-04-25 → 2024-04-30
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 40545
+  ticker: GE
+  datum: '2024-04-02'
+  faktor_kursreihe: 1.253
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2023-04-25 → 2024-04-23
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1045810
+  ticker: NVDA
+  datum: '2024-06-10'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 9.998382
+  sec_einreichungen: 2023-08-28 → 2024-08-28
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 820313
+  ticker: APH
+  datum: '2024-06-12'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2023-07-28 → 2024-07-26
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1110803
+  ticker: ILMN
+  datum: '2024-06-25'
+  faktor_kursreihe: 1.028
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2023-08-10 → 2024-08-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 1.0000 = 1
+- cik: 1058090
+  ticker: CMG
+  datum: '2024-06-26'
+  faktor_kursreihe: 50.0
+  sec_verhaeltnis: 50.000398
+  sec_einreichungen: 2023-07-28 → 2024-07-25
+  art: split
+  split_faktor: 50.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 719955
+  ticker: WSM
+  datum: '2024-07-09'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2023-09-01 → 2024-08-23
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 11544
+  ticker: WRB
+  datum: '2024-07-11'
+  faktor_kursreihe: 1.5
+  sec_verhaeltnis: 1.500002
+  sec_einreichungen: 2023-08-03 → 2024-08-02
+  art: split
+  split_faktor: 1.5
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1730168
+  ticker: AVGO
+  datum: '2024-07-15'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 10.009639
+  sec_einreichungen: 2023-09-06 → 2024-09-11
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 723254
+  ticker: CTAS
+  datum: '2024-09-12'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2023-10-05 → 2024-10-04
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 910521
+  ticker: DECK
+  datum: '2024-09-17'
+  faktor_kursreihe: 6.0
+  sec_verhaeltnis: 5.999923
+  sec_einreichungen: 2023-11-02 → 2024-10-31
+  art: split
+  split_faktor: 6.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 52988
+  ticker: J
+  datum: '2024-09-30'
+  faktor_kursreihe: 1.197
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2023-11-21 → 2024-11-25
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1375365
+  ticker: SMCI
+  datum: '2024-10-01'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 10.000019
+  sec_einreichungen: 2024-02-02 → 2025-02-25
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 707549
+  ticker: LRCX
+  datum: '2024-10-03'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 10.0
+  sec_einreichungen: 2023-10-23 → 2024-10-28
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1596532
+  ticker: ANET
+  datum: '2024-12-04'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.000003
+  sec_einreichungen: 2024-02-13 → 2025-02-19
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 65984
+  ticker: ETR
+  datum: '2024-12-13'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2024-02-23 → 2025-02-18
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1327567
+  ticker: PANW
+  datum: '2024-12-16'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999682
+  sec_einreichungen: 2024-02-21 → 2025-02-14
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 916365
+  ticker: TSCO
+  datum: '2024-12-20'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 5.0
+  sec_einreichungen: 2024-02-23 → 2025-02-20
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 920760
+  ticker: LEN
+  datum: '2025-01-21'
+  faktor_kursreihe: 1.033
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2024-01-26 → 2025-01-23
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 106040
+  ticker: WDC
+  datum: '2025-02-24'
+  faktor_kursreihe: 1.323
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2024-04-30 → 2025-05-02
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 52988
+  ticker: J
+  datum: '2025-05-16'
+  faktor_kursreihe: 1.01
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2024-08-06 → 2025-08-05
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1 (zusammen mit 1 weiteren Ereignissen im Fenster,
+    Produkt 1.209)
+- cik: 815556
+  ticker: FAST
+  datum: '2025-05-22'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 2.0
+  sec_einreichungen: 2024-07-17 → 2025-07-17
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 906709
+  ticker: NKTR
+  datum: '2025-06-09'
+  faktor_kursreihe: 0.066667
+  sec_verhaeltnis: 0.066665
+  sec_einreichungen: 2024-08-09 → 2025-08-08
+  art: split
+  split_faktor: 0.066667
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 898173
+  ticker: ORLY
+  datum: '2025-06-10'
+  faktor_kursreihe: 15.0
+  sec_verhaeltnis: 14.999881
+  sec_einreichungen: 2024-08-08 → 2025-08-08
+  art: split
+  split_faktor: 15.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1381197
+  ticker: IBKR
+  datum: '2025-06-18'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.0
+  sec_einreichungen: 2024-08-05 → 2025-08-06
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1659166
+  ticker: FTV
+  datum: '2025-06-30'
+  faktor_kursreihe: 1.327
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2024-07-24 → 2025-07-30
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 773840
+  ticker: HON
+  datum: '2025-10-30'
+  faktor_kursreihe: 1.061
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2025-02-14 → 2026-02-17
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1666700
+  ticker: DD
+  datum: '2025-11-03'
+  faktor_kursreihe: 2.39
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2024-11-05 → 2025-11-06
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1065280
+  ticker: NFLX
+  datum: '2025-11-17'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 10.000002
+  sec_einreichungen: 2025-01-27 → 2026-01-23
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1373715
+  ticker: NOW
+  datum: '2025-12-18'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis: 4.999995
+  sec_einreichungen: 2025-01-30 → 2026-01-29
+  art: split
+  split_faktor: 5.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1811074
+  ticker: TPL
+  datum: '2025-12-23'
+  faktor_kursreihe: 3.0
+  sec_verhaeltnis: 3.0
+  sec_einreichungen: 2025-02-19 → 2026-02-18
+  art: split
+  split_faktor: 3.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1166691
+  ticker: CMCSA
+  datum: '2026-01-05'
+  faktor_kursreihe: 1.067
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2025-01-31 → 2026-02-03
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: 'SEC-Verhältnis = 1; bestätigt: SEC 8-K vom 05.01.2026 (accn 0000950103-26-000079):
+    Abspaltung Versant Media (VSNT), 1 Versant je 25 Comcast, wirksam 02.01.2026 23:59
+    ET'
+- cik: 1748790
+  ticker: AMCR
+  datum: '2026-01-15'
+  faktor_kursreihe: 0.2
+  sec_verhaeltnis: 0.199931
+  sec_einreichungen: 2025-02-05 → 2026-02-04
+  art: split
+  split_faktor: 0.2
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 10795
+  ticker: BDX
+  datum: '2026-02-10'
+  faktor_kursreihe: 1.272
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2025-05-01 → 2026-05-07
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1075531
+  ticker: BKNG
+  datum: '2026-04-06'
+  faktor_kursreihe: 25.0
+  sec_verhaeltnis: 24.996194
+  sec_einreichungen: 2025-04-29 → 2026-04-28
+  art: split
+  split_faktor: 25.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1690820
+  ticker: CVNA
+  datum: '2026-05-08'
+  faktor_kursreihe: 5.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: dieselbe Periode davor nicht gemeldet
+- cik: 1048911
+  ticker: FDX
+  datum: '2026-06-01'
+  faktor_kursreihe: 1.241
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2025-07-21 → 2026-07-20
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 319201
+  ticker: KLAC
+  datum: '2026-06-12'
+  faktor_kursreihe: 10.0
+  sec_verhaeltnis: 9.999992
+  sec_einreichungen: 2025-08-08 → 2026-08-06
+  art: split
+  split_faktor: 10.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1666700
+  ticker: DD
+  datum: '2026-06-24'
+  faktor_kursreihe: 0.333333
+  sec_verhaeltnis: 0.333413
+  sec_einreichungen: 2025-08-05 → 2026-08-04
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis 0.3334 passt weder zu 1 noch zum Produkt (zusammen 
+    mit 1 weiteren Ereignissen im Fenster, Produkt 0.7967)
+- cik: 30554
+  ticker: DD
+  datum: '2026-06-24'
+  faktor_kursreihe: 0.333333
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht danach
+- cik: 773840
+  ticker: HON
+  datum: '2026-06-29'
+  faktor_kursreihe: 0.9535
+  sec_verhaeltnis: 0.5
+  sec_einreichungen: 2025-07-24 → 2026-07-23
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: Faktor nahe 1, SEC-Verhältnis 0.5000 nicht eindeutig
+- cik: 64040
+  ticker: SPGI
+  datum: '2026-07-01'
+  faktor_kursreihe: 1.057
+  sec_verhaeltnis: 1.0
+  sec_einreichungen: 2025-08-01 → 2026-07-28
+  art: abspaltung
+  split_faktor: 1.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = 1
+- cik: 1535527
+  ticker: CRWD
+  datum: '2026-07-02'
+  faktor_kursreihe: 4.0
+  sec_verhaeltnis: 4.000008
+  sec_einreichungen: 2025-08-28 → 2026-08-27
+  art: split
+  split_faktor: 4.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 865752
+  ticker: MNST
+  datum: '2026-08-11'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht danach
+- cik: 820313
+  ticker: APH
+  datum: '2026-09-03'
+  faktor_kursreihe: 2.0
+  sec_verhaeltnis: 1.999918
+  sec_einreichungen: 2025-10-24 → 2026-10-30
+  art: split
+  split_faktor: 2.0
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: SEC-Verhältnis = Faktor
+- cik: 1755672
+  ticker: CTVA
+  datum: '2026-10-01'
+  faktor_kursreihe: 6.665
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: unklar
+  split_faktor:
+  quelle: SEC-Vergleich automatisch
+  geprueft: false
+  bemerkung: kein Periodenbericht danach
