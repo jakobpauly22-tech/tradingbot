@@ -300,3 +300,22 @@ Neuberechnungen, Variante 2 Diagnose der Filter) statt der angezeigten 3. Die Be
 sie bleiben als Ablage unverändert. Keine Bewertung ändert sich: Die Zahl der Varianten geht in kein Kriterium und
 keine Schwelle ein (die Aussagekraft-Schwelle von etwa 5 Pp. p.a. ist nicht nach der Variantenzahl bereinigt); sie
 macht nur sichtbar, wie oft auf denselben Daten getestet wurde.
+
+## Datenkorrektur Marktwert: Abspaltungen als „Split“ und veraltete Aktienzahl (Jakob 13.11.2026, festgehalten vor dem Neulauf)
+
+Festgehalten am 13.11.2026 um 10:46, **vor** jedem Neulauf mit dieser Korrektur.
+
+- **Befund:** (1) Yahoo führt Abspaltungen als Faktor in der Spalte `split`; die Marktwert-Rechnung
+  (`index_nachbau.aktien_splitbereinigt`) multipliziert damit auch die SEC-Aktienzahl, wenn sie vor der Abspaltung
+  gemeldet wurde und der Stichtag danach liegt. (2) Die SEC-Aktienzahl (Deckblatt) ist bei manchen Firmen veraltet, weil
+  sie je Gattung gemeldet wird (CMCSA: Stand 2009).
+- **Korrektur:** Faktoren nach dem Stichtag alle (der Kurs ist damit bereinigt), zwischen Meldung und Stichtag nur echte
+  Splits (Einordnung je Ereignis über das SEC-Verhältnis, Liste `config/kapitalmassnahmen_historie.yaml`, unklare Fälle
+  von Jakob geprüft; im Betrieb Flex-Belege). Ist die Aktienzahl älter als 15 Monate, gilt ersatzweise die jüngste
+  gewichtete Aktienzahl (Basic), markiert „Ersatz“.
+- **Einordnung:** Datenkorrektur, keine neue Variante; Score, Gewichte, Filtergrenzen und Erfolgskriterien unverändert.
+- **Die Korrektur wird unabhängig vom Ergebnis des Neulaufs übernommen.** Das gilt ausdrücklich auch dafür, dass Titel,
+  die bisher wegen „kein Marktwert“ herausfielen, durch die Ersatz-Aktienzahl wieder gewertet werden. Der Neulauf
+  (Scores, Gegenprobe des Index-Nachbaus mit unveränderten Kriterien, Fundamental A; für B nur Signale und Auswahl) dient
+  nur der Dokumentation der Wirkung.
+- **Wirksam im Betrieb** ab dem Rebalancing-Stichtag 04.01.2027, zusammen mit EQ_OFFER, für Auswahl und Risk-Manager-Veto.
