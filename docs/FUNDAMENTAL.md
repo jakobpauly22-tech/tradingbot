@@ -332,3 +332,31 @@ sind als `nicht_zugehoerig` markiert. Wirkung: Fundamental A hielt CIK 30554 vom
 rund 4 %); der Sprung bucht dort einen Scheinverlust von grob einem Fünftel der Position (Schätzung: rund −0,9 % des
 Portfolios einmalig, etwa −0,1 Pp. p.a.), in allen bisherigen Läufen von A gleich. Weil die Reihe nicht endet, greift
 auch die Delisting-Regel (Übernahme zum letzten Kurs) nicht.
+
+## Dritte Datenkorrektur: Kursreihe von E. I. du Pont gekappt (Jakob 13.11.2026, festgehalten vor dem Neulauf)
+
+Festgehalten am 13.11.2026 um 13:08, **vor** dem Neulauf.
+
+- **Korrektur:** Die Kursreihe von CIK 30554 (E. I. du Pont, Tiingo „DD“) endet am 31.08.2017, dem letzten Handelstag
+  vor dem Umtausch in DowDuPont (1,2820 je Aktie, 8-K12B vom 01.09.2017). Danach gilt die bestehende Delisting-Regel
+  (Übernahme/Fusion zum letzten Kurs).
+- **Einordnung:** Datenkorrektur, keine neue Variante. **Sie wird unabhängig vom Ergebnis des Neulaufs übernommen**;
+  der Neulauf (Teil c) dokumentiert nur die Wirkung, zusammen mit den beiden anderen Datenkorrekturen.
+
+### Musterprüfung auf andere Fusionen: Kriterien (festgelegt vor der Suche, 13.11.2026 13:08)
+
+Gesucht werden Kursreihen, die nach dem Indexabgang einer Firma weiterlaufen und dabei wahrscheinlich zu einem anderen
+Unternehmen gehören.
+
+- **Grundmenge:** alle Firmen (CIK) des Universums, deren letzte Mitgliedschaft ab 01.01.2012 endet, mit gültiger
+  Kursreihe.
+- **K1 – Reihe läuft weiter:** Die verwendete Kursreihe hat mehr als 10 Handelstage nach dem Indexabgang noch Kurse
+  (gleiche 10-Tage-Grenze wie die Abdeckungsregel in `docs/DATENQUALITAET.md`).
+- **K2 – Sprung:** Im Fenster vom 5. Handelstag vor bis zum 10. Handelstag nach dem Indexabgang gibt es eine
+  Tagesänderung von mehr als ±15 % ohne Split-Ereignis an diesem Tag. (Die allgemeine Kursprüfung meldet erst ab 25 %;
+  der DD-Fall hatte −20 %.)
+- **K3 – Ticker gehört heute einer anderen Firma:** Das Symbol der Kursreihe ist laut SEC-Tickerliste
+  (`company_tickers.json`) heute einer anderen CIK zugeordnet als der Firma oder ihren Vorgängern.
+- **Treffer:** K1 und (K2 oder K3). Gemeldet werden alle Treffer mit Abgangsgrund, Kurssprung, heutigem Inhaber des
+  Tickers und letztem eigenen Periodenbericht (10-K/10-Q) der CIK als Zusatzangaben. Korrigiert wird erst nach Jakobs
+  Prüfung der Liste.
