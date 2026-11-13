@@ -462,3 +462,4 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
 - **Halten:** Fundamental-Bücher halten die Tochter bis zum nächsten Quartalsstichtag; dann entscheidet die Auswahlregel (wie Fremdtitel in A3).
 - **Vorschläge der Mutter** vor dem Stichtag bleiben stehen, mit dem Hinweis „Limit prüfen“ (der Kurs fällt um den Wert der Tochter).
 - **Test:** nachgestellt mit Versant (1 VSNT je 25 CMCSA), `tests/betrieb/test_kapitalmassnahmen_a4.py`.
+- **Pflicht vor Echtgeld: FIFO-Steuerauswertung** (Jakob 13.11.2026). Das Journal führt den Einstand als gleitenden Durchschnitt; vor Echtgeld kommt eine Auswertung nach FIFO aus den Einzelausführungen (§ 20 Abs. 4 Satz 7 EStG), einschließlich der Anschaffungsdaten aus Kapitalmaßnahmen. Kein Umbau des Journals.

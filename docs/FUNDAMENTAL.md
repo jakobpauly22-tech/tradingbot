@@ -464,3 +464,23 @@ Comcast-Werts würden sonst übersehen; S2 hält die Fehltreffer klein):
   `config/universum_korrekturen.yaml` mit Datum, Verhältnis, Quelle und Kursfaktor nach Yahoo-Art
   Vortagesschluss / (Vortagesschluss − Verhältnis × erster Schlusskurs der Tochter); fehlt der Kurs der Tochter, wird der
   Fall gemeldet, nicht geschätzt.
+
+### Teil c1: Änderung der Kriterien nach der ersten Suche (Jakob 13.11.2026, festgehalten vor der zweiten Suche)
+
+**Begründung:** Die erste Suche (Bericht `docs/berichte/2026-11-13_abspaltungen_tiingo.md`, bleibt stehen) maß den reinen
+Kurs. Tiingo bucht Abspaltungen aber meist als Bardividende am Ex-Tag (TGNA 01.06.2017: 8,53 USD = Wert von Cars.com;
+TWX 09.06.2014: 2,935 USD = Time Inc.), und der Backtest rechnet mit der Gesamtrendite (Dividenden reinvestiert). Fehlerhaft
+sind nur Fälle wie CSC (30.11.2015: Dividende 10,50 USD = nur die Sonderdividende, der Wert von CSRA fehlt, Gesamtrendite
+−39 %). Außerdem lief das 8-K von TWX über Item 8.01, und Item 2.01 allein lieferte 246 Fehltreffer.
+
+- **S1 (neu):** Gesamtrendite (Schluss plus Dividende gegen Vortagesschluss) −3 % oder schlechter an einem Tag ohne
+  Split-Eintrag, oder über zwei aufeinanderfolgende Tage zusammen (Verschiebung um einen Tag wie bei TWX).
+- **S2 (neu):** irgendein 8-K der Firma (oder eines Vorgänger-CIK) im Fenster 30 Kalendertage vor bis 5 nach dem Tag, dessen
+  Volltext (alle Dokumente der Einreichung) „spin“, „separation“ oder „distribution“ enthält.
+- **Treffer:** S1 und S2. **Unklar:** Gesamtrendite −15 % oder schlechter ohne S2.
+- **Probe:** CSC 30.11.2015 muss Treffer sein; TGNA 01.06.2017 und TWX 06./09.06.2014 dürfen nicht als Treffer erscheinen.
+  Zusätzlich muss S2 die in Teil a per SEC bestätigten Abspaltungen am jeweiligen Tag finden: LDOS 30.09.2013, CSC/DXC
+  30.11.2015, OXY 25.02.2016, HLT 04.01.2017, DD 02.04.2019 (Dow), DD 03.06.2019 (Corteva), MTCH 01.07.2020; die kleinste
+  davon ist **OXY 25.02.2016** (Kursfaktor 1,0017, Restbeteiligung California Resources, rund 0,17 % des Werts).
+  Dazu eine Stichprobe von 10 Treffern (zufällig, fester Startwert) gegen die 8-K-Texte. Fehlt etwas, wird es gemeldet;
+  die Kriterien werden nicht selbst geändert.
