@@ -440,3 +440,27 @@ Jakob hat die Regel ohne Umsatzbedingung freigegeben; die erste Suche bleibt als
   gleich dem Vortagesschluss. n bleibt bei 3 wie in der ersten Suche (festgelegt vor der zweiten Suche).
 - **Erster echter Kurs danach:** erster Handelstag nach dem Lauf, der E1 nicht erfüllt (Kursspanne oder anderer Schluss).
 - Grundmenge, Fenster und gemeldete Angaben unverändert.
+
+## Teil c1: Abspaltungen in Tiingo-Reihen (Jakob 13.11.2026, festgehalten vor der Suche)
+
+**Befund:** Tiingo bereinigt Abspaltungen nicht (Anlass CSC 30.11.2015, TGNA 01.06.2017). Hält der Backtest einen solchen
+Titel über die Abspaltung, bucht er den Wert der Tochter als Verlust. **Die Korrektur bestätigter Fälle wird unabhängig vom
+Ergebnis des Neulaufs übernommen** (Datenkorrektur, keine neue Variante); gefundene Fälle gehen vorher als Liste an Jakob.
+
+**Kriterien** (Jakob 13.11.2026, Schwelle 3 % statt der geplanten 15 %: kleine Abspaltungen wie Versant ≈ 6 % des
+Comcast-Werts würden sonst übersehen; S2 hält die Fehltreffer klein):
+
+- **Grundmenge:** Firmen, deren Kursreihe im Backtest aus Tiingo kommt; Zeitraum Mitgliedschaft 2012–2024, verlängert bis
+  zum nächsten Rebalancing-Stichtag nach dem Indexabgang. Kurse bis zur Datumsgrenze des Tresors.
+- **S1 – Rückgang:** Schlusskurs gegen Vortagesschluss −3 % oder schlechter, an einem Tag ohne Split-Eintrag bei Tiingo.
+- **S2 – SEC-Beleg:** Im Fenster 30 Kalendertage vor bis 5 nach dem Tag reicht die Firma (oder ein Vorgänger-CIK) ein 8-K
+  mit Item 2.01 ein oder eine Einreichung, deren Dokumentbeschreibung „spin“, „separation“ oder „distribution“ enthält.
+- **Treffer:** S1 und S2. **Zweite Liste „unklar“:** Rückgang von 15 % oder mehr ohne S2.
+- **Probe (müssen gefunden werden):** CSC 30.11.2015 (CSRA plus Sonderdividende), TGNA 01.06.2017 (Cars.com) und als kleine
+  Abspaltung TWX 09.06.2014 (Time Inc., 1 je 8 Time-Warner-Aktien laut 8-K vom 09.06.2014, accn 0001105705-14-000031;
+  Wertanteil 4,05 % laut Anhang zum Form 8937 von Time Warner). Fehlt ein Probefall, wird das gemeldet, die Kriterien
+  werden nicht selbst geändert.
+- **Korrektur je bestätigtem Fall** (erst nach Jakobs Prüfung): Eintrag `abspaltungen_tiingo` in
+  `config/universum_korrekturen.yaml` mit Datum, Verhältnis, Quelle und Kursfaktor nach Yahoo-Art
+  Vortagesschluss / (Vortagesschluss − Verhältnis × erster Schlusskurs der Tochter); fehlt der Kurs der Tochter, wird der
+  Fall gemeldet, nicht geschätzt.
