@@ -114,7 +114,7 @@ daten:
 
 benachrichtigung:
   # Jakob 12.11.2026 (tradingbot/betrieb/benachrichtigung.py): (a) Kurzfassung nach jedem echten Tageslauf, (b) Erinnerung,
-  # wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief (lokal tools/waechter.py, extern Healthchecks.io),
+  # wenn an einem Xetra-Handelstag bis 22:25 kein Tageslauf lief (lokal tools/waechter.py, extern Healthchecks.io),
   # (c) Sofortmeldung bei Stopp oder Fehler. Probe und Kopie melden nie. Zugangsdaten nur in .env.
   telegram: true                       # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; der Bot sendet nur und liest nie Nachrichten
   healthchecks: true                   # HEALTHCHECKS_PING_URL; Lebenszeichen nach jedem Lauf, an Xetra-Feiertagen vom Wächter

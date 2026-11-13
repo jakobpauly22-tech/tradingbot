@@ -1,6 +1,6 @@
 r"""Wächter für den Tageslauf (Benachrichtigung b, Jakob 12.11.2026).
 
-Läuft über die Windows-Aufgabenplanung montags bis freitags um 22:00 (Einrichtung: tools\waechter_einrichten.ps1).
+Läuft über die Windows-Aufgabenplanung montags bis freitags um 22:25 (Einrichtung: tools\waechter_einrichten.ps1).
 - Xetra-Handelstag ohne Tageslauf im echten Journal → Erinnerung per Telegram.
 - Xetra-Feiertag unter der Woche → Lebenszeichen an Healthchecks.io (kein Fehlalarm, wenn der Laptop an ist).
 - Nach Mitternacht nachgeholt (Laptop war aus oder schlief) → nichts; dann meldet Healthchecks.io von außen.
@@ -23,7 +23,7 @@ from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 def main() -> int:
     load_dotenv(PROJEKT_WURZEL / ".env")
     jetzt = datetime.now(ZoneInfo("Europe/Berlin")).replace(tzinfo=None)
-    with betriebsmodus("Wächter Tageslauf (22:00)"):
+    with betriebsmodus("Wächter Tageslauf (22:25)"):
         journal = betriebspfad("journal.sqlite")
         log = betriebspfad("waechter.log")
         try:

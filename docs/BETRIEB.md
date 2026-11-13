@@ -238,14 +238,15 @@ Modul `betrieb/benachrichtigung.py`, Schalter in `config/betrieb.yaml` (`benachr
 - **(a) Kurzfassung** nach jedem echten Tageslauf per Telegram: Signaltage, Abgleich ok, gestoppt oder nicht geprüft,
   Vorschläge je Buch (frei/Veto), Bücher mit Datenbefund, abgelehnte und verfallene Orders seit dem letzten Lauf,
   Buchwert je Buch (wie gebucht und mit Modellgebühr, gegenüber Startkapital und Vortag).
-- **(b) Erinnerung**, wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief (auch ein gestoppter Lauf zählt als
+- **(b) Erinnerung**, wenn an einem Xetra-Handelstag bis 22:25 kein Tageslauf lief (auch ein gestoppter Lauf zählt als
   gelaufen):
-  - lokal: Aufgabe „TradingBot Waechter“ Mo–Fr 22:00 (`tools/waechter.py`, einrichten mit
+  - lokal: Aufgabe „TradingBot Waechter“ Mo–Fr 22:25 (der Abendlauf startet laut Ablauf erst nach
+    22:15; 13.11.2026) (`tools/waechter.py`, einrichten mit
     `powershell -ExecutionPolicy Bypass -File tools\waechter_einrichten.ps1`); Ergebnis in `daten/betrieb/waechter.log`.
     An Xetra-Feiertagen unter der Woche sendet der Wächter nur ein Lebenszeichen an Healthchecks.
   - extern: Healthchecks.io bekommt nach jedem echten Lauf ein Lebenszeichen ohne Inhalt. Einstellung des Checks: Cron
-    `0 18 * * 1-5`, Zeitzone Europe/Berlin, Karenz 4 h 30 min; Benachrichtigung über die Telegram-Integration von
-    Healthchecks. Damit kommt die Erinnerung um 22:30 auch bei ausgeschaltetem Laptop. Grenzen: Ein Lauf vor 18:00 deckt
+    `0 18 * * 1-5`, Zeitzone Europe/Berlin, Karenz 5 h (Stand 13.11.2026); Benachrichtigung über die Telegram-Integration von
+    Healthchecks. Damit kommt der Alarm um 23:00 auch bei ausgeschaltetem Laptop. Grenzen: Ein Lauf vor 18:00 deckt
     den Tag nicht ab; an Xetra-Feiertagen bei ausgeschaltetem Laptop gibt es einen Fehlalarm.
 - **(c) Sofortmeldung:** Stopp im Tageslauf (als Kurzfassung mit Kopfzeile „GESTOPPT“), Ausnahme im Tageslauf (nur der
   Typ, dazu Lebenszeichen „fail“), Probleme beim Senden (abgelehnt, unbestätigt, Veto bei der zweiten Prüfung, Gateway

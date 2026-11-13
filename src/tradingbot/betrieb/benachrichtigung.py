@@ -2,7 +2,7 @@
 
 (a) Kurzfassung nach jedem echten Tageslauf: Vorschläge je Buch, Abgleich ok/gestoppt, abgelehnte und verfallene Orders
     seit dem letzten Lauf, Buchwerte.
-(b) Erinnerung, wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief: lokal per Aufgabenplanung
+(b) Erinnerung, wenn an einem Xetra-Handelstag bis 22:25 kein Tageslauf lief: lokal per Aufgabenplanung
     (tools/waechter.py) und extern über Healthchecks.io (Totmannschalter, funktioniert auch bei ausgeschaltetem Laptop).
 (c) Sofortmeldung bei Stopp oder Fehler (Stopp im Tageslauf, Abbruch oder Ablehnung beim Senden, Ausnahme, nach dem
     Senden bei IBKR offene Order, die im Journal nicht unterwegs ist).
@@ -32,7 +32,7 @@ KONTO_MUSTER = (re.compile(r"\bDU[A-Z]?\d\w*…?"), re.compile(r"\bU\d{5,}\b")) 
 GEHEIME_VARIABLEN = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "HEALTHCHECKS_PING_URL", "FLEX_TOKEN", "FLEX_QUERY_ID",
                      "TIINGO_API_KEY", "FRED_API_KEY", "SEC_USER_AGENT")
 MAX_LAENGE = 4000                                   # Telegram erlaubt 4096 Zeichen je Nachricht
-ERINNERUNG_AB = time(22, 0)
+ERINNERUNG_AB = time(22, 25)               # Abendlauf startet laut Ablauf erst nach 22:15 (Jakob 13.11.2026)
 SENDEPROBLEME = (                                   # Anfang der Meldung von freigeben_und_senden → Kategorie (ohne Inhalt)
     ("Gateway nicht verbunden", "Gateway nicht verbunden – nichts gesendet"),
     ("Abgleich mit IBKR weicht ab – nichts gesendet", "Abgleich vor dem Senden weicht ab – nichts gesendet"),
@@ -224,7 +224,7 @@ def sendeprobleme(journal, ids: list[str], seit: str, meldungen: list[str], jetz
 
 def erinnerung(tag: date) -> str:
     """(b) lokale Erinnerung (tools/waechter.py)."""
-    return (f"⏰ Heute ({tag:%d.%m.%Y}, Xetra-Handelstag) lief bis 22:00 kein Tageslauf. "
+    return (f"⏰ Heute ({tag:%d.%m.%Y}, Xetra-Handelstag) lief bis 22:25 kein Tageslauf. "
             "Freigabe ist bis 24 Uhr möglich (US-Käufe und Tausch empfohlen 22:05–22:50).")
 
 
@@ -334,7 +334,7 @@ def lauf_heute(journal_datei, tag: date) -> bool:
 
 
 def waechter(jetzt: datetime, journal_datei, melder: Melder) -> str:
-    """(b) Lokale Prüfung um 22:00 (Aufgabenplanung). Handelstag ohne Lauf → Erinnerung. An Xetra-Feiertagen unter der Woche
+    """(b) Lokale Prüfung um 22:25 (Aufgabenplanung). Handelstag ohne Lauf → Erinnerung. An Xetra-Feiertagen unter der Woche
     ein Lebenszeichen, damit Healthchecks keinen Fehlalarm gibt. Gestartet nach Mitternacht (Laptop war aus) → nichts."""
     from tradingbot.betrieb.kalender import ist_handelstag
 

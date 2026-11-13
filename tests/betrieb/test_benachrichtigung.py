@@ -1,5 +1,5 @@
 """Benachrichtigungen (Jakob 12.11.2026): Inhalte aus der Positivliste, Eurobeträge abschaltbar, keine Kontodaten,
-Versand wirft nie, Wächter um 22:00, Sendeprobleme."""
+Versand wirft nie, Wächter um 22:25, Sendeprobleme."""
 import re
 import urllib.parse
 from datetime import date, datetime
@@ -218,30 +218,31 @@ class Zaehler(bn.Melder):
 
 def test_waechter_erinnert_ohne_lauf(journal):
     m = Zaehler()
-    bn.waechter(datetime(2026, 11, 12, 22, 0), journal.datei, m)
-    assert len(m.texte) == 1 and "12.11.2026" in m.texte[0] and "kein Tageslauf" in m.texte[0]
+    bn.waechter(datetime(2026, 11, 12, 22, 25), journal.datei, m)
+    assert len(m.texte) == 1 and "12.11.2026" in m.texte[0] and "bis 22:25 kein Tageslauf" in m.texte[0]
 
 
 def test_waechter_still_nach_lauf_auch_gestoppt(journal):
     journal.ereignis("abgleich", "Abgleich mit IBKR weicht ab – Tageslauf gestoppt", jetzt=datetime(2026, 11, 12, 18, 30))
     m = Zaehler()
-    assert "lief heute" in bn.waechter(datetime(2026, 11, 12, 22, 0), journal.datei, m)
+    assert "lief heute" in bn.waechter(datetime(2026, 11, 12, 22, 25), journal.datei, m)
     assert m.texte == []
 
 
 def test_waechter_lauf_vom_vortag_zaehlt_nicht(journal):
     journal.ereignis("tageslauf", "x", jetzt=datetime(2026, 11, 11, 23, 59))
     m = Zaehler()
-    bn.waechter(datetime(2026, 11, 12, 22, 5), journal.datei, m)
+    bn.waechter(datetime(2026, 11, 12, 22, 30), journal.datei, m)
     assert len(m.texte) == 1
 
 
 def test_waechter_feiertag_wochenende_und_zu_frueh(journal):
     m = Zaehler()
-    bn.waechter(datetime(2026, 12, 24, 22, 0), journal.datei, m)        # Xetra-Feiertag, Donnerstag
+    bn.waechter(datetime(2026, 12, 24, 22, 25), journal.datei, m)        # Xetra-Feiertag, Donnerstag
     assert m.texte == [] and m.pings == 1
-    bn.waechter(datetime(2026, 11, 14, 22, 0), journal.datei, m)        # Samstag
-    bn.waechter(datetime(2026, 11, 12, 21, 59), journal.datei, m)       # vor 22:00
+    bn.waechter(datetime(2026, 11, 14, 22, 25), journal.datei, m)        # Samstag
+    bn.waechter(datetime(2026, 11, 12, 21, 59), journal.datei, m)       # vor 22:25
+    assert bn.waechter(datetime(2026, 11, 12, 22, 24), journal.datei, m) == "vor 22:25 – nichts geprüft"   # Abendlauf erst nach 22:15
     assert m.texte == [] and m.pings == 1
 
 
