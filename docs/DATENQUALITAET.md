@@ -73,3 +73,11 @@ Firmen mit gültigen Kursen: Streubesitz gegen den Börsenwert geprüft (30–13
 ## Benchmark „S&P 500 ohne Finanzwerte“
 
 Gebaut am 02.11.2026 nach bestandener Gegenprobe (Lauf 4) mit demselben Code (`daten/sp500_nachbau.py`), Finanzwerte (SIC 6000–6999 inklusive REITs) point-in-time ausgeschlossen; USD und EUR (Index geteilt durch EUR/USD desselben Tages). Werkzeug: `tools/nachbau_sp500_ohne_finanzwerte.py`, Laden: `sp500_nachbau.lade_benchmark_sp500_ohne_finanzwerte()`. Kontrolle (01.10.2016–31.12.2024): annualisiert 15,26 % (USD) bzw. 16,32 % (EUR); voller Nachbau 14,93 %, S&P 500 TR 14,85 % (USD); Gewicht der Finanzwerte im vollen Nachbau 14–19 %; Abdeckung Median 95,7 %, Minimum 92,1 %.
+
+## Offene Punkte
+
+- **Abgangsgründe aus der Wikipedia-Änderungstabelle teils verrutscht (Befund 13.11.2026):** Bei 21 von 90 Kursenden
+  2012–2024 passt der Text in `grund_abgang` nicht zur Firma (z. B. DO „Siris Capital Group acquired Polycom“, ANR „Kraft
+  split into two companies“, XEC „Gardner Denver“). Die Delisting-Einstufung (`daten/delisting.py`) nutzt den Text nur, wenn
+  kein SEC-Beleg vorliegt; heute betrifft das 2 Fälle, beide mit passendem Text. Bleibt eine Fehlerquelle für neue Fälle.
+  Noch nicht korrigiert; Ursache (Zuordnung der Zeilen beim Einlesen der Tabelle) und Umfang klären, mit Jakob besprechen.

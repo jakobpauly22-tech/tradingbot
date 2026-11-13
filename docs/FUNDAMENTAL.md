@@ -403,3 +403,28 @@ Plan von Jakob freigegeben am 13.11.2026. Code: `daten/kapitalmassnahmen_histori
 - **Stichprobe (Backtest-Daten):** BAX 03.10.2016 bisher ohne Marktwert (Streubesitz 183 %, Abspaltung Baxalta 2015 als
   Split), korrigiert 25,9 Mrd. USD; CMCSA mit Ersatz-Aktienzahl 150,1 statt 128,0 Mrd. USD (2016) und 189,7 statt
   172,2 Mrd. USD (2019); HON 2016 Faktor 0,995 (Abspaltung AdvanSix); LDOS unverändert (kombiniert 1:4 vor 2016).
+
+## Vierte Datenkorrektur: eingefrorene Kurse nach einem Handelsstopp bei Insolvenz (Jakob 13.11.2026, festgehalten vor der Suche)
+
+Festgehalten am 13.11.2026 um 14:41, **vor** der Suche und vor dem Neulauf.
+
+- **Anlass SIVB (CIK 719739):** Tiingo füllt während des Handelsstopps vom 10.03. bis 27.03.2023 den letzten Kurs vor dem
+  Stopp ein (106,04 USD); erster echter Kurs danach 0,40 USD (Schluss 28.03.2023, OTC „SIVBQ“). Im Index-Nachbau gilt für
+  SIVB ab dem ersten Tag des Stopps der erste echte Kurs nach dem Stopp (0,40 USD); der Verlust fällt damit in die
+  Mitgliedschaft (Abgang 15.03.2023).
+- **Allgemeine Regel:** Eingefrorene Kurse nach einem Handelsstopp mit Insolvenz werden ab dem ersten eingefrorenen Tag
+  durch den ersten echten Kurs nach dem Stopp ersetzt (Backtests und Index-Nachbau). Gibt es danach keinen echten Kurs,
+  wird der Fall gemeldet und nicht automatisch entschieden.
+- **Einordnung:** Datenkorrektur in Teil c, keine neue Variante. **Sie wird unabhängig vom Ergebnis des Neulaufs
+  übernommen.** Gefundene Fälle gehen vor der Korrektur als Liste an Jakob.
+
+### Suchkriterien (festgelegt vor der Suche)
+
+- **Grundmenge:** alle Firmen (CIK, mit Vorgängern) des Universums mit gültiger Kursreihe und mindestens einem 8-K mit
+  Item 1.03 (Bankruptcy or Receivership) in den SEC-Einreichungen; Kurse wie im Backtest (bis zur Datumsgrenze des Tresors).
+- **Fenster:** vom 10. Handelstag vor bis 60 Kalendertage nach dem ersten 8-K mit Item 1.03.
+- **E1 – eingefroren:** mindestens 3 aufeinanderfolgende Handelstage mit unverändertem Schlusskurs (gleich dem Vortag)
+  und Umsatz 0 (oder fehlendem Umsatz).
+- **Treffer:** E1 im Fenster. Gemeldet: Firma, Mitgliedschaft, Datum des 8-K, eingefrorener Zeitraum und Kurs, erster
+  echter Kurs danach (erster Tag mit Umsatz > 0 und anderem Schlusskurs) oder Reihenende, ob die Firma am ersten
+  eingefrorenen Tag Indexmitglied war und ob ein Backtest-Buch sie hielt.
