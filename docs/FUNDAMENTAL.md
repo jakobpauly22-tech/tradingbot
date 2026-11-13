@@ -292,3 +292,11 @@ APD 2016, RTX 2020, IBM 2021, GE 2023/2024, J 2024, CMCSA 05.01.2026 mit 1,067 v
 (`index_nachbau.aktien_splitbereinigt`, genutzt für E/P, EBIT/EV, Altman X4, den Index-Nachbau und im Betrieb) multipliziert
 die SEC-Aktienzahl auch mit diesen Faktoren. Im Betrieb betrifft das aktuell CMCSA (Bestand Fundamental A). Mit Jakob
 besprechen.
+
+**Varianten-Liste (Korrektur 13.11.2026, 10:26):** Variante 1 stand dort unter zwei Schreibweisen („Regeln vom
+03.11.2026“ aus dem Datumsfehler vom 02.11.2026, sonst „02.11.2026“). Die Schreibweise ist vereinheitlicht, keine Zeile
+gelöscht, Korrekturvermerk in der neuen Spalte `korrektur`. Gezählt sind jetzt **2 Varianten** (Variante 1 mit drei
+Neuberechnungen, Variante 2 Diagnose der Filter) statt der angezeigten 3. Die Berichte vom 13.11.2026 nennen noch 3;
+sie bleiben als Ablage unverändert. Keine Bewertung ändert sich: Die Zahl der Varianten geht in kein Kriterium und
+keine Schwelle ein (die Aussagekraft-Schwelle von etwa 5 Pp. p.a. ist nicht nach der Variantenzahl bereinigt); sie
+macht nur sichtbar, wie oft auf denselben Daten getestet wurde.
