@@ -319,3 +319,16 @@ Festgehalten am 13.11.2026 um 10:46, **vor** jedem Neulauf mit dieser Korrektur.
   (Scores, Gegenprobe des Index-Nachbaus mit unveränderten Kriterien, Fundamental A; für B nur Signale und Auswahl) dient
   nur der Dokumentation der Wirkung.
 - **Wirksam im Betrieb** ab dem Rebalancing-Stichtag 04.01.2027, zusammen mit EQ_OFFER, für Auswahl und Risk-Manager-Veto.
+
+**Prüfliste Teil a (Jakob 13.11.2026):** 20 Fälle mit Beleg aus 8-K oder Pressemitteilung in
+`config/kapitalmassnahmen_historie.yaml` (Spalte `quelle`, `geprueft: true`); alle Einschätzungen von Jakob durch den
+Beleg bestätigt, kein Widerspruch. EVHC 2016, FERG 2018, DELL 2018 bleiben unklar ohne Faktor.
+
+**Neuer Befund (offen, mit Jakob besprechen): Kursreihe von E. I. du Pont (CIK 30554).** Die Mitgliedschaft bis
+01.09.2017 nutzt die Tiingo-Reihe „DD“; sie läuft über den 31.08.2017 (letzter Handelstag, Umtausch 1,2820 DowDuPont je
+Aktie laut 8-K12B vom 01.09.2017, accn 0001193125-17-274834) hinaus und setzt ohne Umrechnung mit DowDuPont/DuPont fort
+(Sprung am 01.09.2017 von 507,98 auf 406,60, −20,0 %; DowDuPont selbst +0,8 %). Die Ereignisse 2019 und 2026 dieser Reihe
+sind als `nicht_zugehoerig` markiert. Wirkung: Fundamental A hielt CIK 30554 vom 04.10.2016 bis 03.10.2017 (Gewicht
+rund 4 %); der Sprung bucht dort einen Scheinverlust von grob einem Fünftel der Position (Schätzung: rund −0,9 % des
+Portfolios einmalig, etwa −0,1 Pp. p.a.), in allen bisherigen Läufen von A gleich. Weil die Reihe nicht endet, greift
+auch die Delisting-Regel (Übernahme zum letzten Kurs) nicht.

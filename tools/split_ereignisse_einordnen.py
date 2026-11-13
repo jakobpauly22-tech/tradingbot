@@ -173,7 +173,7 @@ def main() -> int:
                                   "quelle": "SEC-Vergleich automatisch", "geprueft": False, "bemerkung": bemerkung})
     eintraege.sort(key=lambda e: (e["datum"], e["ticker"]))
     kopf = ("# Einordnung der „Split“-Ereignisse der Kursreihen (tools/split_ereignisse_einordnen.py, Jakob 13.11.2026).\n"
-            "# art: split | abspaltung | kombiniert | unklar; split_faktor gilt für die Aktienzahl (Abspaltung: 1).\n"
+            "# art: split (auch Reverse-Split, Aktiendividende) | abspaltung | kombiniert | unklar | nicht_zugehoerig; split_faktor gilt für die Aktienzahl (Abspaltung: 1).\n"
             "# Einträge mit geprueft: true hat Jakob bestätigt; sie bleiben bei neuen Läufen unverändert.\n"
             "# Backtests lesen nur Ereignisse bis zur Datumsgrenze des Tresors.\n")
     from io import StringIO
@@ -184,8 +184,10 @@ def main() -> int:
     df = pd.DataFrame(eintraege)
     df["zeitraum"] = df["datum"].map(lambda d: "Backtest bis 2024" if d <= "2024-12-31" else "Betrieb ab 2025")
     zaehl = df.pivot_table(index="art", columns="zeitraum", values="cik", aggfunc="count", fill_value=0)
-    pruef = df[df["art"].isin(["kombiniert", "unklar"]) & (df["zeitraum"] == "Backtest bis 2024")]
-    pruef_betrieb = df[df["art"].isin(["kombiniert", "unklar"]) & (df["zeitraum"] == "Betrieb ab 2025")]
+    offen = df["art"].isin(["kombiniert", "unklar"]) & ~df["geprueft"].astype(bool)
+    pruef = df[offen & (df["zeitraum"] == "Backtest bis 2024")]
+    pruef_betrieb = df[offen & (df["zeitraum"] == "Betrieb ab 2025")]
+    geprueft = df[df["geprueft"].astype(bool)]
     text = ["# Split-Ereignisse der Kursreihen: Einordnung und Prüfliste", "",
             f"Erstellt {datetime.now():%d.%m.%Y %H:%M} mit `tools/split_ereignisse_einordnen.py`; Liste `config/kapitalmassnahmen_historie.yaml`. "
             f"{len(df)} Ereignisse ab 2012 in den Kursreihen des Universums.", "",
@@ -206,8 +208,13 @@ def main() -> int:
              "| Ticker (CIK) | Datum | Faktor Kursreihe | Bemerkung |", "| --- | --- | --- | --- |"]
     for z in pruef_betrieb.itertuples():
         text.append(f"| {z.ticker} ({z.cik}) | {z.datum} | {z.faktor_kursreihe:g} | {z.bemerkung} |")
-    abs_ = df[df["art"] == "abspaltung"]
-    text += ["", f"## Automatisch als Abspaltung eingeordnet ({len(abs_)})", "",
+    text += ["", f"## Von Jakob geprüft, mit Beleg ({len(geprueft)})", "",
+             "| Ticker (CIK) | Datum | Faktor Kursreihe | Art | Split-Faktor | Beleg |", "| --- | --- | --- | --- | --- | --- |"]
+    for z in geprueft.itertuples():
+        f = "–" if z.split_faktor is None or pd.isna(z.split_faktor) else f"{z.split_faktor:g}"
+        text.append(f"| {z.ticker} ({z.cik}) | {z.datum} | {z.faktor_kursreihe:g} | {z.art} | {f} | {z.quelle} |")
+    abs_ = df[(df["art"] == "abspaltung") & ~df["geprueft"].astype(bool)]
+    text += ["", f"## Automatisch als Abspaltung eingeordnet, ungeprüft ({len(abs_)})", "",
              ", ".join(f"{z.ticker} {z.datum} ({z.faktor_kursreihe:g})" for z in abs_.itertuples()) or "–", ""]
     einfach_aber_abs = abs_[abs_["faktor_kursreihe"].map(lambda v: abs(v - round(v)) < 1e-6 or abs(1 / v - round(1 / v)) < 1e-6)]
     if len(einfach_aber_abs):
