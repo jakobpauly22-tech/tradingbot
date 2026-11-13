@@ -277,6 +277,7 @@ class Tagesfenster:
         e = buchstopp.gestoppt(self.journal).get(buch)
         if not hasattr(self, "stopp_knoepfe"):
             self.stopp_knoepfe: dict[str, ttk.Button] = {}
+        self._form8937_zeilen(rahmen, buch)                       # A4: auch nach der Buchung (8937 erscheint oft später)
         if e is None:
             return
         z = ttk.Frame(rahmen)
@@ -309,8 +310,36 @@ class Tagesfenster:
             knopf.pack(side="left", padx=8)
             self.flex_split_knoepfe[beleg] = knopf
 
+    def _form8937_zeilen(self, rahmen, buch: str):
+        """A4 (Jakob 13.11.2026): Aufteilung laut Form 8937 des Unternehmens zum Vergleich eintragen (Anteil der Mutter in %,
+        Quelle). Gebucht wird nach Schlusskursen; das Journal zeigt beide nebeneinander."""
+        from tradingbot.betrieb import kapitalmassnahmen
+        if not hasattr(self, "form8937_felder"):
+            self.form8937_felder: dict[str, tuple] = {}
+        for m in kapitalmassnahmen.form8937_offen(self.journal, buch):
+            zeile = ttk.Frame(rahmen)
+            zeile.pack(fill="x", pady=(2, 0))
+            ttk.Label(zeile, text=f"Form 8937 (falls veröffentlicht) zu {m['beleg_id']}: Anteil Mutter in %").pack(side="left")
+            anteil, quelle = ttk.Entry(zeile, width=8), ttk.Entry(zeile, width=40)
+            anteil.pack(side="left", padx=4)
+            ttk.Label(zeile, text="Quelle").pack(side="left")
+            quelle.pack(side="left", padx=4)
+            knopf = ttk.Button(zeile, text="Eintragen", command=lambda b=m["beleg_id"], a=anteil, q=quelle: self.form8937_speichern(b, a.get(), q.get()))
+            knopf.pack(side="left", padx=6)
+            self.form8937_felder[m["beleg_id"]] = (anteil, quelle, knopf)
+
+    def form8937_speichern(self, beleg: str, anteil: str, quelle: str) -> str:
+        from tradingbot.betrieb import kapitalmassnahmen
+        try:
+            text = kapitalmassnahmen.form8937_eintragen(self.journal, beleg, anteil, quelle, self.jetzt_fn())
+        except ValueError as f:
+            text = str(f)
+        self._protokoll_schreiben([text])
+        self._uebersicht_bauen()
+        return text
+
     def massnahme_entscheiden(self, beleg: str, bestaetigt: bool) -> str:
-        """A3: Übernahme/Delisting bestätigen (Buchung im nächsten Tageslauf) oder ablehnen (Buch bleibt gestoppt bis zur Quittung)."""
+        """A3/A4: Übernahme/Delisting/Abspaltung bestätigen (Buchung im nächsten Tageslauf) oder ablehnen (Buch bleibt gestoppt bis zur Quittung)."""
         from tradingbot.betrieb import kapitalmassnahmen
         try:
             text = (kapitalmassnahmen.bestaetigen if bestaetigt else kapitalmassnahmen.ablehnen)(self.journal, beleg, self.jetzt_fn())

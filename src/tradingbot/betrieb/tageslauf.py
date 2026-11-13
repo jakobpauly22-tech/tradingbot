@@ -504,8 +504,11 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             if not stopp:                                  # Kapitalmaßnahmen erkennen und melden (A1, 12.11.2026)
                 kapitalmassnahmen.erkennen(journal, list(b["buecher"]), flex, erg.meldungen)
                 # Split, Reverse-Split, Tickerwechsel mit Flex-Beleg buchen, nur bei exakt passender Probe (A2, 12.11.2026)
+                def _schlusskurse(t, ab, _laden=kurse_laden):          # Einstandsaufteilung einer Abspaltung (A4)
+                    return _laden(t, nyse, "etf" if t.endswith(".DE") else "aktie_usd")["close"]
                 for bu in kapitalmassnahmen.buchen(journal, list(b["buecher"]), positionen, erg.meldungen, fx=fx, jetzt=jetzt,
-                                                   technik_universum={e["ticker"] for e in kt["universum"]["etfs"]}):
+                                                   technik_universum={e["ticker"] for e in kt["universum"]["etfs"]},
+                                                   schlusskurse=_schlusskurse):
                     if bu.ok:
                         erg.sofort.append(bu.text)
             if stopp:
@@ -713,10 +716,12 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             preise = {r.symbol: float(r.schluss_usd) for r in bewertung.itertuples() if r.symbol}
             preise.update({t: float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1]) for t in set(bestand) | nachkauf_fb[n] if t not in preise})
             frei_n = kasse_frei(journal, n, fx)[0]
+            ohne_conid = _km.tochter_ohne_conid(journal, n)           # A4: Verkauf einer Tochter ohne Conid gesperrt
             v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, frei_n, bestand,
                                           journal.zustand(n), kf, aufschlag, gebuehr_fuer("USD", eurusd),
-                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)}, reserviert=journal.kasse(n) - frei_n,
-                                          nachkauf=nachkauf_fb[n])
+                                          gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)} | ohne_conid,
+                                          reserviert=journal.kasse(n) - frei_n, nachkauf=nachkauf_fb[n])
+            z = verkauf_gesperrt_merken(z, ohne_conid, bestand, grund)
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue
@@ -725,6 +730,14 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             journal.zustand_speichern(n, z)
             erg.meldungen.append(f"{n}: {grund}, {len(v)} Vorschläge")
             roh += v
+
+    # A4 (Jakob 13.11.2026): Tochter aus einer Abspaltung ohne Conid – nur melden; ein anstehender Verkauf bleibt gesperrt
+    # (tägliche Erinnerung) und wird nachgeholt, sobald Jakob die Conid in config/kontrakte.yaml übernommen hat.
+    for n in fb:
+        try:
+            roh += _tochter_ohne_conid_pruefen(journal, n, nyse, kurse_laden, eurusd, erg)
+        except Exception as f:  # noqa: BLE001 – Prüfung darf den Lauf nicht abbrechen
+            erg.meldungen.append(f"{n}: Prüfung Tochter ohne Conid nicht möglich ({type(f).__name__}: {f})")
 
     # Devisentausch je Buch vor den USD-Käufen (Entscheidung Jakob 03.11.2026)
     puffer = float(b.get("waehrung", {}).get("tausch_puffer", 0.02))
@@ -765,6 +778,48 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         ziel = journal.sichern(None, jetzt=jetzt)
         erg.meldungen.append(f"Journal gesichert: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
     return erg
+
+
+def verkauf_gesperrt_merken(z: dict, ohne_conid: set[str], bestand: dict[str, float], grund: str) -> dict:
+    """A4: Am Quartalsstichtag fällt der Verkauf einer gehaltenen Tochter ohne Conid an, wenn sie nicht im neuen Ziel steht;
+    der Titel war gesperrt (gesperrt_titel) und wird im Zustand `verkauf_gesperrt` für Erinnerung und Nachholen gemerkt."""
+    if not (grund.startswith("Quartalsstichtag") or grund.startswith("Aufbau")):
+        return z
+    neu = sorted(t for t in ohne_conid if bestand.get(t, 0) > 0 and t not in (z.get("ziel") or {}))
+    if not neu:
+        return z
+    return {**z, "verkauf_gesperrt": sorted(set(z.get("verkauf_gesperrt") or []) | set(neu))}
+
+
+def _tochter_ohne_conid_pruefen(journal, n: str, nyse, kurse_laden, eurusd: float, erg) -> list:
+    """A4: Gehaltene Tochter ohne Conid melden. Steht ihr Verkauf aus (Zustand `verkauf_gesperrt`): Erinnerung (Sofortmeldung)
+    bis zur Übernahme der Conid, danach Verkaufsvorschlag; nicht mehr gehaltene Titel fallen aus der Liste."""
+    from tradingbot.betrieb import kapitalmassnahmen as _km_a4
+
+    ohne = _km_a4.tochter_ohne_conid(journal, n)
+    for t in sorted(ohne):
+        erg.meldungen.append(f"{n}: Tochter {t} aus einer Abspaltung ohne Conid in config/kontrakte.yaml – bitte übernehmen "
+                             "(Vorschlag im Journal); Buch läuft weiter")
+    z = journal.zustand(n) or {}
+    offen = [t for t in (z.get("verkauf_gesperrt") or []) if journal.bestand(n).get(t, 0) > 0]
+    vorschlaege = []
+    for t in offen:
+        if t in ohne:
+            text = (f"{n}: Verkauf der Tochter {t} steht an (Quartalsstichtag), ist aber gesperrt – Conid fehlt in config/kontrakte.yaml. "
+                    "Erinnerung bis zur Übernahme")
+            erg.meldungen.append(text)
+            erg.sofort.append(text)
+        elif t not in {u["ticker"] for u in journal.unterwegs(n)}:
+            kurs = float(kurse_laden(t, nyse, "aktie_usd")["close"].iloc[-1])
+            bv = _verkauf(n, pd.Timestamp(nyse), t, journal.bestand(n)[t], kurs / eurusd, "USD", "aktie",
+                          f"Verkauf nachgeholt: Tochter {t} aus einer Abspaltung, am Quartalsstichtag fällig, war gesperrt, weil die "
+                          "Conid fehlte (A4, Jakob 13.11.2026).", fx=eurusd, plan="USD")
+            bv.kern = f"Verkauf nachgeholt: {t} kam durch eine Abspaltung ins Buch; die Conid ist jetzt übernommen."
+            vorschlaege.append(bv)
+            erg.meldungen.append(f"{n}: Verkauf der Tochter {t} nachgeholt (Conid übernommen)")
+    if offen != list(z.get("verkauf_gesperrt") or []):
+        journal.zustand_speichern(n, {**z, "verkauf_gesperrt": offen})
+    return vorschlaege
 
 
 def datenkorrektur_vermerken(journal, bewertung: pd.DataFrame, tag, jetzt: datetime | None = None) -> list[str]:

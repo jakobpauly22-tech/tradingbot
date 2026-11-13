@@ -440,7 +440,7 @@ class Journal:
         for z in self.db.execute(sql, (buch, bis) if bis else (buch,)):
             vorgaenge.append((str(z["zeit"])[:10], 1, str(z["zeit"]), dict(z)))
         for p in self.massnahmen_posten(buch, bis=bis):
-            if p["ticker"] and p["stueck"]:
+            if p["ticker"] and (p["stueck"] or p["einstand"]):        # Abspaltung (A4): Einstand der Mutter ohne Stückänderung
                 vorgaenge.append((str(p["tag"] or ""), 0, str(p["tag"] or ""), {**dict(p), "_posten": True}))
         erg: dict[str, dict] = {}
         for _, _, zeit, z in sorted(vorgaenge, key=lambda v: (v[0], v[1], v[2])):

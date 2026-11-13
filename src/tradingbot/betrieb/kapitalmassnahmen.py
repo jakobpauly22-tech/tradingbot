@@ -34,7 +34,8 @@ STEUER = {"split": "zu prüfen: Split steuerneutral, Anschaffungsdaten übertrag
           "reverse_split": "zu prüfen: Reverse-Split steuerneutral, Barausgleich für Bruchteile als Veräußerung",
           "tickerwechsel": "zu prüfen: reiner Tickerwechsel steuerneutral",
           "uebernahme": "zu prüfen: Barabfindung Veräußerung (§ 20 Abs. 2 EStG), Aktientausch ggf. § 20 Abs. 4a EStG",
-          "abspaltung": "zu prüfen: Abspaltung § 20 Abs. 4a Satz 7 EStG, Einstand nach Kursverhältnis",
+          "abspaltung": "zu prüfen: Abspaltung § 20 Abs. 4a Satz 7 EStG (Einstand nach Kursverhältnis, Anschaffungsdatum der "
+                        "Mutter) oder Sachausschüttung (Kapitalertrag in Höhe des Werts der Tochter)",
           "delisting": "zu prüfen: wertlose Ausbuchung, Verlustverrechnung",
           "sonstige": "zu prüfen"}
 OFFEN = ("erkannt", "bestaetigt")
@@ -135,6 +136,12 @@ def erkennen(journal, buecher: list[str], flex, meldungen: list[str], *, ticker_
     for m in belege_aus_flex(zeilen):
         for p in m.posten:
             p["ticker"] = ticker_fuer(p["conid"], p["symbol"], p["waehrung"], tabelle)
+        if m.art == "abspaltung":                                         # A4: Mutter steht nur in der Beschreibung
+            mutter = mutter_aus_beschreibung(m.beschreibung)
+            w = m.posten[0]["waehrung"] if m.posten else "USD"
+            if mutter and not any(p["symbol"] == mutter[0] for p in m.posten):
+                m.posten.append({"conid": None, "symbol": mutter[0], "isin": mutter[1], "waehrung": w, "stueck": 0.0, "betrag": 0.0,
+                                 "ticker": ticker_fuer(None, mutter[0], w, tabelle)})
         titel = {p["ticker"] for p in m.posten}
         betroffen = [b for b in buecher if titel & set(journal.bestand(b)) or titel & {z["ticker"] for z in journal.unterwegs(b)}]
         felder = {"code": m.code, "tag": m.tag, "beschreibung": m.beschreibung, "steuer": STEUER[m.art], "quelle": quelle}
@@ -509,25 +516,28 @@ def _cent_aufteilen(betraege: dict[str, float], summe: float) -> dict[str, float
 
 
 def buchen(journal, buecher: list[str], positionen, meldungen: list[str], *, fx: dict[str, float],
-           ticker_je_conid: dict[int, str] | None = None, technik_universum=frozenset(), jetzt=None) -> list[Buchung]:
+           ticker_je_conid: dict[int, str] | None = None, technik_universum=frozenset(), jetzt=None, schlusskurse=None) -> list[Buchung]:
     """Split, Reverse-Split und Tickerwechsel mit Flex-Beleg je Buch buchen (A2). Nur bei exakt passender Probe:
     - Verhältnis r aus der Beschreibung (Split) bzw. aus den Stückzahlen (Tickerwechsel), gegen die Flex-Stückzahlen geprüft;
     - Bücher vor dem Stichtag · r: ganze Stück exakt laut Flex, eine Spitze nur mit Barausgleich (Kasse ± 0,05);
     - nach der Buchung Bücher = IBKR-Position, je Titel ganzzahlig exakt.
     Sonst nichts buchen: das Buch bleibt gestoppt (A1), Meldung. Im selben Schritt (eine Transaktion): Kurseinheiten ÷ r im
-    Strategiezustand und in offenen Vorschlägen, Beleg an den Buchstopp hängen (Aufhebung, sobald der Abgleich sauber ist)."""
+    Strategiezustand und in offenen Vorschlägen, Beleg an den Buchstopp hängen (Aufhebung, sobald der Abgleich sauber ist).
+    `schlusskurse(ticker, ab_tag)`: Schlusskurse ab dem Tag (pd.Series) für die Einstandsaufteilung einer Abspaltung (A4)."""
     from tradingbot.betrieb import buchstopp
 
     tabelle = ticker_je_conid if ticker_je_conid is not None else _ticker_je_conid()
     ist = {p.ticker: float(p.stueck) for p in positionen}
     jetzt_text = (jetzt or datetime.now()).replace(tzinfo=None).isoformat(timespec="seconds")
     ergebnisse: list[Buchung] = []
-    for k in journal.massnahmen("buch=? AND art IN (?, ?, ?, ?, ?) AND status IN (?, ?)", (KONTO, *BUCHBAR, *BESTAETIGUNG, *OFFEN)):
+    arten = (*BUCHBAR, *BESTAETIGUNG)
+    for k in journal.massnahmen(f"buch=? AND art IN ({', '.join('?' * len(arten))}) AND status IN (?, ?)", (KONTO, *arten, *OFFEN)):
         if k["art"] in BESTAETIGUNG:                               # A3: erst nach Jakobs Bestätigung, im nächsten Tageslauf
             if k["status"] != "bestaetigt":
                 meldungen.append(f"{NAMEN[k['art']]} {k['beleg_id']}: wartet auf Bestätigung in der Oberfläche – Buch bleibt gestoppt")
                 continue
-            bu = _buchen_uebernahme(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen)
+            bu = (_buchen_abspaltung(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen, schlusskurse)
+                  if k["art"] == "abspaltung" else _buchen_uebernahme(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen))
             if bu is not None:
                 ergebnisse.append(bu)
             continue
@@ -765,7 +775,7 @@ def kennzahlen_pruefen(journal, buecher: list[str], kurse_roh, je_buch: dict, ta
 # wertlos“; ein Delisting mit weiterem Handel (z. B. außerbörslich) ist kein DW – ein unbekanntes Kürzel stoppt wie in A1
 # und wird nie automatisch gebucht.
 
-BESTAETIGUNG = ("uebernahme", "delisting")
+BESTAETIGUNG = ("uebernahme", "delisting", "abspaltung")     # Abspaltung: A4, Jakob 13.11.2026
 POSTEN_ARTEN = {"bestand": "Stückposten (Einstand übertragen)",
                 "barzuzahlung": "Barzuzahlung (§ 20 Abs. 4a, zu prüfen)",
                 "barabfindung": "Barabfindung (Veräußerung § 20 Abs. 2, zu prüfen)",
@@ -794,7 +804,8 @@ def bestaetigung_offen(journal, buch: str | None = None) -> list[dict]:
     """Erkannte Übernahmen/Delistings (Bestätigen oder Ablehnen) und unbekannte Arten (nur Ablehnen), optional je Buch, mit
     Text der Konditionen laut Flex-Beleg für die Oberfläche."""
     aus = []
-    for k in journal.massnahmen("buch=? AND status='erkannt' AND art IN (?, ?, ?)", (KONTO, *BESTAETIGUNG, "sonstige")):
+    for k in journal.massnahmen(f"buch=? AND status='erkannt' AND art IN ({', '.join('?' * (len(BESTAETIGUNG) + 1))})",
+                                (KONTO, *BESTAETIGUNG, "sonstige")):
         buecher = [r["buch"] for r in journal.massnahmen("beleg_id=? AND buch!=?", (k["beleg_id"], KONTO))]
         if buch is not None and buch not in buecher:
             continue
@@ -808,6 +819,11 @@ def konditionen_text(journal, k) -> str:
     posten = journal.massnahme_posten(k["beleg_id"])
     r, w, bar_je = konditionen(k["beschreibung"])
     teile = [f"{NAMEN[k['art']]} {k['beleg_id']} am {k['tag'] or '?'}"]
+    if k["art"] == "abspaltung":
+        r, w, bar_je = abspaltung_verhaeltnis(k["beschreibung"]), None, None
+        mutter = mutter_aus_beschreibung(k["beschreibung"])
+        teile.append(f"Mutter {mutter[0] if mutter else '?'}" + (f", {r:g} Tochter-Aktien je Aktie" if r else ", Verhältnis nicht lesbar"))
+        r = None
     if r is not None:
         teile.append(f"{r:g} neue Aktien je Aktie")
     if bar_je is not None:
@@ -881,7 +897,7 @@ def zustand_entfernen(z: dict, alt: str) -> tuple[dict, list[str]]:
 
 
 def _abschliessen(journal, k, alt: str, neu: str | None, r: float, vorher: dict[str, float], posten_je_buch, zustaende, ereignisse,
-                  zeilen, meldungen, jetzt_text, *, umrechnen: bool) -> Buchung:
+                  zeilen, meldungen, jetzt_text, *, umrechnen: bool, mutter_bleibt: bool = False) -> Buchung:
     """Gemeinsamer Abschluss A2/A3: offene Vorschläge vor dem Stichtag (Split: umrechnen; Titel geht unter: ersetzen bzw.
     unterwegs lassen), Order über den Stichtag, Beleg an die Buchstopps, alles in einer Transaktion."""
     from tradingbot.betrieb import buchstopp
@@ -892,6 +908,10 @@ def _abschliessen(journal, k, alt: str, neu: str | None, r: float, vorher: dict[
     vorschlaege, unterwegs_alt, ueber_stichtag = [], {}, {}
     for z in journal.db.execute("SELECT * FROM vorschlaege WHERE ticker=? AND art!='fx' AND signaltag < ? AND status IN "
                                 "('vorgeschlagen','freigegeben','gesendet','unbestaetigt','ausgefuehrt')", (alt, tag)).fetchall():
+        if mutter_bleibt:                                          # Abspaltung (A4): die Mutter bleibt, Vorschläge bleiben
+            if z["status"] in ("vorgeschlagen", "freigegeben", "gesendet", "unbestaetigt"):
+                meldungen.append(f"{kopf}: Vorschlag {z['id']} ({alt}, {z['status']}) stammt von vor der Abspaltung – Limit prüfen")
+            continue
         if z["status"] == "ausgefuehrt":                           # Order über den Stichtag ausgeführt?
             spaet = journal.db.execute("SELECT COALESCE(SUM(stueck), 0) FROM ausfuehrungen WHERE order_ref=? AND substr(zeit, 1, 10) >= ?",
                                        (f"{z['buch']}:{z['id']}", tag)).fetchone()[0]
@@ -939,7 +959,8 @@ def _abschliessen(journal, k, alt: str, neu: str | None, r: float, vorher: dict[
                              vorschlaege=vorschlaege, ereignisse=ereignisse)
     meldungen += zeilen
     meldungen += [x for b in sorted(ueber_stichtag) for x in ueber_stichtag[b]]
-    return Buchung(beleg, art, True, f"Kapitalmaßnahme gebucht: {NAMEN[art]} {alt}" + (f" → {neu}" if neu and neu != alt else "")
+    return Buchung(beleg, art, True, f"Kapitalmaßnahme gebucht: {NAMEN[art]} {alt}" + (f" → {neu}" if neu and neu != alt and not mutter_bleibt else "")
+                   + (f" + {neu}" if mutter_bleibt and neu else "")
                    + (f" (r = {r:g})" if art in SPLITS else "") + f"; Bücher {', '.join(sorted(vorher))}", sorted(vorher), titel)
 
 
@@ -1097,3 +1118,235 @@ def _buchen_uebernahme(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldun
             zustaende[b] = z_neu
             ereignisse.append(("kurseinheiten", f"{kopf}: Strategiezustand {b}: " + "; ".join(aend), b))
     return _abschliessen(journal, k, alt, neu, r, vorher, posten_je_buch, zustaende, ereignisse, zeilen, meldungen, jetzt_text, umrechnen=False)
+
+
+# === A4 (Jakob 13.11.2026): Abspaltung (SO) nach Bestätigung ==================================================================
+#
+# Entscheidungen: (1) Bestätigungspflicht wie A3; gebucht im nächsten Tageslauf, nur bei exakt passender Probe; (2) Einstand
+# der Mutter aufgeteilt nach den Schlusskursen am ersten gemeinsamen Handelstag ab dem Stichtag:
+#     Anteil Tochter = r · C_Tochter / (r · C_Tochter + C_Mutter),   r = Tochter-Aktien je Mutter-Aktie;
+# (3) Anschaffungsdatum der Tochter = Datum der Mutterposten („zu prüfen“). Das Journal führt den Einstand als gleitenden
+# Durchschnitt mit dem Tag des ersten Kaufs; die Kaufposten der Mutter stehen im Buchungstext; (4) Form 8937 des
+# Unternehmens, falls veröffentlicht, wird zum Vergleich daneben eingetragen (Oberfläche), gebucht wird nach (2);
+# (5) Steuer „zu prüfen“: Abspaltung nach § 20 Abs. 4a Satz 7 EStG oder Sachausschüttung (Wert der Tochter im Text);
+# (6) Tochter ohne Conid in config/kontrakte.yaml: nur melden, Buch läuft weiter; steht ein Verkauf an, ist nur dieser Titel
+# gesperrt, mit täglicher Erinnerung bis zur Übernahme; (7) Fundamental hält die Tochter bis zum nächsten Stichtag, danach
+# nach der Regel (wie Fremdtitel in A3). Format der IBKR-Beschreibung am ersten echten Beleg prüfen.
+
+POSTEN_ARTEN["einstand_aufteilung"] = "Einstandsaufteilung Abspaltung (Stück unverändert, zu prüfen)"
+ABSPALTUNGEN = "_abspaltungen"          # Zustandsschlüssel: gebuchte Aufteilung und Form 8937 je Beleg
+
+
+def mutter_aus_beschreibung(beschreibung: str | None) -> tuple[str, str] | None:
+    """„CMCSA(US20030N1019) SPINOFF 1 FOR 25 (VSNT, VERSANT MEDIA GROUP INC, US…)“ → („CMCSA“, „US20030N1019“)."""
+    m = re.match(r"\s*([A-Z0-9][A-Z0-9.\- ]*?)\s*\(([A-Z]{2}[A-Z0-9]{9}\d)\)", str(beschreibung or ""))
+    return (m.group(1).strip(), m.group(2)) if m else None
+
+
+def abspaltung_verhaeltnis(beschreibung: str | None) -> float | None:
+    """Tochter-Aktien je Mutter-Aktie aus „SPINOFF 1 FOR 25“ (→ 0,04)."""
+    m = re.search(r"SPIN-?\s*OFF\s+(\d+(?:\.\d+)?)\s+FOR\s+(\d+(?:\.\d+)?)", str(beschreibung or ""), re.IGNORECASE)
+    return float(m.group(1)) / float(m.group(2)) if m and float(m.group(2)) > 0 else None
+
+
+def erster_gemeinsamer_tag(mutter, tochter, ab: str):
+    """Erster Handelstag ab `ab` mit Schlusskurs beider Titel: (Tag, Schluss Mutter, Schluss Tochter) oder None."""
+    m, t = mutter.dropna(), tochter.dropna()
+    m, t = m[(m.index >= pd.Timestamp(ab)) & (m > 0)], t[(t.index >= pd.Timestamp(ab)) & (t > 0)]
+    gemeinsam = m.index.intersection(t.index).sort_values()
+    if len(gemeinsam) == 0:
+        return None
+    d = gemeinsam[0]
+    return d, float(m.loc[d]), float(t.loc[d])
+
+
+def _buchen_abspaltung(journal, k, buecher, ist, tabelle, fx, jetzt_text, meldungen, schlusskurse) -> Buchung | None:
+    """Abspaltung je Buch: Mutter bleibt, Tochter = floor(Stück · r) laut Flex, Spitze bar; Einstand nach Kursverhältnis."""
+    beleg, art, tag = k["beleg_id"], k["art"], k["tag"]
+    kopf = f"{NAMEN[art]} {beleg}"
+    roh = [dict(p) for p in journal.massnahme_posten(beleg)]
+    for p in roh:
+        if p["conid"] and p["conid"] in tabelle:
+            p["ticker"] = tabelle[p["conid"]]
+
+    def nicht(text):
+        meldungen.append(f"{kopf}: nicht gebucht – {text}")
+        return Buchung(beleg, art, False, meldungen[-1], titel={p["ticker"] for p in roh if p["ticker"]})
+
+    if not tag:
+        return nicht("Stichtag fehlt im Beleg")
+    mutter_info = mutter_aus_beschreibung(k["beschreibung"])
+    mutter = next((p["ticker"] for p in roh if mutter_info and p["symbol"] == mutter_info[0]), None)
+    if not mutter:
+        return nicht("Mutter in der Beschreibung nicht lesbar")
+    stueck_je: dict[str, float] = {}
+    bar: dict[str, float] = {}
+    for p in roh:
+        if p["ticker"] and abs(p["stueck"] or 0) > 1e-9:
+            stueck_je[p["ticker"]] = stueck_je.get(p["ticker"], 0.0) + float(p["stueck"])
+        if abs(p["betrag"] or 0) > 1e-9:
+            bar[p["waehrung"]] = bar.get(p["waehrung"], 0.0) + float(p["betrag"])
+    vorher_je = {b: journal.bestand_vor(b, tag) for b in buecher}
+    vorher = {b: vorher_je[b].get(mutter, 0.0) for b in buecher if abs(vorher_je[b].get(mutter, 0.0)) > 1e-9}
+    if not vorher:
+        journal.massnahme_status(beleg, KONTO, "ohne_buch")
+        meldungen.append(f"{kopf}: kein Buch hielt {mutter} vor dem Stichtag – nichts zu buchen")
+        return None
+    if any(s < 0 or abs(s - round(s)) > 1e-9 for s in vorher.values()):
+        return nicht(f"Bestand vor dem Stichtag nicht ganzzahlig positiv ({mutter})")
+    if abs(stueck_je.get(mutter, 0.0)) > 1e-9:
+        return nicht(f"Stückzahl von {mutter} ändert sich laut Flex ({stueck_je[mutter]:+g}) – keine reine Abspaltung, bitte prüfen")
+    neue = sorted(t for t, s in stueck_je.items() if s > 0 and t != mutter)
+    if len(neue) != 1:
+        return nicht("keine Tochter im Beleg" if not neue else f"mehrere neue Titel im Beleg ({', '.join(neue)})")
+    tochter = neue[0]
+    alt_konto = sum(vorher.values())
+    neu_konto = stueck_je[tochter]
+    if abs(neu_konto - round(neu_konto)) > 1e-9:
+        return nicht(f"Stückzahl der Tochter laut Flex nicht ganzzahlig ({neu_konto:g})")
+    neu_konto = int(round(neu_konto))
+    r = abspaltung_verhaeltnis(k["beschreibung"])
+    if r is None:
+        return nicht("Verhältnis in der Beschreibung nicht lesbar")
+    exakt_konto = alt_konto * r
+    if neu_konto != int(math.floor(exakt_konto + 1e-9)):
+        return nicht(f"Probe: Bücher {alt_konto:g} Stück × {r:g} = {exakt_konto:g}, Flex {neu_konto} ganze Stück")
+    spitze_konto = exakt_konto - neu_konto
+    if len(bar) > 1:
+        return nicht(f"Barausgleich in mehreren Währungen ({', '.join(sorted(bar))})")
+    bar_w, bar_betrag = next(iter(bar.items())) if bar else (None, 0.0)
+    if spitze_konto <= 1e-9 and abs(bar_betrag) > TOLERANZ_KASSE:
+        return nicht(f"Barbetrag {bar_betrag:,.2f} {bar_w} ohne Spitze")
+    if spitze_konto > 1e-9 and bar_betrag <= TOLERANZ_KASSE:
+        return nicht(f"Spitze {spitze_konto:g} Stück ohne Barausgleich im Beleg")
+    verteilung = verteilen(vorher, r, neu_konto)
+    if verteilung is None:
+        return nicht(f"Spitzen nicht nach größtem Rest verteilbar ({neu_konto} Stück auf {len(vorher)} Bücher)")
+    preis_spitze = bar_betrag / spitze_konto if spitze_konto > 1e-9 else None
+    if preis_spitze is None and any(f < -1e-9 for _, f in verteilung.values()):
+        return nicht("Spitzenausgleich zwischen Büchern ohne Barausgleichskurs im Beleg")
+    nachher = {mutter: 0.0, tochter: 0.0}
+    for b in buecher:
+        jetzt_b = journal.bestand(b)
+        for t in nachher:
+            nachher[t] += jetzt_b.get(t, 0.0)
+    for b in vorher:
+        nachher[tochter] += verteilung[b][0]
+    abweichend = [t for t in sorted(nachher) if abs(nachher[t] - ist.get(t, 0.0)) > 1e-6]
+    if abweichend:
+        return nicht("Probe gegen IBKR: " + "; ".join(f"{t} Bücher danach {nachher[t]:g}, IBKR {ist.get(t, 0.0):g}" for t in abweichend))
+    if schlusskurse is None:
+        return nicht("keine Schlusskurse für die Einstandsaufteilung – Buchung wartet")
+    fehler = "kein gemeinsamer Handelstag"
+    try:
+        gemeinsam = erster_gemeinsamer_tag(schlusskurse(mutter, tag), schlusskurse(tochter, tag), tag)
+    except Exception as f:  # noqa: BLE001 – ohne Kurs keine Aufteilung: warten, Buch bleibt gestoppt
+        gemeinsam, fehler = None, type(f).__name__
+    if gemeinsam is None:
+        return nicht(f"Schlusskurse von {mutter} und {tochter} ab {tag}: {fehler} – Buchung wartet, Buch bleibt gestoppt")
+    tag_kurs, c_mutter, c_tochter = gemeinsam
+    anteil = r * c_tochter / (r * c_tochter + c_mutter)
+    zustand_abs = dict(journal.zustand(ABSPALTUNGEN) or {})
+    eintrag = dict(zustand_abs.get(beleg) or {})
+    f8937 = eintrag.get("form8937")
+
+    p_m = next((p for p in roh if p["ticker"] == mutter), {})
+    p_t = next((p for p in roh if p["ticker"] == tochter and (p["stueck"] or 0) > 0), {})
+    bar_je = (_cent_aufteilen({b: f * preis_spitze for b, (_, f) in verteilung.items() if abs(f) > 1e-9}, bar_betrag)
+              if preis_spitze else {})
+    posten_je_buch, ereignisse, zeilen = {}, [], []
+    for b, s in sorted(vorher.items()):
+        ganz, f = verteilung[b]
+        e = journal.einstaende(b, bis=tag).get(mutter, {})
+        w_alt, k_alt = float(e.get("w", 0.0)), float(e.get("k", 0.0))
+        w_ein = e.get("waehrung") or p_m.get("waehrung") or "USD"
+        angeschafft = str(e.get("erst") or "")[:10] or None
+        w_ab, k_ab = w_alt * anteil, k_alt * anteil                    # Einstand, der von der Mutter auf die Tochter geht
+        if f >= 0:                                                     # verkaufte Spitze: ihr Anteil geht mit dem Barausgleich ab
+            w_t, k_t = w_ab * ganz / (s * r), k_ab * ganz / (s * r)
+        else:                                                          # aufgerundet: zugekaufte Spitze zum Barausgleichskurs
+            w_t = w_ab + (-f) * preis_spitze
+            k_t = k_ab + (-f) * preis_spitze / (1.0 if bar_w == "EUR" else float(fx[bar_w]))
+        posten = [{"ticker": mutter, "conid": p_m.get("conid"), "symbol": p_m.get("symbol"), "isin": p_m.get("isin"), "stueck": 0,
+                   "waehrung": w_ein, "einstand": -w_ab, "einstand_eur": -k_ab, "art": "einstand_aufteilung"}]
+        if ganz:
+            posten.append({"ticker": tochter, "conid": p_t.get("conid"), "symbol": p_t.get("symbol"), "isin": p_t.get("isin"), "stueck": ganz,
+                           "waehrung": p_t.get("waehrung") or w_ein, "einstand": w_t, "einstand_eur": k_t, "angeschafft": angeschafft,
+                           "art": "bestand"})
+        if b in bar_je:
+            posten.append(_barposten(bar_je[b], bar_w, fx, "spitzenausgleich"))
+        posten_je_buch[b] = posten
+        kaeufe = journal.db.execute("SELECT substr(zeit, 1, 10) AS d, SUM(stueck) AS s FROM ausfuehrungen WHERE buch=? AND ticker=? AND "
+                                    "richtung=1 AND substr(zeit, 1, 10) < ? GROUP BY d ORDER BY d", (b, mutter, tag)).fetchall()
+        text = (f"{kopf} gebucht ({b}): {mutter} {s:g} Stück bleiben, {tochter} +{ganz} Stück (r = {r:g}); Einstand {w_alt:,.2f} {w_ein} "
+                f"aufgeteilt nach Schlusskursen am {tag_kurs.date()} ({mutter} {c_mutter:,.2f}, {tochter} {c_tochter:,.2f}): "
+                f"Mutter {1 - anteil:.2%}, Tochter {anteil:.2%} → {tochter} {w_t:,.2f}, {mutter} {w_alt - w_ab:,.2f} {w_ein}; "
+                f"angeschafft {angeschafft or '–'} (Datum der Mutter, zu prüfen; Kaufposten der Mutter: "
+                + (", ".join(f"{z['d']} {z['s']:g} St." for z in kaeufe) or "–") + ")"
+                + (f"; Form 8937 ({f8937['quelle']}): Tochter {100 - float(f8937['anteil_mutter']):.2f} %" if f8937 else "; Form 8937 noch nicht eingetragen")
+                + (f", Spitze {f:+.4f} Stück nach größtem Rest, {POSTEN_ARTEN['spitzenausgleich']} {bar_je[b]:+,.2f} {bar_w}" if b in bar_je else "")
+                + f"; Steuer {STEUER[art]}; Wert der Tochter am {tag_kurs.date()}: {ganz * c_tochter:,.2f} {p_t.get('waehrung') or w_ein}")
+        ereignisse.append(("kapitalmassnahme_gebucht", text, b))
+        zeilen.append(text)
+    if not p_t.get("conid") or p_t.get("conid") not in tabelle:
+        zeilen.append(f"{kopf}: Tochter {tochter} (Conid {p_t.get('conid') or '?'}) steht noch nicht in config/kontrakte.yaml – Buch läuft "
+                      "weiter; ein Verkauf der Tochter bleibt gesperrt, bis Jakob die Conid übernommen hat")
+    eintrag.update({"mutter": mutter, "tochter": tochter, "r": r, "kurstag": str(tag_kurs.date()), "c_mutter": c_mutter, "c_tochter": c_tochter,
+                    "anteil_tochter": anteil, "gebucht": jetzt_text})
+    zustand_abs[beleg] = eintrag
+    zustaende = {ABSPALTUNGEN: zustand_abs}
+    return _abschliessen(journal, k, mutter, tochter, r, vorher, posten_je_buch, zustaende, ereignisse, zeilen, meldungen, jetzt_text,
+                         umrechnen=False, mutter_bleibt=True)
+
+
+def form8937_eintragen(journal, beleg_id: str, anteil_mutter_prozent: float, quelle: str, jetzt: datetime | None = None) -> str:
+    """Aufteilung laut Form 8937 des Unternehmens (Anteil der Mutter in %) zum Vergleich eintragen (A4, Oberfläche). Gebucht
+    bleibt die Aufteilung nach Schlusskursen; das Ereignis zeigt beide nebeneinander."""
+    jetzt = (jetzt or datetime.now()).replace(tzinfo=None)
+    k = (journal.massnahmen("beleg_id=? AND buch=?", (beleg_id, KONTO)) or [None])[0]
+    if k is None or k["art"] != "abspaltung" or k["status"] == "abgelehnt":
+        raise ValueError(f"Beleg {beleg_id}: keine (offene oder gebuchte) Abspaltung")
+    try:
+        a = float(str(anteil_mutter_prozent).replace(",", "."))
+    except ValueError:
+        raise ValueError("Form 8937: Anteil der Mutter als Zahl in % angeben") from None
+    if not 0 < a < 100 or not str(quelle or "").strip():
+        raise ValueError("Form 8937: Anteil der Mutter zwischen 0 und 100 % und eine Quelle angeben")
+    zustand_abs = dict(journal.zustand(ABSPALTUNGEN) or {})
+    eintrag = dict(zustand_abs.get(beleg_id) or {})
+    eintrag["form8937"] = {"anteil_mutter": a, "quelle": str(quelle).strip(), "eingetragen": jetzt.isoformat(timespec="seconds")}
+    zustand_abs[beleg_id] = eintrag
+    journal.zustand_speichern(ABSPALTUNGEN, zustand_abs)
+    text = f"Form 8937 zu {beleg_id} ({str(quelle).strip()}): Mutter {a:.2f} %, Tochter {100 - a:.2f} %"
+    if "anteil_tochter" in eintrag:
+        gebucht = 100 * float(eintrag["anteil_tochter"])
+        text += (f"; gebucht nach Schlusskursen am {eintrag['kurstag']}: Mutter {100 - gebucht:.2f} %, Tochter {gebucht:.2f} % "
+                 f"(Differenz Tochter {100 - a - gebucht:+.2f} Pp.) – Buchung bleibt nach Jakobs Regel")
+    else:
+        text += " – noch nicht gebucht; der Buchungstext zeigt beide Aufteilungen"
+    journal.ereignis("form8937", text, jetzt=jetzt)
+    return text
+
+
+def form8937_offen(journal, buch: str | None = None) -> list[dict]:
+    """Abspaltungen (erkannt, bestätigt, gebucht) ohne eingetragenes Form 8937, optional je Buch (Oberfläche)."""
+    zustand_abs = journal.zustand(ABSPALTUNGEN) or {}
+    aus = []
+    for k in journal.massnahmen("buch=? AND art='abspaltung' AND status IN ('erkannt', 'bestaetigt', 'gebucht')", (KONTO,)):
+        buecher = [r["buch"] for r in journal.massnahmen("beleg_id=? AND buch!=?", (k["beleg_id"], KONTO))]
+        if (buch is not None and buch not in buecher) or (zustand_abs.get(k["beleg_id"]) or {}).get("form8937"):
+            continue
+        aus.append({"beleg_id": k["beleg_id"], "buecher": buecher, "text": konditionen_text(journal, k)})
+    return aus
+
+
+def tochter_ohne_conid(journal, buch: str, tabelle: dict[int, str] | None = None) -> set[str]:
+    """Gehaltene Töchter aus gebuchten Abspaltungen des Buchs, deren Conid nicht in config/kontrakte.yaml steht (A4)."""
+    tabelle = tabelle if tabelle is not None else _ticker_je_conid()
+    bestand = journal.bestand(buch)
+    aus = set()
+    for p in journal.db.execute("SELECT p.ticker, p.conid FROM kapitalmassnahmen_posten p JOIN kapitalmassnahmen k ON k.beleg_id=p.beleg_id "
+                                "AND k.buch=p.buch WHERE p.buch=? AND k.status='gebucht' AND k.art='abspaltung' AND p.stueck > 0", (buch,)):
+        if p["ticker"] and bestand.get(p["ticker"], 0) > 0 and (not p["conid"] or p["conid"] not in tabelle):
+            aus.add(p["ticker"])
+    return aus

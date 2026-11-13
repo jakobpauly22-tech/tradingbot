@@ -445,3 +445,20 @@ A3 bucht Übernahmen (TC, Merger) und Delisting wertlos (DW), aber erst nach Jak
   - Fundamental-Bücher halten erhaltene Aktien bis zum nächsten Quartalsstichtag; dann entscheidet die Auswahlregel. Ein Titel außerhalb des gefilterten Universums wird verkauft.
   - Technik-Bücher bekommen im nächsten Lauf einen Ausstiegsvorschlag für jeden Titel außerhalb des Universums (Ausstiege sind immer erlaubt).
 - **Kenvue** (Primärquellen geprüft 12.11.2026): Gemeinsame Pressemitteilung vom 03.11.2025: 3,50 USD bar und 0,14625 Kimberly-Clark-Aktien je Kenvue-Aktie. 8-K vom 02.11.2026: Vollzug am 02.11.2026, Bruchteile bar zum VWAP-Durchschnitt der 5 Handelstage vor dem Vollzug. Kein Buch hielt KVUE; der Fall dient als Test (`test_kapitalmassnahmen_a3.py`).
+
+
+## Abspaltung buchen (A4, Jakob 13.11.2026)
+
+A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche, nur mit Flex-Beleg (`kapitalmassnahmen._buchen_abspaltung`).
+
+- **Erkennen:** Die Mutter steht nur in der Beschreibung („CMCSA(US20030N1019) SPINOFF 1 FOR 25 (VSNT, …)“), die Flex-Zeile nennt die Tochter. A1 ergänzt die Mutter, damit das Buch, das sie hält, gestoppt wird. Format am ersten echten Beleg prüfen.
+- **Bestätigung** (Entscheidung 1): wie A3. Die Oberfläche zeigt Mutter, Verhältnis und Flex-Posten; gebucht wird im nächsten Tageslauf, nur bei exakt passender Probe.
+- **Probe:** Mutter-Stückzahl unverändert; Tochter = floor(Stück × Verhältnis) laut Flex, Spitzen nach größtem Rest, Bruchteile nur mit Barausgleich; danach Bücher = IBKR-Position für Mutter und Tochter.
+- **Einstand** (Jakobs Regel): Aufteilung nach den Schlusskursen am ersten gemeinsamen Handelstag ab dem Stichtag, Anteil Tochter = r · C_Tochter / (r · C_Tochter + C_Mutter). Die Summe bleibt gleich; eine verkaufte Spitze nimmt ihren Anteil mit. Fehlt ein Kurs, wartet die Buchung, das Buch bleibt gestoppt. Posten-Art der Mutter: `einstand_aufteilung` (Stück unverändert).
+- **Anschaffungsdatum** (Entscheidung 2): Datum der Mutterposten, „zu prüfen“. Das Journal führt den Einstand als gleitenden Durchschnitt mit dem Tag des ersten Kaufs; der Buchungstext nennt zusätzlich alle Kaufposten der Mutter mit Datum und Stück.
+- **Form 8937:** In der Oberfläche kann der Anteil der Mutter laut Form 8937 mit Quelle eingetragen werden, auch nach der Buchung. Das Journal (Ereignis `form8937`) zeigt beide Aufteilungen und die Differenz; gebucht bleibt nach Schlusskursen.
+- **Steuer:** „zu prüfen“: Abspaltung nach § 20 Abs. 4a Satz 7 EStG oder Sachausschüttung; der Buchungstext nennt den Wert der Tochter am Kurstag.
+- **Tochter ohne Conid** (Entscheidung 3): nur Meldung, das Buch läuft weiter. Steht am Quartalsstichtag ihr Verkauf an, ist nur dieser Titel gesperrt (Zustand `verkauf_gesperrt`), mit täglicher Sofortmeldung, bis die Conid in `config/kontrakte.yaml` steht; dann schlägt der nächste Lauf den Verkauf vor.
+- **Halten:** Fundamental-Bücher halten die Tochter bis zum nächsten Quartalsstichtag; dann entscheidet die Auswahlregel (wie Fremdtitel in A3).
+- **Vorschläge der Mutter** vor dem Stichtag bleiben stehen, mit dem Hinweis „Limit prüfen“ (der Kurs fällt um den Wert der Tochter).
+- **Test:** nachgestellt mit Versant (1 VSNT je 25 CMCSA), `tests/betrieb/test_kapitalmassnahmen_a4.py`.
