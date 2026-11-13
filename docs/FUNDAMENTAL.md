@@ -244,3 +244,51 @@ Festgehalten am 13.11.2026 um 09:36, **vor** jedem Neulauf mit der Korrektur.
   der Bücher Fundamental A und B und das Fundamental-Veto im Risk-Manager. Davor rechnet der Betrieb wie bisher.
 - **Varianten-Liste:** Der Neulauf wird in `daten/fundamental/varianten.csv` als „Datenkorrektur, keine neue Variante“
   eingetragen.
+
+### Ergebnis des Neulaufs (13.11.2026, nur Dokumentation der Wirkung)
+
+Auswertung der Signale, der Gegenprobe und der Auswahl: `docs/berichte/2026-11-13_piotroski_eq_offer.md`; gehaltene
+Titel: `docs/berichte/2026-11-13_piotroski_eq_offer_bestand.md`. Code-Stand 13b300a.
+
+- **Signale:** 150 von 12.595 Firmen-Stichtagen ändern sich (1,2 %, 44 Firmen), 128 von 0 auf 1 (bisher fälschlich
+  „neue Aktien“), 22 von 1 auf 0 (unter anderem GE nach dem Reverse-Split 1:8 und XRX nach 1:4). Weg A greift in
+  12.583 Fällen, der Rückfall B in 12.
+- **Gegenprobe A gegen B:** Bei 86 Firmen-Stichtagen ergeben die Wege verschiedene Signale. In allen Fällen ist A
+  plausibler: Yahoo führt Abspaltungen als „Split“ (37, z. B. BAX/Baxalta 1,841, APD/Versum, RTX, IBM/Kyndryl, GE,
+  DHR, J/Amentum), die Erstmeldung hat einen Skalierungsfehler (19, Tausend statt Stück: PCAR, COR, COP, GRMN, ABMD,
+  OI), oder der Kursreihe fehlt ein Ereignis (30, z. B. HWM/Arconic 1:3 aus 2016, LEN-Aktiendividende).
+- **A weicht ohne Split-Ereignis von der Erstmeldung ab:** 317 Firmen-Stichtage (83 Firmen, Median 0,04 %), mit
+  geändertem Signal 49 (14 Firmen: 6 Skalierungsfehler, die übrigen fehlende Ereignisse oder kleine Neuausweise wie
+  TMO, AWK, J, TDG).
+- **Filter:** Grenze Piotroski ≤ 3 neu überschritten: HWM (2017) und GE (2022), je 4 Stichtage; nicht mehr
+  ausgeschlossen: CF (2016/17), 2 Stichtage.
+- **Auswahl (ohne Kurse nachgestellt):** A an 5 von 33 Stichtagen anders (5 Titelwechsel), B an 8 von 33 (9).
+- **Gehaltene Titel:** keiner betroffen. Splits aus der Kursreihe bestätigt: WMT 3:1 (26.02.2024), TSCO 5:1
+  (20.12.2024), ETR 2:1 (13.12.2024); bei allen liegen beide verglichenen Jahre nach dem Split.
+
+Neulauf Fundamental A, Entwicklungsdaten 01.10.2016 bis 31.12.2024, Tresor zu. Verglichen wird mit einem Lauf der
+bisherigen Rechnung auf demselben Datenstand, weil sich seit dem 02.11. Marktwerte durch spätere Kursdaten leicht
+geändert haben (bisherige Rechnung heute 11,04 % statt 11,17 % p.a.).
+
+| A, nach Kosten | bisher (`20261113T100150_fundamental_schatten_eq_bisher`) | korrigiert (`20261113T100231_fundamental_schatten_eq_offer`) |
+| --- | --- | --- |
+| Rendite p.a. vor Steuern | 11,04 % | 11,36 % |
+| Sharpe / max. Drawdown | 0,48 / −41,7 % | 0,49 / −41,8 % |
+| nach laufenden Steuern / nach Verkauf | 9,31 % / 8,80 % | 9,77 % / 9,17 % |
+| Trades / Kosten | 344 / 667 € | 341 / 662 € |
+| Kontrollportfolio | 13,05 % | 13,04 % |
+
+Beide Kriterien bleiben verfehlt: (a) 11,36 % < 13,04 %; (b) Sharpe 0,49 < 0,79 und Drawdown −41,8 % schlechter als
+die Grenze −36,6 %. Der Abstand von 0,3 Pp. p.a. liegt weit unter der Schwelle, die man von Zufall unterscheiden
+könnte. Wie vorab festgehalten, ändert das Ergebnis nichts: Die Korrektur gilt ab 04.01.2027, die Entscheidungen vom
+02.11.2026 bleiben. Beide Läufe stehen in `daten/fundamental/varianten.csv` als Neuberechnung von Variante 1
+(Datenkorrektur, keine neue Variante).
+
+Für B gibt es keinen Neulauf mit Kennzahlen: Nach der Entscheidung vom 02.11.2026 (Punkt 3, Rückschaufehler) wird
+„nur Qualität“ nicht auf 2016–2024 gerechnet. Für B sind nur Signale und Auswahl ausgewiesen.
+
+**Nebenbefund (offen, nicht geändert):** Die Kursreihen von Yahoo führen Abspaltungen als „Split“ (BAX 2015, PPL 2015,
+APD 2016, RTX 2020, IBM 2021, GE 2023/2024, J 2024, CMCSA 05.01.2026 mit 1,067 vermutlich Versant). Die Marktwert-Rechnung
+(`index_nachbau.aktien_splitbereinigt`, genutzt für E/P, EBIT/EV, Altman X4, den Index-Nachbau und im Betrieb) multipliziert
+die SEC-Aktienzahl auch mit diesen Faktoren. Im Betrieb betrifft das aktuell CMCSA (Bestand Fundamental A). Mit Jakob
+besprechen.

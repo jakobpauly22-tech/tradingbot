@@ -701,6 +701,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         if splits_flex:
             meldungen = [f"Aktienzahl mit Split-Verhältnis aus Flex (Quelle: Flex): {', '.join(sorted(splits_flex))}"] + list(meldungen)
         erg.meldungen += meldungen[:5]
+        erg.meldungen += datenkorrektur_vermerken(journal, bewertung, nyse, jetzt)
         bewertung, raus = nicht_handelbare_entfernen(bewertung, nyse)
         erg.meldungen += raus
         from tradingbot.engines.fundamental.aktuell import rangliste
@@ -764,6 +765,21 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         ziel = journal.sichern(None, jetzt=jetzt)
         erg.meldungen.append(f"Journal gesichert: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
     return erg
+
+
+def datenkorrektur_vermerken(journal, bewertung: pd.DataFrame, tag, jetzt: datetime | None = None) -> list[str]:
+    """Datenkorrektur Piotroski EQ_OFFER (Jakob 13.11.2026): beim ersten Lauf, in dem die Bewertung sie anwendet
+    (ab 04.01.2027), einmal das Ereignis „datenkorrektur_angewendet“ mit Stichtag ins Journal schreiben."""
+    if bewertung is None or "eq_offer_korrektur_aktiv" not in getattr(bewertung, "columns", []) or not bewertung["eq_offer_korrektur_aktiv"].any():
+        return []
+    if journal.db.execute("SELECT 1 FROM ereignisse WHERE art='datenkorrektur_angewendet' LIMIT 1").fetchone():
+        return []
+    geaendert = bewertung[bewertung["eq_offer_alt"].notna() & (bewertung["eq_offer_alt"] != bewertung["eq_offer_neu"])]
+    text = (f"Piotroski EQ_OFFER splitbereinigt erstmals angewendet am Stichtag {pd.Timestamp(tag).date()} (Auswahl Fundamental A/B und "
+            f"Risk-Manager-Veto; Datenkorrektur vom 13.11.2026). Signal geändert bei {len(geaendert)} Firmen"
+            + (f": {', '.join(sorted(str(s) for s in geaendert['symbol'].dropna()))[:300]}" if len(geaendert) else "") + ".")
+    journal.ereignis("datenkorrektur_angewendet", text, jetzt=jetzt)
+    return [text]
 
 
 def _verbunden(broker) -> bool:

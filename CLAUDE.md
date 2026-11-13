@@ -114,6 +114,7 @@ Parameter in `config/fundamental.yaml`, vor dem ersten Backtest festgelegt, nich
 - **Reihenfolge:** erster Lauf mit Qualität und Multiples, DCF erst danach (MRP 5 %, g = 2 % < Kapitalkosten, Wachstum aus historischem Umsatz mit Deckel 10 %, r_f = 10-jährige US-Rendite point-in-time, Beta per Regression).
 - **DAX:** vorerst nur US; später über ESEF, getrennt ausgewiesen.
 - **Erster Lauf (02.11.2026):** beide Erfolgskriterien verfehlt (Ergebnis und Diagnose in `docs/FUNDAMENTAL.md`). Der kombinierte Score geht nicht als Stockpicker ins Paper Trading; Score und Gewichte bleiben unverändert. Im Paper Trading laufen zwei Schattenportfolios vorwärts mit: (A) Originalscore, (B) nur Qualitätshälfte. DCF zurückgestellt. Gezählte Varianten: `daten/fundamental/varianten.csv`.
+- **Datenkorrektur Piotroski EQ_OFFER (13.11.2026):** Aktienzahl t−1 aus derselben Einreichung wie t (Rückfall Split-Faktoren), übernommen unabhängig vom Neulauf, wirksam im Betrieb ab 04.01.2027 (`config/fundamental.yaml` `piotroski_eq_offer`). Offener Nebenbefund: Yahoo führt Abspaltungen als Split, das verzerrt die Marktwerte (`docs/FUNDAMENTAL.md`).
 
 ## Technik-Engine und Risk-Manager (Entscheidungen 02.11.2026)
 

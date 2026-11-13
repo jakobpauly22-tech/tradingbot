@@ -153,3 +153,20 @@ def test_lade_aktienfakten_offline_und_neu_bei_anderem_stand(tmp_path):
     cache.schreiben("sec_erstmeldungen", "0000000001", pd.DataFrame({"x": [1]}), {"roh_abgerufen_um": "2026-11-20T10:00:00"})
     az.lade_aktienfakten([1], definition=DEF, cache=cache, client=Client())
     assert Client.abrufe == 3                                         # neuer Stand der Erstmeldungen: neu gebaut
+
+
+def test_erstmals_angewendet_einmal_im_journal(tmp_path):
+    from datetime import datetime
+
+    from tradingbot.betrieb.journal import Journal
+    from tradingbot.betrieb.tageslauf import datenkorrektur_vermerken
+
+    j = Journal(tmp_path / "journal.sqlite")
+    vorher = pd.DataFrame({"symbol": ["WMT", "AAPL"], "eq_offer_alt": [0, 1], "eq_offer_neu": [1, 1], "eq_offer_korrektur_aktiv": [False, False]})
+    assert datenkorrektur_vermerken(j, vorher, "2026-12-01") == []
+    ab = vorher.assign(eq_offer_korrektur_aktiv=True)
+    m = datenkorrektur_vermerken(j, ab, "2027-01-04", datetime(2027, 1, 4, 22, 30))
+    assert len(m) == 1 and "2027-01-04" in m[0] and "1 Firmen: WMT" in m[0]
+    assert datenkorrektur_vermerken(j, ab, "2027-01-05") == []                  # nur einmal
+    assert j.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='datenkorrektur_angewendet'").fetchone()[0] == 1
+    assert datenkorrektur_vermerken(j, pd.DataFrame({"symbol": ["X"]}), "2027-01-04") == []   # alte Attrappen ohne Spalte
