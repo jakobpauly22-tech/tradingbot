@@ -59,3 +59,23 @@ def test_split_sec_verhaeltnis_nur_periodenberichte():
     r, vor, nach, grund = w.sec_verhaeltnis(f, pd.Timestamp("2015-06-18"))
     assert abs(r - 255.9 / 51.2) < 1e-9 and nach == pd.Timestamp("2016-02-25") and grund == ""
     assert w.sec_verhaeltnis(f, pd.Timestamp("2016-06-01"))[3].startswith("kein Periodenbericht danach")
+
+
+# --- tools/pruefe_abspaltungen_tiingo.py (Teil c1, S2 nach der zweiten Änderung, Jakob 13.11.2026) ------------------------
+def test_abspaltung_suchwoerter_s2():
+    w = _werkzeug("pruefe_abspaltungen_tiingo")
+    treffer = ["completed the spin-off of CSRA", "the Spinoff", "a tax-free spin off", "the separation and distribution",
+               "a pro rata distribution of all of the outstanding shares of Time Inc."]
+    kein = ["quarterly cash distribution to unitholders", "distribution agreement with McKesson", "separation agreement with the CEO",
+            "secondary distribution of shares"]
+    assert all(w.WORTE.search(x) for x in treffer)
+    assert not any(w.WORTE.search(x) for x in kein)
+
+
+def test_abspaltung_text_nur_lesbare_dokumente():
+    w = _werkzeug("pruefe_abspaltungen_tiingo")
+    roh = ("<SEC-DOCUMENT><DOCUMENT><TYPE>8-K<TEXT><html><p>Time&#160;Warner completed the <b>spin-off</b></p></html></TEXT></DOCUMENT>"
+           "<DOCUMENT><TYPE>GRAPHIC<TEXT>begin 644 bild.jpg spin-off M89PNG</TEXT></DOCUMENT>"
+           "<DOCUMENT><TYPE>EX-99.1<TEXT>Press release: pro rata distribution of all shares</TEXT></DOCUMENT></SEC-DOCUMENT>")
+    text = w.text_aus_einreichung(roh)
+    assert "completed the spin-off" in text and "distribution of all" in text and "bild.jpg" not in text and "<" not in text

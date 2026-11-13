@@ -484,3 +484,18 @@ sind nur Fälle wie CSC (30.11.2015: Dividende 10,50 USD = nur die Sonderdividen
   davon ist **OXY 25.02.2016** (Kursfaktor 1,0017, Restbeteiligung California Resources, rund 0,17 % des Werts).
   Dazu eine Stichprobe von 10 Treffern (zufällig, fester Startwert) gegen die 8-K-Texte. Fehlt etwas, wird es gemeldet;
   die Kriterien werden nicht selbst geändert.
+
+### Teil c1: zweite Änderung, nur S2 (Jakob 13.11.2026, festgehalten vor dem dritten Lauf)
+
+**Begründung:** Der zweite Lauf brach wegen Speichermangel auf dem Rechner nach etwa 60 % der Grundmenge ab und hatte bis
+dahin 1.664 Treffer. „distribution“ allein trifft Dividenden, Vertriebsverträge und Platzierungen, „separation“ allein
+ebenso Allgemeines. Ein Bericht des abgebrochenen Laufs existiert nicht.
+
+- **S2 (neu):** irgendein 8-K im Fenster 30 Kalendertage vor bis 5 nach dem Ereignis, dessen Volltext „spin-off“, „spinoff“,
+  „spin off“, „separation and distribution“ oder „distribution of all“ enthält (typisch: „pro rata distribution of all of
+  the outstanding shares“). „distribution“ und „separation“ allein entfallen.
+- **S1 bleibt** (Gesamtrendite ≤ −3 %, auch über zwei Tage), damit kleine Abspaltungen nicht verloren gehen. Treffer,
+  Unklar, Probe (CSC; TGNA/TWX kein Treffer), S2-Prüfung an den Teil-a-Fällen (kleinste OXY 25.02.2016) und Stichprobe von
+  10 Treffern wie freigegeben.
+- **Technik:** Das Werkzeug verarbeitet die 8-K einzeln und cacht den Text jedes 8-K komprimiert auf der Festplatte
+  (`daten/cache/sec/volltext_8k_text/`), damit eine spätere Änderung der Suchwörter keinen neuen Abruf braucht.
