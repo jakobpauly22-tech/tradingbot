@@ -4,7 +4,8 @@
     seit dem letzten Lauf, Buchwerte.
 (b) Erinnerung, wenn an einem Xetra-Handelstag bis 22:00 kein Tageslauf lief: lokal per Aufgabenplanung
     (tools/waechter.py) und extern über Healthchecks.io (Totmannschalter, funktioniert auch bei ausgeschaltetem Laptop).
-(c) Sofortmeldung bei Stopp oder Fehler (Stopp im Tageslauf, Abbruch oder Ablehnung beim Senden, Ausnahme).
+(c) Sofortmeldung bei Stopp oder Fehler (Stopp im Tageslauf, Abbruch oder Ablehnung beim Senden, Ausnahme, nach dem
+    Senden bei IBKR offene Order, die im Journal nicht unterwegs ist).
 
 Kanal: Telegram (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID in .env). Lebenszeichen: HEALTHCHECKS_PING_URL in .env.
 
@@ -37,7 +38,10 @@ SENDEPROBLEME = (                                   # Anfang der Meldung von fre
     ("Abgleich mit IBKR weicht ab – nichts gesendet", "Abgleich vor dem Senden weicht ab – nichts gesendet"),
     ("Read-Only im Gateway ist aktiv", "Read-Only im Gateway aktiv"),
     ("Senden abgebrochen", "Senden abgebrochen (Ausnahme)"),
+    ("Abgleich der offenen Orders nach dem Senden fehlgeschlagen", "Abgleich der offenen Orders fehlgeschlagen"),
 )
+ORDER_OFFEN = "Order bei IBKR offen, im Journal nicht unterwegs"      # gleicher Text wie tageslauf.ORDER_OFFEN_MELDUNG
+TICKER_MUSTER = re.compile(r"[A-Z0-9][A-Z0-9.\-]{0,14}")
 
 
 # --- Formatierung -------------------------------------------------------------------------------------------------
@@ -195,12 +199,16 @@ def fehlermeldung(was: str, ausnahme: BaseException, jetzt: datetime) -> str:
 
 
 def sendeprobleme(journal, ids: list[str], seit: str, meldungen: list[str], jetzt: datetime) -> str | None:
-    """(c) Probleme beim Senden: abgelehnte oder unbestätigte Orders, Veto bei der zweiten Prüfung, Abbruch. None = alles gut."""
+    """(c) Probleme beim Senden: abgelehnte oder unbestätigte Orders, Veto bei der zweiten Prüfung, Abbruch, bei IBKR offene
+    Orders, die im Journal nicht unterwegs sind (nur die Kürzel). None = alles gut."""
     kategorien = []
     for m in meldungen:
         for anfang, kategorie in SENDEPROBLEME:
             if anfang in m and kategorie not in kategorien:
                 kategorien.append(kategorie)
+        if m.startswith(ORDER_OFFEN + ": "):                # Positivliste: nur Kürzel, keine Freitexte (Jakob 13.11.2026)
+            titel = [t for t in m[len(ORDER_OFFEN) + 2:].split(" – ")[0].split(", ") if TICKER_MUSTER.fullmatch(t)]
+            kategorien.append(f"{ORDER_OFFEN}: {', '.join(titel) or 'Titel unbekannt'} (nichts storniert)")
     zeilen = []
     if ids:
         platz = ",".join("?" * len(ids))

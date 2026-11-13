@@ -985,7 +985,40 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
         offene.append((z["buch"], z["ticker"], z["richtung"]))
         if antwort.status != "unbestaetigt":
             meldungen.append(f"{z['id']}: von IBKR angenommen (Order {antwort.order_id}, {antwort.text}" + (f", conId {antwort.con_id})" if antwort.con_id else ")"))
+    try:
+        meldungen += offene_orders_abgleichen(journal, broker, jetzt)
+    except Exception as f:  # noqa: BLE001 – der Abgleich darf das Senden nie nachträglich zum Abbruch machen
+        journal.ereignis("order_offen_abgleich", f"Abgleich der offenen Orders fehlgeschlagen: {type(f).__name__}: {f}", jetzt=jetzt)
+        meldungen.append(f"Abgleich der offenen Orders nach dem Senden fehlgeschlagen ({type(f).__name__}) – im Client Portal prüfen")
     return meldungen
+
+
+ORDER_OFFEN_MELDUNG = "Order bei IBKR offen, im Journal nicht unterwegs"
+UNTERWEGS = ("gesendet", "unbestaetigt", "ausgefuehrt")      # ausgefuehrt: Teilausführung, Rest kann noch offen sein
+
+
+def offene_orders_abgleichen(journal, broker, jetzt: datetime | None = None) -> list[str]:
+    """Nach dem Senden (Jakob 13.11.2026, Lehre aus BF-B): alle bei IBKR offenen Orders (alle Client-IDs, reqAllOpenOrders
+    in `broker.offene_orders`) mit dem Journal vergleichen. Eine offene Order, deren orderRef „<Buch>:<Vorschlag-ID>“ im
+    Journal fehlt (auch ohne orderRef, etwa von Hand im Client Portal) oder deren Vorschlag nicht unterwegs ist (abgelehnt,
+    verfallen, freigegeben, …), ergibt eine Meldung und je Order ein Ereignis „order_offen_nicht_unterwegs“.
+    Nichts wird automatisch storniert."""
+    funde, details = [], []
+    for o in broker.offene_orders():
+        buch, _, vid = (o.order_ref or "").partition(":")
+        z = journal.db.execute("SELECT status FROM vorschlaege WHERE id=?", (vid,)).fetchone() if vid else None
+        status = z["status"] if z else None
+        if status in UNTERWEGS:
+            continue
+        journal_text = f"Journal: {status}" if status else "im Journal nicht vorhanden"
+        journal.ereignis("order_offen_nicht_unterwegs",
+                         f"{o.ticker} (orderRef {o.order_ref or '–'}, {'Kauf' if o.richtung > 0 else 'Verkauf'} {o.stueck:g}, "
+                         f"IBKR-Status {o.status}) – {journal_text}; nichts storniert", buch or None, jetzt=jetzt)
+        funde.append(o.ticker)
+        details.append(f"{o.ticker}: {buch or 'ohne Kennung'}, {journal_text}")
+    if not funde:
+        return []
+    return [f"{ORDER_OFFEN_MELDUNG}: {', '.join(funde)} – nichts storniert, bitte im Client Portal prüfen ({'; '.join(details)})"]
 
 
 # --- Standard-Datenquellen (Yahoo, im Betriebsmodus) -----------------------------------------------------------------------

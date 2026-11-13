@@ -41,8 +41,31 @@ def auf_stufe(preis: float, stufe: float, richtung: int) -> float:
     n = preis / stufe
     n = math.floor(n + 1e-9) if richtung > 0 else math.ceil(n - 1e-9)
     return round(n * stufe, 6)
-ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive", "ValidationError"}   # ValidationError: z. B. 321 Read-Only (09.11.2026)
+ABGELEHNT = {"Cancelled", "ApiCancelled", "Inactive"}
 READ_ONLY_CODE = 321                 # „Die API befindet sich im schreibgeschützten Modus“
+# ib_async setzt bei Hinweis-Codes (105, 110, 165, 321, 329, 399, 404, 434, 492, 10167, 2100–2199) den Status auf
+# „ValidationError“, obwohl die Order bei IBKR aktiv bleibt (Vorfall BF-B, Order 211, 12.11.2026: Warnung 399 „nicht vor
+# 09:30 US/Eastern platziert“, bei IBKR PreSubmitted). Maßgeblich ist deshalb der Status aus orderStatus, nicht der Code;
+# einzige Ausnahme ist 321 (Read-Only): Die Order kommt nie bei IBKR an (09.11.2026), also abgelehnt.
+WARNUNG = "ValidationError"
+
+
+def echter_status(trade) -> str:
+    """Order-Status aus orderStatus, ohne die Überschreibung durch Warnungen: Steht „ValidationError“, gilt der letzte
+    Log-Eintrag mit einem anderen Status (die orderStatus-Meldungen von IBKR). Ohne solchen Eintrag bleibt „ValidationError“."""
+    status = trade.orderStatus.status
+    if status != WARNUNG:
+        return status
+    for eintrag in reversed(list(getattr(trade, "log", []) or [])):
+        s = getattr(eintrag, "status", "") or ""
+        if s and s != WARNUNG:
+            return s
+    return WARNUNG
+
+
+def read_only_abgewiesen(trade) -> bool:
+    """Fehler 321 (Read-Only) im Order-Log: die Order wurde nie bei IBKR platziert."""
+    return any(int(getattr(e, "errorCode", 0) or 0) == READ_ONLY_CODE for e in getattr(trade, "log", []) or [])
 
 
 @lru_cache(maxsize=1)
@@ -323,10 +346,17 @@ class IbkrBroker:
         return auf_stufe(preis, stufe, richtung), stufe
 
     def _warte_auf_antwort(self, trade, sekunden: float) -> SendeErgebnis:
-        """Wartet kurz auf die Antwort von IBKR: angenommen, abgelehnt (mit Fehlertext) oder unbestätigt."""
+        """Wartet kurz auf die Antwort von IBKR: angenommen, abgelehnt (mit Fehlertext) oder unbestätigt.
+
+        Warnungen (Status „ValidationError“ in ib_async, z. B. 399) entscheiden nichts: Es zählt der echte Status aus
+        orderStatus (`echter_status`); bis zum Ende der Wartezeit wird auf ihn gewartet, sonst „unbestätigt“. Nur 321
+        (Read-Only) ohne angenommenen Status gilt als abgelehnt (Jakob 13.11.2026)."""
         ende = time.monotonic() + sekunden
         while True:
-            status = trade.orderStatus.status
+            status = echter_status(trade)
+            if status not in ANGENOMMEN and read_only_abgewiesen(trade):
+                status = "ReadOnly"
+                break
             if status in ANGENOMMEN or status in ABGELEHNT or time.monotonic() >= ende:
                 break
             self.ib.sleep(0.2)
@@ -336,8 +366,8 @@ class IbkrBroker:
         oid = str(trade.order.orderId)
         cid = int(getattr(trade.contract, "conId", 0) or 0)
         if status in ANGENOMMEN:
-            return SendeErgebnis(oid, "angenommen", status, cid)
-        if status in ABGELEHNT:
+            return SendeErgebnis(oid, "angenommen", status + (" – Hinweis von IBKR: " + "; ".join(texte) if texte else ""), cid)
+        if status in ABGELEHNT or status == "ReadOnly":
             return SendeErgebnis(oid, "abgelehnt", "; ".join(texte) or status, cid)
         return SendeErgebnis(oid, "unbestaetigt", f"Status {status} nach {sekunden:.0f} s" + (": " + "; ".join(texte) if texte else ""), cid)
 

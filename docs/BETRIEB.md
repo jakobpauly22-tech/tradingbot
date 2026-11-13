@@ -249,8 +249,19 @@ Modul `betrieb/benachrichtigung.py`, Schalter in `config/betrieb.yaml` (`benachr
     den Tag nicht ab; an Xetra-Feiertagen bei ausgeschaltetem Laptop gibt es einen Fehlalarm.
 - **(c) Sofortmeldung:** Stopp im Tageslauf (als Kurzfassung mit Kopfzeile „GESTOPPT“), Ausnahme im Tageslauf (nur der
   Typ, dazu Lebenszeichen „fail“), Probleme beim Senden (abgelehnt, unbestätigt, Veto bei der zweiten Prüfung, Gateway
-  nicht verbunden, Abgleich vor dem Senden weicht ab, Read-Only, Abbruch). Grenze: Lehnt IBKR eine Order erst zur
-  Eröffnung ab, erfährt der Bot das erst beim nächsten Abendlauf.
+  nicht verbunden, Abgleich vor dem Senden weicht ab, Read-Only, Abbruch, bei IBKR offene Order, die im Journal nicht
+  unterwegs ist). Grenze: Lehnt IBKR eine Order erst zur Eröffnung ab, erfährt der Bot das erst beim nächsten
+  Abendlauf.
+- **Warnungen beim Senden (Jakob 13.11.2026, Vorfall BF-B):** ib_async setzt bei Hinweis-Codes wie 399 („wird nicht vor
+  09:30 US/Eastern platziert“) den Status auf `ValidationError`, obwohl die Order aktiv ist. Der Bot nimmt den Status
+  deshalb aus orderStatus, nicht aus dem Fehlercode: PreSubmitted/Submitted/Filled = angenommen (Warnung im Meldungstext),
+  Cancelled/Inactive = abgelehnt, ohne echten Status nach der Wartezeit = unbestätigt. Einzige Ausnahme ist 321
+  (Read-Only), die Order kommt dann nie bei IBKR an und gilt als abgelehnt.
+- **Abgleich der offenen Orders nach dem Senden (Jakob 13.11.2026):** Alle bei IBKR offenen Orders (alle Client-IDs,
+  `reqAllOpenOrders`) werden mit dem Journal verglichen. Fehlt eine offene Order im Journal (auch ohne orderRef, etwa von
+  Hand angelegt) oder ist ihr Vorschlag nicht unterwegs (unterwegs = gesendet, unbestätigt, ausgeführt), kommt die
+  Sofortmeldung „Order bei IBKR offen, im Journal nicht unterwegs: <Titel>“ (nur Kürzel) und je Order ein Ereignis
+  `order_offen_nicht_unterwegs`. Nichts wird automatisch storniert.
 - **Sicherheit:** Der Bot sendet nur (Telegram `sendMessage`), ruft nie Nachrichten ab und öffnet keinen Port; über
   Nachrichten lässt sich nichts auslösen. Inhalte kommen aus einer Positivliste; Freitexte des Tageslaufs (etwa
   Kassenstände des Kontos im Stopptext) gehen nie hinaus, aus einem Stopp nur Kategorie und betroffene Titel. Konto-IDs

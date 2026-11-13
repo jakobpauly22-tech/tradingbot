@@ -203,6 +203,42 @@ def test_ablehnung_und_unbestaetigt(tmp_path):
     assert broker(tmp_path, status="Submitted").sende(KAUF, set()).status == "angenommen"
 
 
+TEXT_399 = ("Warning 399, reqId 211: Order-Mitteilung: KAUFEN 17 BF B NYSE Warnung: Ihre Order wird nicht vor "
+            "2026-11-13 09:30:00 US/Eastern an der Börse platziert.")
+
+
+def _eintrag(status, message="", code=0):
+    return SimpleNamespace(status=status, message=message, errorCode=code)
+
+
+def test_warnung_399_nach_presubmitted_ist_angenommen(tmp_path):
+    """Vorfall BF-B (Order 211, 12.11.2026): IBKR meldet PreSubmitted, danach Warnung 399; ib_async überschreibt den
+    Status mit „ValidationError“. Die Order ist aktiv – angenommen, die Warnung steht im Text."""
+    log = [_eintrag("PendingSubmit"), _eintrag("PreSubmitted"), _eintrag("ValidationError", TEXT_399, 399)]
+    e = broker(tmp_path, status="ValidationError", log=log).sende(KAUF, set(), wartezeit=0.0)
+    assert e.status == "angenommen" and e.text.startswith("PreSubmitted") and "399" in e.text
+
+
+def test_warnung_399_ohne_echten_status_ist_unbestaetigt(tmp_path):
+    log = [_eintrag("PendingSubmit"), _eintrag("ValidationError", TEXT_399, 399)]
+    e = broker(tmp_path, status="ValidationError", log=log).sende(KAUF, set(), wartezeit=0.0)
+    assert e.status == "unbestaetigt" and "PendingSubmit" in e.text and "399" in e.text
+    e = broker(tmp_path, status="ValidationError", log=[_eintrag("ValidationError", TEXT_399, 399)]).sende(KAUF, set(), wartezeit=0.0)
+    assert e.status == "unbestaetigt"
+
+
+def test_warnung_321_read_only_bleibt_abgelehnt(tmp_path):
+    text = "Warning 321, reqId 49: Bei der Validierung ... Die API befindet sich im schreibgeschützten Modus."
+    log = [_eintrag("PendingSubmit"), _eintrag("ValidationError", text, 321)]
+    e = broker(tmp_path, status="ValidationError", log=log).sende(KAUF, set(), wartezeit=5.0)
+    assert e.status == "abgelehnt" and "321" in e.text
+
+
+def test_warnung_dann_cancelled_ist_abgelehnt(tmp_path):
+    log = [_eintrag("PreSubmitted"), _eintrag("ValidationError", TEXT_399, 399), _eintrag("Cancelled", "Order storniert", 202)]
+    assert broker(tmp_path, status="Cancelled", log=log).sende(KAUF, set()).status == "abgelehnt"
+
+
 def test_ticker_aus_conid():
     from tradingbot.broker.ibkr import ticker_aus
     assert ticker_aus(SimpleNamespace(conId=100292766, symbol="IEMA", primaryExchange="AEB", exchange="", currency="EUR")) == "EUNM.DE"

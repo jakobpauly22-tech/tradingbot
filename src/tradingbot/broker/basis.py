@@ -28,7 +28,8 @@ class KontraktUnbekannt(SendenGesperrt):
 @dataclass(frozen=True)
 class SendeErgebnis:
     """Antwort von IBKR auf eine gesendete Order (Jakob 03.11.2026): „angenommen“ (PreSubmitted/Submitted/Filled),
-    „abgelehnt“ (Fehler, Cancelled, Inactive) oder „unbestaetigt“ (nach der Wartezeit noch keine Antwort)."""
+    „abgelehnt“ (Fehler, Cancelled, Inactive, 321 Read-Only) oder „unbestaetigt“ (nach der Wartezeit noch keine Antwort).
+    Warnungen wie 399 entscheiden nie über den Status (Jakob 13.11.2026); sie stehen bei „angenommen“ im Text."""
     order_id: str
     status: str
     text: str = ""
