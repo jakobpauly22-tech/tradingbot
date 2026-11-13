@@ -223,3 +223,24 @@ Lesart (Claude, zur Entscheidung durch Jakob):
   Titel liefen im Mittel besser; einzelne Totalausfälle wie SolarEdge 2023 −91 %).
 - Insolvenzen kamen im Zeitraum kaum vor (1 Pleite-Delisting im ganzen Universum), daher ist der eigentliche Zweck von
   Altman hier kaum prüfbar. Die 4-Quartals-Fenster überlappen sich, die Fälle sind nicht unabhängig.
+
+## Datenkorrektur Piotroski „keine neuen Aktien“ (Jakob 13.11.2026, festgehalten vor dem Neulauf)
+
+Festgehalten am 13.11.2026 um 09:36, **vor** jedem Neulauf mit der Korrektur.
+
+- **Befund:** Das Signal EQ_OFFER vergleicht die gewichtete Aktienzahl der Jahre t und t−1, beide als Erstmeldung. Liegt
+  ein Split zwischen den beiden Einreichungen, steht ein Wert nach dem Split (t) gegen einen Wert vor dem Split (t−1).
+  Ein Split wirkt dann wie eine Kapitalerhöhung, ein Reverse-Split wie ein Rückkauf, jeweils für einen 10-K-Zyklus.
+- **Einordnung:** Datenkorrektur. Die Umsetzung wird an die Definition angeglichen (beide Jahre auf derselben
+  Split-Basis). Keine neue Variante: Score, Gewichte, Filtergrenzen und Erfolgskriterien bleiben unverändert.
+- **Methode (Jakob 13.11.2026):** Weg A: t−1 als Vergleichswert aus derselben Einreichung wie t (gleicher Begriff,
+  Basic oder Diluted). Rückfall Weg B, wenn der Vergleichswert fehlt: Erstmeldungen beider Jahre mit den Split-Faktoren
+  zwischen den Einreichungen (nur Splits bis zum Stichtag; Backtest Yahoo/Tiingo, Betrieb zusätzlich quittierte
+  Flex-Verhältnisse). Gegenprobe beider Wege; Abweichungen von A zur Erstmeldung ohne Split werden getrennt ausgewiesen.
+- **Die Korrektur wird unabhängig vom Ergebnis des Neulaufs übernommen.** Der Neulauf auf den Entwicklungsdaten
+  (01.10.2016 bis 31.12.2024, Tresor unverändert zu) dient nur der Dokumentation der Wirkung. Ein besseres oder
+  schlechteres Ergebnis ändert weder die Übernahme noch die Entscheidungen vom 02.11.2026.
+- **Wirksam im Betrieb** ab dem ersten Rebalancing-Stichtag im Januar 2027 (04.01.2027), gleichzeitig für die Auswahl
+  der Bücher Fundamental A und B und das Fundamental-Veto im Risk-Manager. Davor rechnet der Betrieb wie bisher.
+- **Varianten-Liste:** Der Neulauf wird in `daten/fundamental/varianten.csv` als „Datenkorrektur, keine neue Variante“
+  eingetragen.
