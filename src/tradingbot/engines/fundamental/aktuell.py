@@ -21,6 +21,7 @@ from tradingbot.daten.kurse import lade_kurse
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
+from tradingbot.engines.fundamental.aktienzahl import korrektur_aktiv, lade_aktienfakten, signal_alt_neu, vergleich_fuer_abschluesse
 from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
 from tradingbot.engines.fundamental.filter import piotroski_fuer_filter
 from tradingbot.engines.fundamental.gesamtscore import gesamtscore
@@ -90,6 +91,7 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
         if nr in status.index and bool(status.loc[nr, "gueltig"]):
             symbol_je_firma.setdefault(f, status.loc[nr, "symbol"])
     zeilen = []
+    eq_korrektur = korrektur_aktiv(tag, konfig)          # Datenkorrektur EQ_OFFER ab 04.01.2027 (Jakob 13.11.2026)
     schwelle = Fehlerschwelle("Betrieb: Fundamental-Bewertung je Firma")
     for firma in sorted({firmen_schluessel(z, nr) for nr, z in mitglieder.iterrows()}):
         if isinstance(firma, str) or daten.kurse.get(firma) is None:
@@ -114,7 +116,12 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                 continue
             mw, _ = marktwert_am(tag, kurse["close"], aktien, daten.streubesitz_gueltig.get(firma))
             industrie = industrie_von <= sic <= industrie_bis
-            p, alt, ben, acc, m = piotroski(t), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t), multiples(t, mw)
+            # EQ_OFFER: beide Wege immer rechnen (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
+            eq = vergleich_fuer_abschluesse(t, lade_aktienfakten(ciks_der_zeile(zeile), cache=cache), tag, kurse["split"])
+            eq_alt, eq_neu = signal_alt_neu(t, eq)
+            p = piotroski(t, eq_offer=eq if eq_korrektur else None)
+            p_korrigiert = p if eq_korrektur else piotroski(t, eq_offer=eq)
+            alt, ben, acc, m = altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t), multiples(t, mw)
             cfo = _w(t, "operativer_cashflow", 0)
             e = filter_anwenden(sic=sic, piotroski=p, altman=alt, beneish=ben, cfo_t=cfo, konfig=konfig)
             ende_t = info["ende_t"]
@@ -125,6 +132,9 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                            "piotroski_hoch": p["hochgerechnet"], "piotroski_n": p["anzahl_signale"], "piotroski_signale": dict(p["signale"]),
                            "marktwert_usd": mw, "altman": alt.get("wert"), "altman_zone": alt.get("zone"), "altman_variante": alt.get("variante"),
                            "beneish": ben.get("wert"), "geschaeftsjahr_ende": ende_t,
+                           "eq_offer_alt": eq_alt, "eq_offer_neu": eq_neu, "eq_offer_quelle": (eq or {}).get("quelle"),
+                           "eq_offer_split_faktor": (eq or {}).get("split_faktor"), "eq_offer_korrektur_aktiv": eq_korrektur,
+                           "piotroski_filter_korrigiert": piotroski_fuer_filter(p_korrigiert),
                            "bekannt_ab": bekannt.min() if len(bekannt) else None})
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{firma}: {type(f).__name__} {str(f)[:60]}"

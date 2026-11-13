@@ -46,7 +46,7 @@ PIOTROSKI_SIGNALE = {
 PIOTROSKI_MINDESTSIGNALE = 7      # Entscheidung Jakob 02.11.2026 (config/fundamental.yaml)
 
 
-def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -> dict:
+def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE, *, eq_offer: dict | None = None) -> dict:
     """Piotroski F-Score (0–9), neun binäre Signale, jedes einzeln berechnet, soweit seine Posten vorliegen.
 
     Ursprünglich für Value-Aktien entwickelt (Firmen mit hohem Buchwert-Markt-Verhältnis, Piotroski 2000); hier dient er
@@ -58,15 +58,18 @@ def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -
                    Piotroski wertet nur eine Zunahme als negatives Signal, schuldenfreie Firmen zählen daher als 1);
                    ΔLIQUID: Liquidität 3. Grades (UV/kfr. Verbindlichkeiten) gestiegen;
                    EQ_OFFER: keine neuen Aktien – Näherung über die gewichtete Aktienzahl (t ≤ t−1), da die SEC-Daten
-                   die Ausgabe von Stammaktien nicht einheitlich melden
+                   die Ausgabe von Stammaktien nicht einheitlich melden. Mit `eq_offer` (aktienzahl.eq_offer_vergleich)
+                   stehen beide Jahre auf derselben Split-Basis (Datenkorrektur Jakob 13.11.2026); ohne `eq_offer` oder
+                   ohne bekannte Werte darin gelten die Erstmeldungen aus `t` wie bisher
     Effizienz:     ΔMARGIN: Bruttomarge gestiegen;  ΔTURN: Kapitalumschlag Umsatz_t/BS_{t−1} gestiegen
     Fehlende Signale (Entscheidung Jakob 02.11.2026): alle 9 → `wert`; 7 oder 8 → auf 9 Punkte hochgerechnet
     (`wert_hochgerechnet` = Punkte · 9 / Anzahl, `hochgerechnet` = True); weniger → kein Wert, der Filter wird übersprungen.
     """
     signale, zwischen, fehlend = {}, {}, []
     w = lambda n, j: _w(t, n, j)  # noqa: E731
+    korrigiert = bool(eq_offer) and eq_offer.get("wert_t") is not None and eq_offer.get("wert_vj") is not None
     for name, posten in PIOTROSKI_SIGNALE.items():
-        luecken = _brauche(t, posten)
+        luecken = [] if name == "eq_offer" and korrigiert else _brauche(t, posten)
         if luecken:
             fehlend += [f"{name}:{x}" for x in luecken]
             continue
@@ -89,7 +92,11 @@ def piotroski(t: pd.DataFrame, mindestsignale: int = PIOTROSKI_MINDESTSIGNALE) -
                 liquid_vj = w("umlaufvermoegen", 1) / w("kurzfristige_verbindlichkeiten", 1)
                 zwischen.update(liquid=liquid, liquid_vj=liquid_vj); signale[name] = int(liquid > liquid_vj)
             elif name == "eq_offer":
-                signale[name] = int(w("gewichtete_aktien", 0) <= w("gewichtete_aktien", 1))
+                if korrigiert:
+                    zwischen.update(aktien_t=eq_offer["wert_t"], aktien_vj=eq_offer["wert_vj"], aktien_quelle=eq_offer["quelle"])
+                    signale[name] = int(eq_offer["wert_t"] <= eq_offer["wert_vj"])
+                else:
+                    signale[name] = int(w("gewichtete_aktien", 0) <= w("gewichtete_aktien", 1))
             elif name == "delta_margin":
                 marge, marge_vj = w("bruttoergebnis", 0) / w("umsatz", 0), w("bruttoergebnis", 1) / w("umsatz", 1)
                 zwischen.update(marge=marge, marge_vj=marge_vj); signale[name] = int(marge > marge_vj)

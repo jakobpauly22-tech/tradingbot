@@ -77,6 +77,12 @@ filter:                                # Code: engines/fundamental/filter.py
 kennzahlen_regeln:
   aktualitaet_monate: 15               # letztes Geschäftsjahr höchstens 15 Monate vor dem Stichtag, sonst nicht bewertbar
 
+# Datenkorrektur Piotroski EQ_OFFER (Jakob 13.11.2026, docs/FUNDAMENTAL.md): t−1 auf der Split-Basis von t
+# (Weg A Vergleichswert aus derselben Einreichung, Rückfall B Split-Faktoren; engines/fundamental/aktienzahl.py).
+# Keine neue Variante; übernommen unabhängig vom Ergebnis des Neulaufs.
+piotroski_eq_offer:
+  splitbereinigt_ab: 2027-01-04        # Betrieb: erster Rebalancing-Stichtag Januar 2027, Auswahl A/B und Risk-Manager-Veto zugleich
+
 multiples:
   # Entscheidung 02.11.2026: Vergleichsgruppe zweistellige SIC (Major Group) mit mindestens 5 Firmen, sonst SIC-Division.
   # Multiples als Perzentil-Rang innerhalb der Gruppe; Ausreißer vorher auf 1./99. Perzentil gekappt; negativer EV markiert.

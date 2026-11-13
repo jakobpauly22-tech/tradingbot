@@ -71,13 +71,28 @@ def ranglisten_aus_scores(scores: pd.DataFrame, konfig: dict) -> tuple[dict, pd.
     return ranglisten, b
 
 
-def main() -> int:
+def argumente(argv=None):
+    """Neuberechnung derselben Variante (keine neue Variante), z. B. Datenkorrektur Piotroski EQ_OFFER (Jakob 13.11.2026):
+    --scores scores_eq_offer --name fundamental_schatten_eq_offer --anlass "…" --kopie backtest_bericht_eq_offer.md"""
+    import argparse
+    a = argparse.ArgumentParser(description="Backtest Fundamental-Schattenportfolio (Variante 1)")
+    a.add_argument("--scores", default="scores", help="Schlüssel im Cache „fundamental“ (tools/auswertung_scores.py)")
+    a.add_argument("--name", default=NAME, help="Name des Laufs (Ordner unter daten/backtests/)")
+    a.add_argument("--anlass", default=ANLASS, help="Anlass der Neuberechnung (Spalte in varianten.csv)")
+    a.add_argument("--kopie", default="backtest_bericht.md", help="Dateiname der Berichtskopie unter daten/fundamental/")
+    return a.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    global NAME, ANLASS
+    arg = argumente(argv)
+    NAME, ANLASS = arg.name, arg.anlass
     konfig = lade_konfiguration("fundamental")
     konfig_bt = lade_konfiguration("backtest")
     sp = konfig["schattenportfolio"]
     start, ende = pd.Timestamp(str(konfig["backtest"]["gewertet_ab"])), pd.Timestamp(str(konfig["backtest"]["gewertet_bis"]))
     cache = standard_cache()
-    scores, scores_meta = cache.lesen("fundamental", "scores")
+    scores, scores_meta = cache.lesen("fundamental", arg.scores)
     if scores is None:
         raise SystemExit("Cache fundamental/scores fehlt: tools/auswertung_scores.py ausführen")
     scores = scores[(scores["stichtag"] >= start) & (scores["stichtag"] <= ende)]
@@ -187,7 +202,8 @@ def main() -> int:
     text = [f"# Fundamental-Schattenportfolio – erster gewerteter Backtest", "",
             f"Zeitraum {tage[0].date()} bis {tage[-1].date()} ({len(ranglisten)} Rebalancing-Stichtage), virtuell "
             f"{sp['kapital']:,.0f} €, {sp['titel']} Titel. {VARIANTE}. Getestete Varianten bisher: {anzahl_varianten}.", "",
-            f"Ablage: `{lauf.pfad.relative_to(PROJEKT_WURZEL) if lauf.pfad else '–'}`; Scores-Cache: {scores_meta.get('stichtage', '?')} Stichtage, Zeitraum {scores_meta.get('zeitraum', '?')}.", "",
+            f"Anlass der Neuberechnung: {ANLASS or '–'}.", "",
+            f"Ablage: `{lauf.pfad.relative_to(PROJEKT_WURZEL) if lauf.pfad else '–'}`; Scores-Cache `{arg.scores}`: {scores_meta.get('stichtage', '?')} Stichtage, Zeitraum {scores_meta.get('zeitraum', '?')}.", "",
             "## Erfolgskriterien (vor dem Lauf festgeschrieben)", "",
             "| Kriterium | Schattenportfolio | Vergleich | Ergebnis |", "| --- | --- | --- | --- |",
             f"| (a) Rendite p.a. nach Kosten, vor Steuern ≥ Kontrollportfolio | {pz(s_vor['cagr'])} | {pz(s_kon['cagr'])} | {ok(krit_a)} |",
@@ -286,7 +302,7 @@ def main() -> int:
         prot.to_csv(lauf.pfad / "auswahl_protokoll.csv", index=False)
         vor.trades.to_csv(lauf.pfad / "trades_vor_steuern.csv", index=False)
         pd.DataFrame(reihen).to_csv(lauf.pfad / "wertreihen.csv")
-    (ziel / "backtest_bericht.md").write_text(bericht, encoding="utf-8")
+    (ziel / arg.kopie).write_text(bericht, encoding="utf-8")
     print(bericht)
     return 0
 

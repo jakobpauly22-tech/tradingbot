@@ -108,6 +108,10 @@ class SecClient:
         self._cache_schreiben(datei, url, daten_neu, zeitpunkt)
         return daten_neu, zeitpunkt
 
+    def companyfacts_aus_cache(self, cik) -> tuple[dict | None, datetime | None]:
+        """companyfacts nur aus dem lokalen Cache, ohne Netzabruf (None, None, wenn nichts gecacht ist)."""
+        return self._cache_lesen(self.cache_wurzel / "companyfacts" / f"CIK{cik10(cik)}.json.gz")
+
     def companyfacts(self, cik) -> tuple[dict, datetime]:
         return self.json_mit_cache(f"{SEC_DATA}/api/xbrl/companyfacts/CIK{cik10(cik)}.json",
                                    self.cache_wurzel / "companyfacts" / f"CIK{cik10(cik)}.json.gz")
