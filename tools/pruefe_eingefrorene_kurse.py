@@ -5,8 +5,9 @@ Aufruf:  .venv\Scripts\python tools\pruefe_eingefrorene_kurse.py
 Ergebnis: docs/berichte/2026-11-13_eingefrorene_kurse.md
 
 Grundmenge: Firmen des Universums mit gültiger Kursreihe und einem 8-K mit Item 1.03. Fenster: 10. Handelstag vor bis
-60 Kalendertage nach dem ersten 8-K mit Item 1.03. E1: mindestens 3 aufeinanderfolgende Handelstage mit unverändertem
-Schlusskurs und Umsatz 0 (oder fehlend). Kurse wie im Backtest (bis zur Datumsgrenze des Tresors).
+60 Kalendertage nach dem ersten 8-K mit Item 1.03. E1 (Fassung vom 13.11.2026 nach der ersten Suche, ohne Umsatzbedingung,
+weil Tiingo an eingefrorenen Tagen Umsatz meldet): mindestens 3 aufeinanderfolgende Handelstage mit Eröffnung = Hoch =
+Tief = Schluss und Schluss gleich dem Vortag. Kurse wie im Backtest (bis zur Datumsgrenze des Tresors).
 """
 import glob
 import sys
@@ -25,16 +26,15 @@ from tradingbot.daten.universum import lade_universum
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
-BERICHT = PROJEKT_WURZEL / "docs" / "berichte" / "2026-11-13_eingefrorene_kurse.md"
+BERICHT = PROJEKT_WURZEL / "docs" / "berichte" / "2026-11-13_eingefrorene_kurse_2.md"   # erste Suche: …_kurse.md
 MIN_TAGE, VOR_HANDELSTAGE, NACH_TAGEN = 3, 10, 60
 
 
 def eingefroren(kurse: pd.DataFrame, von, bis) -> list[dict]:
-    """Läufe von mindestens MIN_TAGE Handelstagen mit Schluss = Vortag und Umsatz 0/fehlend, die im Fenster beginnen."""
+    """Läufe von mindestens MIN_TAGE Handelstagen mit Eröffnung = Hoch = Tief = Schluss = Vortagesschluss, die im Fenster
+    beginnen (ohne Umsatzbedingung, Jakob 13.11.2026)."""
     k = kurse.sort_index()
-    gleich = k["close"].diff() == 0
-    ohne_umsatz = (k["volume"].fillna(0) == 0) if "volume" in k.columns else pd.Series(True, index=k.index)
-    flag = gleich & ohne_umsatz
+    flag = ((k["close"].diff() == 0) & (k["open"] == k["close"]) & (k["high"] == k["close"]) & (k["low"] == k["close"]))
     laeufe, start = [], None
     for i, (tag, f) in enumerate(flag.items()):
         if f and start is None:
@@ -42,9 +42,7 @@ def eingefroren(kurse: pd.DataFrame, von, bis) -> list[dict]:
         if (not f or i == len(flag) - 1) and start is not None:
             ende = i if f else i - 1
             if ende - start + 1 >= MIN_TAGE and pd.Timestamp(von) <= k.index[start] <= pd.Timestamp(bis):
-                danach = k.iloc[ende + 1:]
-                echt = danach[(danach["close"] != k["close"].iloc[ende])
-                              & ((danach["volume"].fillna(0) > 0) if "volume" in danach.columns else True)]
+                echt = k.iloc[ende + 1:][~flag.iloc[ende + 1:]]
                 laeufe.append({"erster_tag": k.index[start], "letzter_tag": k.index[ende], "tage": ende - start + 1,
                                "kurs": float(k["close"].iloc[ende]),
                                "erster_echter_tag": echt.index[0] if len(echt) else None,
@@ -100,7 +98,7 @@ def main() -> int:
             f"Erstellt {datetime.now():%d.%m.%Y %H:%M} mit `tools/pruefe_eingefrorene_kurse.py`. Kriterien vor der Suche festgelegt "
             "(docs/FUNDAMENTAL.md, Abschnitt „Vierte Datenkorrektur“): Grundmenge Firmen mit 8-K Item 1.03 und gültiger Kursreihe; "
             f"Fenster {VOR_HANDELSTAGE} Handelstage vor bis {NACH_TAGEN} Tage nach dem ersten 8-K; mindestens {MIN_TAGE} Handelstage "
-            "unveränderter Schluss ohne Umsatz. Kurse bis zur Datumsgrenze des Tresors.", "",
+            "Eröffnung = Hoch = Tief = Schluss = Vortagesschluss (zweite Suche, ohne Umsatzbedingung). Kurse bis zur Datumsgrenze des Tresors.", "",
             f"Grundmenge: {grundmenge} Firmen. Treffer: {len(df)}. Nichts wurde korrigiert.", "",
             "| Ticker (CIK) | Name | Mitgliedschaft | 8-K 1.03 | Kursreihe | eingefroren | Kurs | erster echter Kurs danach | "
             "Mitglied am 1. Tag | in Backtest A gehalten |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]

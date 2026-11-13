@@ -428,3 +428,15 @@ Festgehalten am 13.11.2026 um 14:41, **vor** der Suche und vor dem Neulauf.
 - **Treffer:** E1 im Fenster. Gemeldet: Firma, Mitgliedschaft, Datum des 8-K, eingefrorener Zeitraum und Kurs, erster
   echter Kurs danach (erster Tag mit Umsatz > 0 und anderem Schlusskurs) oder Reihenende, ob die Firma am ersten
   eingefrorenen Tag Indexmitglied war und ob ein Backtest-Buch sie hielt.
+
+### Änderung der Suchkriterien nach der ersten Suche (Jakob 13.11.2026, festgehalten vor der zweiten Suche)
+
+**Änderung nach der Suche, mit Begründung:** Die erste Suche (Bericht vom 13.11.2026 14:42) fand SIVB nur zerlegt und erst ab
+dem 15.03.2023, weil Tiingo an eingefrorenen Tagen Umsatz meldet (10.03.: 11,5 Mio. Stück bei Eröffnung = Hoch = Tief =
+Schluss = 106,04 USD; 13.03.: 2.404; 14.03.: 6; 21.03.: 4). Die Umsatzbedingung erkennt den Handelsstopp damit nicht.
+Jakob hat die Regel ohne Umsatzbedingung freigegeben; die erste Suche bleibt als Bericht stehen.
+
+- **E1 (neu):** mindestens **n = 3** aufeinanderfolgende Handelstage mit Eröffnung = Hoch = Tief = Schluss und Schluss
+  gleich dem Vortagesschluss. n bleibt bei 3 wie in der ersten Suche (festgelegt vor der zweiten Suche).
+- **Erster echter Kurs danach:** erster Handelstag nach dem Lauf, der E1 nicht erfüllt (Kursspanne oder anderer Schluss).
+- Grundmenge, Fenster und gemeldete Angaben unverändert.
