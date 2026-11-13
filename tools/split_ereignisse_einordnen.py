@@ -14,7 +14,6 @@ in der alten und danach in der ersten Einreichung neu auf der neuen Basis (ASC 2
 Liegen mehrere Ereignisse zwischen den beiden Einreichungen, wird gegen ihr Produkt geprüft.
 Läuft im Betriebsmodus (auch Ereignisse ab 2025); Backtests lesen die Liste nur bis zur Datumsgrenze des Tresors.
 """
-import math
 import sys
 import warnings
 from datetime import datetime
@@ -26,89 +25,16 @@ from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kapitalmassnahmen_historie import einordnen, sec_verhaeltnis
 from tradingbot.engines.fundamental.aktienzahl import aktienfakten
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
 LISTE = PROJEKT_WURZEL / "config" / "kapitalmassnahmen_historie.yaml"
 BERICHT = PROJEKT_WURZEL / "docs" / "berichte" / "2026-11-13_split_ereignisse.md"
-TOLERANZ = 0.015          # relative Abweichung, bis zu der r als „gleich“ gilt
-ENG = 0.002               # enge Toleranz bei Faktoren nahe 1
-MAX_TAGE_DANACH = 460     # erste Einreichung nach dem Ereignis höchstens ~15 Monate später
 # Bekannte Bestätigungen aus Primärquellen (nicht aus dem Gedächtnis): Ticker, Datum → Bemerkung
 BESTAETIGT = {("CMCSA", "2026-01-05"): ("abspaltung", "SEC 8-K vom 05.01.2026 (accn 0000950103-26-000079): Abspaltung Versant Media "
                                                      "(VSNT), 1 Versant je 25 Comcast, wirksam 02.01.2026 23:59 ET")}
-
-
-def gleich(a: float, b: float) -> bool:
-    return b != 0 and abs(a / b - 1) <= TOLERANZ
-
-
-def skalierungsfehler(r: float) -> bool:
-    e = math.log10(r) if r > 0 else 0
-    return abs(e) >= 2.5 and abs(e - 3 * round(e / 3)) < 0.05
-
-
-PERIODENBERICHTE = ("10-K", "10-Q", "10-K/A", "10-Q/A", "10-KT", "10-KT/A", "20-F", "40-F")
-
-
-def sec_verhaeltnis(fakten: pd.DataFrame, tag: pd.Timestamp) -> tuple[float | None, pd.Timestamp | None, pd.Timestamp | None, str]:
-    """r = Wert derselben Periode im ersten Periodenbericht (10-K/10-Q) nach `tag` / Wert in einem Periodenbericht davor
-    (gleicher Begriff). 8-K-Neudarstellungen zählen nicht (CF 2015: 8-K nach dem Split noch auf alter Basis). Paare mit
-    Skalierungsfehler (Verhältnis ≈ 10^3k) werden übersprungen; es gilt das jüngste übrige Paar."""
-    if fakten is None or fakten.empty:
-        return None, None, None, "keine SEC-Aktienzahlen"
-    f = fakten[fakten["form"].fillna("").isin(PERIODENBERICHTE)]
-    vor, nach = f[f["filed"] < tag], f[f["filed"] > tag]
-    if vor.empty or nach.empty:
-        return None, None, None, "kein Periodenbericht " + ("davor" if vor.empty else "danach")
-    erste_nach = nach["filed"].min()
-    if (erste_nach - tag).days > MAX_TAGE_DANACH:
-        return None, None, None, f"erster Periodenbericht danach erst {erste_nach.date()}"
-    neu = nach[nach["filed"] == erste_nach]
-    skaliert = None
-    for _, z in neu.sort_values(["ende", "rang"], ascending=[False, True]).iterrows():
-        alt = vor[(vor["ende"] == z["ende"]) & (vor["start"] == z["start"]) & (vor["konzept"] == z["konzept"])].sort_values("filed", ascending=False)
-        for _, a in alt.iterrows():
-            if not a["wert"]:
-                continue
-            r = float(z["wert"]) / float(a["wert"])
-            if skalierungsfehler(r):
-                skaliert = skaliert or (r, a["filed"])
-                continue
-            return r, a["filed"], erste_nach, ""
-    if skaliert:                                  # nur Paare mit Skalierungsfehler: Verhältnis trotzdem zurück (einordnen bereinigt)
-        return skaliert[0], skaliert[1], erste_nach, ""
-    return None, None, None, "dieselbe Periode davor nicht gemeldet"
-
-
-def einordnen(f: float, r: float | None, produkt: float, anzahl: int, grund: str) -> tuple[str, float | None, str]:
-    """(Art, Split-Faktor, Bemerkung) für ein Ereignis mit Faktor f; `produkt` = Produkt aller Faktoren im Fenster."""
-    if r is None:
-        return "unklar", None, grund
-    for basis, art, faktor in ((produkt, "split", f), (1.0, "abspaltung", 1.0)):
-        if skalierungsfehler(r / basis):
-            k = round(math.log10(r / basis) / 3)
-            rest = r / 1000 ** k
-            if gleich(rest, basis):
-                return "unklar", None, (f"SEC-Verhältnis {r:.4g}: Skalierungsfehler (Tausend statt Stück), bereinigt {rest:.4f}; "
-                                        f"Vorschlag: {art}, Split-Faktor {faktor:g}")
-    if skalierungsfehler(r):
-        return "unklar", None, f"SEC-Verhältnis {r:.4g}: Skalierungsfehler (Tausend statt Stück)"
-    if abs(produkt - 1) < 2 * TOLERANZ:          # Faktor nahe 1: Split und Abspaltung nur mit enger Toleranz unterscheidbar
-        if abs(r - 1) < ENG and abs(r / produkt - 1) >= ENG:
-            return "abspaltung", 1.0, f"Faktor nahe 1, SEC-Verhältnis {r:.4f} = 1"
-        if abs(r / produkt - 1) < ENG and abs(r - 1) >= ENG:
-            return "split", f, f"Faktor nahe 1, SEC-Verhältnis {r:.4f} = Faktor (Aktiendividende)"
-        return "unklar", None, f"Faktor nahe 1, SEC-Verhältnis {r:.4f} nicht eindeutig"
-    ueberlagert = f" (zusammen mit {anzahl - 1} weiteren Ereignissen im Fenster, Produkt {produkt:.4g})" if anzahl > 1 else ""
-    if gleich(r, produkt):
-        return "split", f, "SEC-Verhältnis = Faktor" + ueberlagert
-    if gleich(r, 1.0):
-        return "abspaltung", 1.0, "SEC-Verhältnis = 1" + ueberlagert
-    if anzahl > 1:
-        return "unklar", None, f"SEC-Verhältnis {r:.4f} passt weder zu 1 noch zum Produkt" + ueberlagert
-    return "kombiniert", r, f"SEC-Verhältnis {r:.4f}: Split-Anteil, Rest Abspaltung (Vorschlag, zu prüfen)"
 
 
 def aktienfakten_mit_quartalen(ciks) -> pd.DataFrame:

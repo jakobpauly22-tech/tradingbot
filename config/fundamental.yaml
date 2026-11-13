@@ -83,6 +83,14 @@ kennzahlen_regeln:
 piotroski_eq_offer:
   splitbereinigt_ab: 2027-01-04        # Betrieb: erster Rebalancing-Stichtag Januar 2027, Auswahl A/B und Risk-Manager-Veto zugleich
 
+# Datenkorrektur Marktwert (Jakob 13.11.2026, docs/FUNDAMENTAL.md): Abspaltungen der Kursreihe nicht als Split in der
+# Aktienzahl (Liste config/kapitalmassnahmen_historie.yaml, ungeklärte Ereignisse behalten den Kursfaktor, markiert);
+# Ersatz-Aktienzahl (jüngste gewichtete Basic-Zahl), wenn die Deckblatt-Zahl älter ist als `aktien_max_alter_monate`.
+# Keine neue Variante; übernommen unabhängig vom Ergebnis des Neulaufs (auch Titel, die bisher ohne Marktwert herausfielen).
+marktwert_korrektur:
+  ab: 2027-01-04                       # Betrieb: erster Rebalancing-Stichtag Januar 2027 (bis dahin nur mitgerechnet und angezeigt)
+  aktien_max_alter_monate: 15
+
 multiples:
   # Entscheidung 02.11.2026: Vergleichsgruppe zweistellige SIC (Major Group) mit mindestens 5 Firmen, sonst SIC-Division.
   # Multiples als Perzentil-Rang innerhalb der Gruppe; Ausreißer vorher auf 1./99. Perzentil gekappt; negativer EV markiert.

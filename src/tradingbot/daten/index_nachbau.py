@@ -90,7 +90,7 @@ def handelstage(schluss: pd.DataFrame, von, bis, mindestanteil: float = 0.5) -> 
     return pd.DatetimeIndex(anzahl.index[anzahl >= mindestanteil * anzahl.median()])
 
 
-def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.DataFrame:
+def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict, korrektur_je_firma: dict | None = None) -> pd.DataFrame:
     """Marktwert je Firma und Tag aus dem Streubesitz laut SEC-Deckblatt, fortgeschrieben mit dem Kurs.
 
     Formel:  MW_i,t = F_i · C_i,t / C_i,e    (F = jüngster bis t bekannte plausible Streubesitz, gemessen am Tag e)
@@ -98,7 +98,12 @@ def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.D
     Aktiengattungen (z.B. Berkshire, Alphabet, Fox); der Streubesitz wird je Firma über alle Gattungen gemeldet und
     entspricht der Streubesitz-Gewichtung des S&P 500. Point-in-time: F gilt ab dem Tag nach der Einreichung.
     `schluss`: Tage × Firmen (splitbereinigte Schlusskurse); `streubesitz`: Firma → DataFrame(wert, filed; Index = e).
+    `korrektur_je_firma` (Datenkorrektur Marktwert, Jakob 13.11.2026): Firma → (Split-Spalte der Kursreihe, eingeordnete
+    Ereignisse); dann MW_i,t = F_i · C_i,t / C_i,e · K(e, t), damit eine Abspaltung zwischen e und t den Streubesitz nicht
+    erhöht (daten/kapitalmassnahmen_historie.py). None = bisherige Rechnung.
     """
+    from tradingbot.daten.kapitalmassnahmen_historie import korrektur_reihe
+
     from tradingbot.daten.abdeckung import STREUBESITZ_MAX, STREUBESITZ_MIN
 
     ergebnis = pd.DataFrame(index=schluss.index, columns=schluss.columns, dtype=float)
@@ -115,7 +120,11 @@ def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict) -> pd.D
             if vorher.empty:
                 continue
             fenster = (c.index >= ab) & ((c.index < bis) if bis is not None else True)
-            ergebnis.loc[fenster, firma] = zeile["wert"] * c[fenster] / vorher.iloc[-1]
+            werte = zeile["wert"] * c[fenster] / vorher.iloc[-1]
+            if korrektur_je_firma and firma in korrektur_je_firma:
+                splits, ereignisse = korrektur_je_firma[firma]
+                werte = werte * korrektur_reihe(splits, ereignisse, e, werte.index).to_numpy()
+            ergebnis.loc[fenster, firma] = werte
     return ergebnis
 
 

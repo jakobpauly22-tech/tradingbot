@@ -61,9 +61,10 @@ def delisting_rendite(grund: str, konfig: dict | None = None) -> float:
 
 
 def delisting_grund_mit_korrektur(ticker: str, filings: pd.DataFrame, letzter_kurs, grund_text: str | None = None,
-                                  korrekturen: list[dict] | None = None) -> tuple[str, str]:
-    """Wie `delisting_grund`, aber manuelle Einträge (config/universum_korrekturen.yaml, `delisting`) haben Vorrang."""
+                                  korrekturen: list[dict] | None = None, cik: int | None = None) -> tuple[str, str]:
+    """Wie `delisting_grund`, aber manuelle Einträge (config/universum_korrekturen.yaml, `delisting`) haben Vorrang.
+    Ein Eintrag mit `cik` gilt nur für diese Firma (wiederverwendete Ticker), sonst zählt der Ticker."""
     for k in korrekturen or []:
-        if k["ticker"] == ticker:
+        if (k.get("cik") is not None and cik is not None and int(k["cik"]) == int(cik)) or (k.get("cik") is None and k["ticker"] == ticker):
             return k["grund"], f"korrigiert: {k['quelle']}"
     return delisting_grund(filings, letzter_kurs, grund_text)

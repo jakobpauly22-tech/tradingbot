@@ -22,6 +22,8 @@ from __future__ import annotations
 import pandas as pd
 
 BEREICH = "sec_aktienfakten"
+BEREICH_QUARTALE = "sec_aktienfakten_quartale"      # Quartale und Geschäftsjahre (80–380 Tage): Ersatz-Aktienzahl, Einordnung
+QUARTALSDAUER = (80, 380)
 SPALTEN = ["konzept", "rang", "start", "ende", "wert", "filed", "form", "accn"]
 
 
@@ -44,8 +46,8 @@ def aktienfakten(roh: dict, definition: dict, jahresdauer: tuple[int, int] = (35
     return t[dauer.between(*jahresdauer) & t["wert"].notna()].sort_values(["ende", "filed", "accn"]).reset_index(drop=True)
 
 
-def lade_aktienfakten(ciks, *, definition: dict | None = None, cache=None, client=None) -> pd.DataFrame:
-    """Aktienfakten mehrerer CIKs (Firma und Vorgänger) aus dem Cache. Fehlt der Eintrag oder passt er nicht zum Stand der
+def lade_aktienfakten(ciks, *, definition: dict | None = None, cache=None, client=None, mit_quartalen: bool = False) -> pd.DataFrame:
+    """Aktienfakten mehrerer CIKs (Firma und Vorgänger) aus dem Cache (`mit_quartalen`: auch 10-Q-Perioden, eigener Bereich). Fehlt der Eintrag oder passt er nicht zum Stand der
     Erstmeldungen (`roh_abgerufen_um`), wird er offline aus den gecachten companyfacts neu gebaut (kein Netzabruf).
     CIKs ohne gecachte companyfacts fehlen im Ergebnis (dann greift Weg B)."""
     from tradingbot.daten.cache import standard_cache
@@ -54,12 +56,13 @@ def lade_aktienfakten(ciks, *, definition: dict | None = None, cache=None, clien
 
     konfig = lade_konfiguration("fundamental")
     definition = definition or konfig["kennzahlen"]["gewichtete_aktien"]
-    jahresdauer = tuple(konfig["sec"]["jahresdauer_tage"])
+    jahresdauer = QUARTALSDAUER if mit_quartalen else tuple(konfig["sec"]["jahresdauer_tage"])
+    bereich = BEREICH_QUARTALE if mit_quartalen else BEREICH
     cache = cache or standard_cache()
     teile = []
     for cik in ciks:
         schluessel = cik10(cik)
-        tabelle, meta = cache.lesen(BEREICH, schluessel)
+        tabelle, meta = cache.lesen(bereich, schluessel)
         _, meta_erst = cache.lesen("sec_erstmeldungen", schluessel)
         stand = (meta_erst or {}).get("roh_abgerufen_um")
         if tabelle is None or (stand and meta.get("roh_abgerufen_um") != stand):
@@ -68,7 +71,7 @@ def lade_aktienfakten(ciks, *, definition: dict | None = None, cache=None, clien
             if roh is None:
                 continue
             tabelle = aktienfakten(roh, definition, jahresdauer)
-            cache.schreiben(BEREICH, schluessel, tabelle, {"quelle": "SEC companyfacts (Cache, offline)",
+            cache.schreiben(bereich, schluessel, tabelle, {"quelle": "SEC companyfacts (Cache, offline)",
                                                             "roh_abgerufen_um": abgerufen.isoformat(timespec="seconds")})
         teile.append(tabelle)
     teile = [t for t in teile if len(t)]
@@ -83,6 +86,25 @@ def _erstmeldung(k: pd.DataFrame):
     k = k.assign(_berichtigung=k["form"].fillna("").str.endswith("/A")).sort_values(["filed", "_berichtigung", "accn"])
     k = k.drop_duplicates("konzept", keep="first").sort_values(["filed", "rang"])
     return k.iloc[0]
+
+
+def ersatz_aktienzahl(fakten: pd.DataFrame | None, stichtag) -> dict | None:
+    """Ersatz-Aktienzahl für den Marktwert (Datenkorrektur Marktwert, Jakob 13.11.2026): jüngste gewichtete Basic-Zahl
+    (Begriff mit Rang 0), wie am Stichtag bekannt (ab dem Tag nach `filed`). Jüngstes Periodenende, bei gleichem Ende die
+    kürzeste Periode (Quartal vor Jahr), davon die Erstmeldung. Rückgabe wert, filed, ende, form oder None.
+    Messtag für die Split-Basis ist `filed`: ASC 260 stellt die Zahl rückwirkend auf alle Splits bis zur Einreichung um."""
+    from tradingbot.backtest.tresor import begrenze
+
+    if fakten is None or len(fakten) == 0:
+        return None
+    f = begrenze(fakten, "filed")
+    f = f[(f["rang"] == 0) & (f["filed"] + pd.Timedelta(days=1) <= pd.Timestamp(stichtag))]
+    if f.empty:
+        return None
+    f = f[f["ende"] == f["ende"].max()]
+    f = f.assign(_dauer=(f["ende"] - f["start"]).dt.days)
+    zeile = _erstmeldung(f[f["_dauer"] == f["_dauer"].min()])
+    return {"wert": float(zeile["wert"]), "filed": zeile["filed"], "ende": zeile["ende"], "form": zeile["form"]}
 
 
 def split_faktor(splits: pd.Series | None, nach, bis) -> float:
@@ -158,3 +180,11 @@ def signal_alt_neu(t: pd.DataFrame, eq: dict | None) -> tuple[int | None, int | 
     if eq and eq.get("wert_t") is not None and eq.get("wert_vj") is not None:
         return alt, int(eq["wert_t"] <= eq["wert_vj"])
     return alt, alt
+
+
+def marktwert_korrektur_aktiv(tag, konfig: dict | None = None) -> bool:
+    """Gilt die Datenkorrektur Marktwert im Betrieb am Tag `tag`? Ab `marktwert_korrektur.ab` (04.01.2027, Jakob 13.11.2026)."""
+    from tradingbot.konfiguration import lade_konfiguration
+
+    ab = ((konfig or lade_konfiguration("fundamental")).get("marktwert_korrektur") or {}).get("ab")
+    return ab is not None and pd.Timestamp(tag).normalize() >= pd.Timestamp(str(ab))

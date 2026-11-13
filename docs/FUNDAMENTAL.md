@@ -360,3 +360,46 @@ Unternehmen gehören.
 - **Treffer:** K1 und (K2 oder K3). Gemeldet werden alle Treffer mit Abgangsgrund, Kurssprung, heutigem Inhaber des
   Tickers und letztem eigenen Periodenbericht (10-K/10-Q) der CIK als Zusatzangaben. Korrigiert wird erst nach Jakobs
   Prüfung der Liste.
+
+### Musterprüfung: Ergebnis und Entscheidung (Jakob 13.11.2026)
+
+14 Treffer (`docs/berichte/2026-11-13_reihen_nach_indexabgang.md`). **Regel:** Korrigiert wird nur, wo die Reihe nach dem
+Ende nicht mehr dem entspricht, was der Aktionär besaß (Zuordnungsfehler, wiederverwendeter Ticker wie DD). Echt
+weiterlaufende Reihen bleiben: Firmen, die weiter 10-K/10-Q melden, und XRX (Holdingwechsel 1:1).
+
+- **XEC (Cimarex):** Der Sprung von −38,2 % am 09.03.2020 ist der Ölpreissturz (am selben Tag DVN −37,4 %, PXD −36,9 %,
+  HES −33,7 %, MRO −46,9 %, OXY −53,4 %), kein Umtausch. Die Fusion mit Cabot (Coterra) kam erst am 01.10.2021, mit
+  4,0146 Coterra je Aktie (8-K vom 01.10.2021, Item 2.01, accn 0001104659-21-122062). Die Reihe endet dort ohne Sprung:
+  letzter Kurs 87,20 USD gegen 4,0146 × 21,76 USD = 87,36 USD (Coterra am 30.09.2021). Keine Korrektur.
+- **CSC, TGNA:** Abspaltungen in nicht bereinigten Tiingo-Reihen, eigene Prüfung in Teil c mit vorab festgelegten Kriterien.
+- **SIVB:** Prüfung der Insolvenzfälle siehe unten; Ergebnis an Jakob, noch nichts geändert.
+
+## Datenkorrektur Marktwert, Teil b: umgesetzt (13.11.2026)
+
+Plan von Jakob freigegeben am 13.11.2026. Code: `daten/kapitalmassnahmen_historie.py` (Einordnung, Korrekturfaktor),
+`engines/fundamental/multiples.marktwert_korrigiert`, `engines/fundamental/aktienzahl.ersatz_aktienzahl`, Tests
+`tests/engines/test_marktwert_korrektur.py`.
+
+    MW_T = C_T · A_d · Π_{e>d} f_e · K(d, T),     K(d, T) = Π_{d<e≤T} s_e / f_e
+
+- **Abspaltung nicht als Split:** f_e = Faktor der Kursreihe, s_e = Split-Faktor der Aktienzahl laut
+  `config/kapitalmassnahmen_historie.yaml` (Abspaltung 1). Ereignisse nach T bleiben wie bisher (der Kurs bei T ist um sie
+  bereinigt). Die Fortschreibung des Streubesitzes (Plausibilitätsprüfung, Index-Nachbau) bekommt denselben Faktor K(e, T).
+- **Ungeklärte Ereignisse** (unklar, nicht_zugehoerig, nicht in der Liste): Kursfaktor bleibt, markiert (Entscheidung Jakob
+  13.11.2026). Im Betrieb ordnet die Bewertung neue und ungeprüft unklare Ereignisse über das SEC-Verhältnis ein (gewichtete
+  Aktienzahl mit Quartalen); was offen bleibt, meldet sie („Marktwert mit ungeklärter Kapitalmaßnahme“). Quittierte Splits
+  „Quelle: Flex“ gelten als Split und haben Vorrang.
+- **Ersatz-Aktienzahl:** Deckblatt-Zahl älter als 15 Monate (nach `filed`, gegen T) oder keine vorhanden → jüngste gewichtete
+  Basic-Zahl (kürzeste Periode, Erstmeldung, bekannt ab dem Tag nach `filed`), Messtag `filed`, markiert „Ersatz“. Ist auch
+  sie älter als 15 Monate: kein Marktwert. `config/fundamental.yaml`, `marktwert_korrektur.aktien_max_alter_monate`.
+- **Kursreihe E. I. du Pont:** `config/universum_korrekturen.yaml`, `kursreihe_ende` (CIK 30554 bis 31.08.2017) und
+  Delisting-Eintrag „Übernahme“ nur für CIK 30554 (Einträge mit `cik` gelten nur für diese Firma). Die Kappung gilt ab
+  diesem Stand in allen Läufen. Hinweis: Das Kursniveau der Reihe bleibt um die späteren DowDuPont-Ereignisse skaliert
+  (2016 rund 406 statt rund 67 USD); Renditen stimmen, der Marktwert 2016/17 bleibt wie bisher unplausibel und fehlt.
+- **Schalter:** Backtest `tools/auswertung_scores.py --marktwert-korrektur` (Cache-Schlüssel mit Zusatz „_marktwert“,
+  Vergleichsspalten `marktwert_alt`, `ep_alt`, `ebit_ev_alt`, Quelle, Faktor, ungeklärte Ereignisse);
+  Index-Nachbau `baue_nachbau(..., marktwert_korrektur=True)`. Betrieb ab 04.01.2027 (`marktwert_korrektur.ab`); bis dahin
+  rechnet die Bewertung beide Werte (`marktwert_alt_usd`, `marktwert_neu_usd`) und zeigt sie.
+- **Stichprobe (Backtest-Daten):** BAX 03.10.2016 bisher ohne Marktwert (Streubesitz 183 %, Abspaltung Baxalta 2015 als
+  Split), korrigiert 25,9 Mrd. USD; CMCSA mit Ersatz-Aktienzahl 150,1 statt 128,0 Mrd. USD (2016) und 189,7 statt
+  172,2 Mrd. USD (2019); HON 2016 Faktor 0,995 (Abspaltung AdvanSix); LDOS unverändert (kombiniert 1:4 vor 2016).

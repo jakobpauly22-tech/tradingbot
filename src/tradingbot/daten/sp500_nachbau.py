@@ -50,6 +50,13 @@ class Firmendaten:
     sic: dict = field(default_factory=dict)
 
 
+def kursreihen_ende() -> dict:
+    """Gekappte Kursreihen je CIK (config/universum_korrekturen.yaml, `kursreihe_ende`): letzter gültiger Tag."""
+    from tradingbot.konfiguration import lade_konfiguration
+
+    return {int(e["cik"]): pd.Timestamp(str(e["letzter_tag"])) for e in lade_konfiguration("universum_korrekturen").get("kursreihe_ende", []) or []}
+
+
 def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historien: dict, *, von=VORLAUF, bis=ENDE,
                      mitglied_ab=START, tiingo=None) -> Firmendaten:
     """Kurse, Streubesitz (roh und geprüft) und SIC-Historie je Firma; Fehlerschwelle 5 % beim Laden der Kurse."""
@@ -60,6 +67,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     mitglied_ab, bis = pd.Timestamp(mitglied_ab), pd.Timestamp(bis)
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
+    kappung = kursreihen_ende()
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -75,6 +83,8 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             if k is None or k.empty:
                 raise LookupError("Kurse nicht im Cache")
             k = k.sort_index().loc[pd.Timestamp(von):bis]
+            if firma in kappung:                               # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
+                k = k.loc[:kappung[firma]]
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{z['ticker']}: {type(f).__name__}"
@@ -124,8 +134,9 @@ def finanzwert_maske(sic: dict, tage: pd.DatetimeIndex, firmen: list) -> pd.Data
     return maske
 
 
-def baue_nachbau(daten: Firmendaten, *, ohne_finanzwerte: bool = False, von=START, bis=ENDE) -> dict:
-    """Kettenindex (USD) nach index_nachbau.marktwert_index; Ergebnis: nachbau (index, abdeckung), tage, mitglied."""
+def baue_nachbau(daten: Firmendaten, *, ohne_finanzwerte: bool = False, von=START, bis=ENDE, marktwert_korrektur: bool = False) -> dict:
+    """Kettenindex (USD) nach index_nachbau.marktwert_index; Ergebnis: nachbau (index, abdeckung), tage, mitglied.
+    `marktwert_korrektur`: Fortschreibung des Streubesitzes ohne Abspaltungen (Datenkorrektur Marktwert, Jakob 13.11.2026)."""
     firmen = sorted(daten.kurse, key=str)
     schluss_voll = pd.DataFrame({f: (daten.kurse[f]["close"] if daten.kurse[f] is not None else pd.Series(dtype=float)) for f in firmen})
     tage = handelstage(schluss_voll, von, bis)
@@ -139,7 +150,14 @@ def baue_nachbau(daten: Firmendaten, *, ohne_finanzwerte: bool = False, von=STAR
         mitglied[firma] |= (tage >= anfang) & (tage < schluss_tag)
     if ohne_finanzwerte:
         mitglied &= ~finanzwert_maske(daten.sic, tage, firmen)
-    marktwerte = marktwerte_aus_streubesitz(schluss_voll, daten.streubesitz_gueltig).reindex(tage)
+    korrektur_je_firma = None
+    if marktwert_korrektur:
+        from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
+
+        ereignisse = lade_ereignisse()
+        korrektur_je_firma = {f: (daten.kurse[f]["split"], ereignisse.get(f)) for f in firmen
+                              if daten.kurse[f] is not None and "split" in daten.kurse[f].columns and not isinstance(f, str)}
+    marktwerte = marktwerte_aus_streubesitz(schluss_voll, daten.streubesitz_gueltig, korrektur_je_firma).reindex(tage)
     nachbau = marktwert_index(renditen.where(mitglied), marktwerte, mitglied)
     return {"nachbau": nachbau, "tage": tage, "mitglied": mitglied}
 

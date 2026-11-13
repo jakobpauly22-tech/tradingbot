@@ -82,3 +82,10 @@ vorgaenger:
 delisting:
   - {ticker: TFCF,  grund: uebernahme, quelle: "Disney übernahm 21st Century Fox (Abschluss 20.03.2019)"}
   - {ticker: TFCFA, grund: uebernahme, quelle: "Disney übernahm 21st Century Fox (Abschluss 20.03.2019)"}
+  # Mit `cik`: gilt nur für diese Firma (der Ticker DD gehört danach DowDuPont/DuPont de Nemours, CIK 1666700).
+  - {ticker: DD, cik: 30554, grund: uebernahme, quelle: "Fusion in DowDuPont, 1,2820 DowDuPont je Aktie (8-K12B vom 01.09.2017); dritte Datenkorrektur, Jakob 13.11.2026"}
+
+# Kursreihen, die nach dem Ende der Firma mit einem anderen Unternehmen weiterlaufen (Zuordnungsfehler, wiederverwendeter
+# Ticker): Reihe nach `letzter_tag` gekappt, danach gilt die Delisting-Regel (docs/FUNDAMENTAL.md, dritte Datenkorrektur).
+kursreihe_ende:
+  - {cik: 30554, ticker: DD, letzter_tag: 2017-08-31, quelle: "E. I. du Pont: Umtausch in DowDuPont zum 01.09.2017 (8-K12B vom 01.09.2017); Tiingo „DD“ läuft als DowDuPont weiter. Jakob 13.11.2026"}

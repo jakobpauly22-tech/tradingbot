@@ -47,7 +47,8 @@ def lade_kurse_und_delistings(firmen, start, ende, konfig: dict) -> tuple[dict, 
         grund, fehler = "unbekannt", None
         try:
             subs, _ = client.submissions(int(firma))
-            grund = delisting_grund_mit_korrektur(zeile["ticker"], einreichungen(subs), letzter, zeile.get("grund_abgang"), korrekturen)[0]
+            grund = delisting_grund_mit_korrektur(zeile["ticker"], einreichungen(subs), letzter, zeile.get("grund_abgang"), korrekturen,
+                                                 cik=int(firma))[0]
         except Exception as f:  # Grund bleibt „unbekannt“ (−30 %), zählt gegen die Schwelle
             fehler = f"{zeile['ticker']}: {type(f).__name__}"
         schwelle.zaehle(fehler)

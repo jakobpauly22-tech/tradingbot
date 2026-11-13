@@ -32,7 +32,7 @@ def sic_division(sic: int | None) -> str | None:
 
 
 def marktwert_am(stichtag, schluss: pd.Series, aktien: pd.Series, streubesitz: pd.DataFrame | None) -> tuple[float | None, str | None]:
-    """Marktwert EK am Stichtag und ggf. Grund, warum keiner vorliegt.
+    """Marktwert EK am Stichtag und ggf. Grund, warum keiner vorliegt (bisherige Rechnung, ohne Datenkorrektur Marktwert).
 
     `schluss`: splitbereinigte Schlusskurse; `aktien`: Aktienzahl splitbereinigt, Index = bekannt ab;
     `streubesitz`: geprüfte Werte (Spalten wert, filed; Index = Messtag) oder None.
@@ -45,6 +45,14 @@ def marktwert_am(stichtag, schluss: pd.Series, aktien: pd.Series, streubesitz: p
     if bekannt.empty:
         return None, "keine Aktienzahl bekannt"
     mw = float(kurse.iloc[-1]) * float(bekannt.iloc[-1])
+    grund = _unplausibel(mw, tag, kurse, schluss, streubesitz)
+    return (None, grund) if grund else (mw, None)
+
+
+def _unplausibel(mw: float, tag, kurse: pd.Series, schluss: pd.Series, streubesitz: pd.DataFrame | None,
+                 fortschreibung=None) -> str | None:
+    """Plausibilitätsprüfung gegen den Streubesitz (30–130 % des Marktwerts), ohne Streubesitz 0,5 Mrd. bis 10 Bio. USD.
+    `fortschreibung(e)`: Korrekturfaktor K(e, Stichtag) für die Fortschreibung F_e · C_T / C_e (None = 1)."""
     if streubesitz is not None and len(streubesitz):
         sb = streubesitz[(streubesitz["filed"] + pd.Timedelta(days=1)) <= tag]
         if len(sb):
@@ -52,13 +60,68 @@ def marktwert_am(stichtag, schluss: pd.Series, aktien: pd.Series, streubesitz: p
             vorher = schluss.loc[:e].dropna()
             if len(vorher):
                 fort = float(sb["wert"].iloc[-1]) * float(kurse.iloc[-1]) / float(vorher.iloc[-1])
+                if fortschreibung is not None:
+                    fort *= fortschreibung(e)
                 anteil = fort / mw if mw > 0 else float("inf")
                 if not STREUBESITZ_ANTEIL_MIN <= anteil <= STREUBESITZ_ANTEIL_MAX:
-                    return None, f"Streubesitz {anteil:.0%} des Marktwerts (Aktienzahl unplausibel)"
-                return mw, None
+                    return f"Streubesitz {anteil:.0%} des Marktwerts (Aktienzahl unplausibel)"
+                return None
     if not STREUBESITZ_MIN <= mw <= STREUBESITZ_MAX:
-        return None, f"Marktwert {mw/1e9:.2f} Mrd. USD unplausibel"
-    return mw, None
+        return f"Marktwert {mw/1e9:.2f} Mrd. USD unplausibel"
+    return None
+
+
+def marktwert_korrigiert(stichtag, kurse: pd.DataFrame, aktien: pd.DataFrame, streubesitz: pd.DataFrame | None, *,
+                         ereignisse: pd.DataFrame | None = None, ersatz_fakten: pd.DataFrame | None = None,
+                         max_alter_monate: int = 15, automatisch_einordnen: bool = False) -> dict:
+    """Marktwert EK mit der Datenkorrektur Marktwert (Jakob 13.11.2026, docs/FUNDAMENTAL.md, Teil b).
+
+        MW_T = C_T · A_d · Π_{e>d} f_e · K(d, T)        (daten/kapitalmassnahmen_historie.py)
+
+    C_T: letzter splitbereinigter Schlusskurs bis T; A_d: Aktienzahl vom Messtag d; f_e: Faktoren der Kursreihe;
+    K(d, T) = Π_{d<e≤T} s_e / f_e nimmt Abspaltungen zwischen d und T aus der Aktienzahl heraus.
+    Aktienzahl: Deckblatt (`aktien`: Spalten wert, filed; Index = Messtag), wenn höchstens `max_alter_monate` alt (nach
+    `filed`, gegen T); sonst Ersatz = jüngste gewichtete Basic-Zahl (aktienzahl.ersatz_aktienzahl, Messtag = filed),
+    markiert „Ersatz“; ist auch der Ersatz zu alt oder fehlt er: kein Marktwert. Plausibilität gegen den Streubesitz wie
+    bisher, dessen Fortschreibung ebenfalls mit K(e, T). Ungeklärte Ereignisse behalten den Kursfaktor und werden gemeldet.
+    `automatisch_einordnen` (Betrieb): Ereignisse, die nicht in der Liste stehen, über das SEC-Verhältnis einordnen.
+    Rückgabe: marktwert, grund, quelle (Deckblatt | Ersatz), aktien_filed, korrektur (K), ungeklaert (Liste).
+    """
+    from tradingbot.daten.kapitalmassnahmen_historie import korrektur
+    from tradingbot.engines.fundamental.aktienzahl import ersatz_aktienzahl
+
+    tag = pd.Timestamp(stichtag)
+    ergebnis = {"marktwert": None, "grund": None, "quelle": None, "aktien_filed": None, "korrektur": 1.0, "ungeklaert": []}
+    schluss = kurse["close"]
+    kurse_bis = schluss.loc[:tag].dropna()
+    if kurse_bis.empty:
+        return {**ergebnis, "grund": "kein Kurs bis zum Stichtag"}
+    splits = kurse["split"] if "split" in kurse.columns else None
+    grenze = tag - pd.DateOffset(months=max_alter_monate)
+    bekannt = aktien[(aktien["filed"] + pd.Timedelta(days=1)) <= tag].dropna(subset=["wert"]) if aktien is not None and len(aktien) else None
+    wahl = None
+    if bekannt is not None and len(bekannt):
+        letzte = bekannt.sort_values("filed").iloc[-1]
+        if letzte["filed"] >= grenze:
+            wahl = (float(letzte["wert"]), pd.Timestamp(letzte.name), letzte["filed"], "Deckblatt")
+    if wahl is None:
+        e = ersatz_aktienzahl(ersatz_fakten, tag)
+        if e is not None and e["filed"] >= grenze:
+            wahl = (e["wert"], e["filed"], e["filed"], f"Ersatz (Basic, Periode bis {e['ende'].date()})")
+        elif bekannt is not None and len(bekannt):
+            return {**ergebnis, "grund": f"Aktienzahl älter als {max_alter_monate} Monate, kein aktueller Ersatz"}
+        else:
+            return {**ergebnis, "grund": "keine Aktienzahl bekannt" + ("" if e is None else f", Ersatz älter als {max_alter_monate} Monate")}
+    wert, messtag, filed, quelle = wahl
+    faktoren = splits[splits.fillna(0) > 0] if splits is not None else pd.Series(dtype=float)
+    alle_nach = float(faktoren[faktoren.index > messtag].prod()) if len(faktoren) else 1.0
+    fakten = ersatz_fakten if automatisch_einordnen else None
+    k, ungeklaert = korrektur(splits, ereignisse, messtag, tag, fakten=fakten)
+    mw = float(kurse_bis.iloc[-1]) * wert * alle_nach * k
+    grund = _unplausibel(mw, tag, kurse_bis, schluss, streubesitz,
+                         fortschreibung=lambda e: korrektur(splits, ereignisse, e, tag, fakten=fakten)[0])
+    return {"marktwert": None if grund else mw, "grund": grund, "quelle": quelle, "aktien_filed": filed, "korrektur": k,
+            "ungeklaert": ungeklaert}
 
 
 def multiples(t: pd.DataFrame, marktwert_ek: float | None) -> dict:

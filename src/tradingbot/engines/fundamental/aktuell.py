@@ -21,12 +21,14 @@ from tradingbot.daten.kurse import lade_kurse
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
-from tradingbot.engines.fundamental.aktienzahl import korrektur_aktiv, lade_aktienfakten, signal_alt_neu, vergleich_fuer_abschluesse
+from tradingbot.daten.kapitalmassnahmen_historie import ereignisse_mit_flex, lade_ereignisse
+from tradingbot.engines.fundamental.aktienzahl import (korrektur_aktiv, lade_aktienfakten, marktwert_korrektur_aktiv, signal_alt_neu,
+                                                       vergleich_fuer_abschluesse)
 from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
 from tradingbot.engines.fundamental.filter import piotroski_fuer_filter
 from tradingbot.engines.fundamental.gesamtscore import gesamtscore
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
-from tradingbot.engines.fundamental.multiples import marktwert_am, multiples
+from tradingbot.engines.fundamental.multiples import marktwert_am, marktwert_korrigiert, multiples
 from tradingbot.engines.fundamental.scores import _w, accruals_quote, altman, beneish, piotroski
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
@@ -92,6 +94,9 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
             symbol_je_firma.setdefault(f, status.loc[nr, "symbol"])
     zeilen = []
     eq_korrektur = korrektur_aktiv(tag, konfig)          # Datenkorrektur EQ_OFFER ab 04.01.2027 (Jakob 13.11.2026)
+    mw_korrektur = marktwert_korrektur_aktiv(tag, konfig)  # Datenkorrektur Marktwert ab 04.01.2027 (Jakob 13.11.2026)
+    max_alter = (konfig.get("marktwert_korrektur") or {}).get("aktien_max_alter_monate", 15)
+    ereignisse = lade_ereignisse()
     schwelle = Fehlerschwelle("Betrieb: Fundamental-Bewertung je Firma")
     for firma in sorted({firmen_schluessel(z, nr) for nr, z in mitglieder.iterrows()}):
         if isinstance(firma, str) or daten.kurse.get(firma) is None:
@@ -114,7 +119,16 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
             if t.empty or info["veraltet"]:
                 schwelle.zaehle(None)
                 continue
-            mw, _ = marktwert_am(tag, kurse["close"], aktien, daten.streubesitz_gueltig.get(firma))
+            mw_alt, _ = marktwert_am(tag, kurse["close"], aktien, daten.streubesitz_gueltig.get(firma))
+            # Marktwert: beide Rechnungen immer (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
+            mk = marktwert_korrigiert(tag, kurse, a[["wert", "filed"]] if len(a) else None, daten.streubesitz_gueltig.get(firma),
+                                      ereignisse=ereignisse_mit_flex(ereignisse.get(firma), kurse, (splits_flex or {}).get(symbol_je_firma.get(firma))),
+                                      ersatz_fakten=lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True),
+                                      max_alter_monate=max_alter, automatisch_einordnen=True)
+            mw = mk["marktwert"] if mw_korrektur else mw_alt
+            for u in mk["ungeklaert"]:
+                meldungen.append(f"Marktwert mit ungeklärter Kapitalmaßnahme: {symbol_je_firma.get(firma) or firma} {u['datum']} "
+                                 f"Faktor {u['faktor_kursreihe']:g} ({u['art']}), Kursfaktor bleibt")
             industrie = industrie_von <= sic <= industrie_bis
             # EQ_OFFER: beide Wege immer rechnen (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
             eq = vergleich_fuer_abschluesse(t, lade_aktienfakten(ciks_der_zeile(zeile), cache=cache), tag, kurse["split"])
@@ -135,6 +149,9 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                            "eq_offer_alt": eq_alt, "eq_offer_neu": eq_neu, "eq_offer_quelle": (eq or {}).get("quelle"),
                            "eq_offer_split_faktor": (eq or {}).get("split_faktor"), "eq_offer_korrektur_aktiv": eq_korrektur,
                            "piotroski_filter_korrigiert": piotroski_fuer_filter(p_korrigiert),
+                           "marktwert_alt_usd": mw_alt, "marktwert_neu_usd": mk["marktwert"], "marktwert_quelle": mk["quelle"],
+                           "marktwert_grund_neu": mk["grund"], "marktwert_korrekturfaktor": mk["korrektur"],
+                           "marktwert_ungeklaert": len(mk["ungeklaert"]) > 0, "marktwert_korrektur_aktiv": mw_korrektur,
                            "bekannt_ab": bekannt.min() if len(bekannt) else None})
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{firma}: {type(f).__name__} {str(f)[:60]}"

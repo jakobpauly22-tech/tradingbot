@@ -21,7 +21,8 @@ from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, la
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.engines.fundamental.aktienzahl import lade_aktienfakten, signal_alt_neu, vergleich_fuer_abschluesse
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
-from tradingbot.engines.fundamental.multiples import marktwert_am, multiples, perzentil_raenge
+from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
+from tradingbot.engines.fundamental.multiples import marktwert_am, marktwert_korrigiert, multiples, perzentil_raenge
 from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
 from tradingbot.engines.fundamental.scores import _w, accruals_quote, altman, beneish, piotroski
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
@@ -36,7 +37,11 @@ def main(argv=None) -> int:
     a.add_argument("--eq-offer-splitbereinigt", action="store_true",
                    help="Datenkorrektur Piotroski EQ_OFFER (Jakob 13.11.2026): Ergebnis in Cache „fundamental/scores_eq_offer“ "
                         "mit Vergleichsspalten zur bisherigen Rechnung; der Cache „fundamental/scores“ bleibt unberührt")
-    korrektur = a.parse_args(argv).eq_offer_splitbereinigt
+    a.add_argument("--marktwert-korrektur", action="store_true",
+                   help="Datenkorrektur Marktwert (Jakob 13.11.2026): Abspaltungen nicht als Split, Ersatz-Aktienzahl; "
+                        "Vergleichsspalten zur bisherigen Rechnung, eigener Cache-Schlüssel (Zusatz „_marktwert“)")
+    argumente = a.parse_args(argv)
+    korrektur, mw_korrektur = argumente.eq_offer_splitbereinigt, argumente.marktwert_korrektur
     konfig = lade_konfiguration("fundamental")
     kennzahlen, filt, mult = konfig["kennzahlen"], konfig["filter"], konfig["multiples"]
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
@@ -49,7 +54,9 @@ def main(argv=None) -> int:
 
     # je Firma einmal: Jahreswerte und Aktienzahl
     schwelle = Fehlerschwelle("Scores: Jahreswerte je Firma")
-    werte, aktien, aktienfakten = {}, {}, {}
+    werte, aktien, aktienfakten, aktien_roh, ersatz_fakten = {}, {}, {}, {}, {}
+    ereignisse = lade_ereignisse() if mw_korrektur else {}
+    max_alter = konfig.get("marktwert_korrektur", {}).get("aktien_max_alter_monate", 15)
     for firma, kurse in daten.kurse.items():
         if isinstance(firma, str) or kurse is None:
             continue
@@ -61,6 +68,10 @@ def main(argv=None) -> int:
             if korrektur:
                 aktienfakten[firma] = lade_aktienfakten(ciks_der_zeile(zeile), cache=cache)
             a = kennzahl_jahreswerte(erst, kennzahlen["aktien_ausstehend"], "2100-01-01") if len(erst) else pd.DataFrame()
+            if mw_korrektur:
+                ersatz_fakten[firma] = lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True)
+                if len(a):
+                    aktien_roh[firma] = a[["wert", "filed"]]
             if len(a):
                 bereinigt = aktien_splitbereinigt(a["wert"], kurse["split"])
                 aktien[firma] = pd.Series(bereinigt.to_numpy(), index=(a["filed"] + pd.Timedelta(days=1)).to_numpy()).sort_index()
@@ -86,6 +97,14 @@ def main(argv=None) -> int:
                 continue
             mw, mw_grund = marktwert_am(tag, daten.kurse[firma]["close"], aktien.get(firma, pd.Series(dtype=float)),
                                         daten.streubesitz_gueltig.get(firma))
+            if mw_korrektur:                         # Datenkorrektur Marktwert; bisherige Werte als Vergleichsspalten
+                mk = marktwert_korrigiert(tag, daten.kurse[firma], aktien_roh.get(firma), daten.streubesitz_gueltig.get(firma),
+                                          ereignisse=ereignisse.get(firma), ersatz_fakten=ersatz_fakten.get(firma), max_alter_monate=max_alter)
+                z.update({"marktwert_alt": mw, "marktwert_grund_alt": mw_grund, "marktwert_quelle": mk["quelle"],
+                          "marktwert_korrekturfaktor": mk["korrektur"], "marktwert_aktien_filed": mk["aktien_filed"],
+                          "marktwert_ungeklaert": "; ".join(f"{u['datum']} {u['faktor_kursreihe']:g} ({u['art']})" for u in mk["ungeklaert"]),
+                          "ep_alt": multiples(t, mw)["ep"], "ebit_ev_alt": multiples(t, mw)["ebit_ev"]})
+                mw, mw_grund = mk["marktwert"], mk["grund"]
             industrie = industrie_von <= sic <= industrie_bis
             eq = (vergleich_fuer_abschluesse(t, aktienfakten.get(firma), tag, daten.kurse[firma]["split"]) if korrektur else None)
             p, a, b, acc, m = (piotroski(t, eq_offer=eq), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t),
@@ -123,10 +142,11 @@ def main(argv=None) -> int:
         raenge.append(perzentil_raenge(gruppe, min_firmen=mult["gruppe_min_firmen"], kappung=tuple(mult["kappung_perzentile"])))
     tabelle = tabelle.merge(pd.concat(raenge)[["stichtag", "firma", "gruppe_ep", "rang_ep", "gruppe_ebit_ev", "rang_ebit_ev"]],
                             on=["stichtag", "firma"], how="left")
-    schluessel = "scores_eq_offer" if korrektur else "scores"
+    schluessel = "scores" + ("_eq_offer" if korrektur else "") + ("_marktwert" if mw_korrektur else "")
     cache.schreiben("fundamental", schluessel, tabelle.astype({"firma": "int64"}),
                     {"stichtage": len(stichtage), "zeitraum": list(ABNAHME_ZEITRAUM),
-                     **({"datenkorrektur": "Piotroski EQ_OFFER splitbereinigt (Jakob 13.11.2026)"} if korrektur else {})})
+                     "datenkorrekturen": (["Piotroski EQ_OFFER splitbereinigt (Jakob 13.11.2026)"] if korrektur else [])
+                     + (["Marktwert: Abspaltungen, Ersatz-Aktienzahl, Kursreihe E. I. du Pont gekappt (Jakob 13.11.2026)"] if mw_korrektur else [])})
 
     # --- Bericht ------------------------------------------------------------------------------
     b = tabelle.assign(jahr=tabelle["stichtag"].dt.year)

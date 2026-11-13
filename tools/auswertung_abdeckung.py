@@ -110,7 +110,7 @@ def main(argumente) -> None:
         try:
             subs, _ = client.submissions(int(zeile["cik"]))
             gruende[r["index"]] = delisting_grund_mit_korrektur(zeile["ticker"], einreichungen(subs), r["letzter_kurs"],
-                                                                zeile["grund_abgang"], korrekturen)[0]
+                                                                zeile["grund_abgang"], korrekturen, cik=int(zeile["cik"]))[0]
             schwelle_delisting.zaehle(None)
         except Exception as fehler:  # Grund bleibt „unbekannt“ (−30 %), Fehler zählt gegen die Schwelle
             schwelle_delisting.zaehle(f"{zeile['ticker']}: {type(fehler).__name__}")
