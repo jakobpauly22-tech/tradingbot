@@ -499,3 +499,47 @@ ebenso Allgemeines. Ein Bericht des abgebrochenen Laufs existiert nicht.
   10 Treffern wie freigegeben.
 - **Technik:** Das Werkzeug verarbeitet die 8-K einzeln und cacht den Text jedes 8-K komprimiert auf der Festplatte
   (`daten/cache/sec/volltext_8k_text/`), damit eine spätere Änderung der Suchwörter keinen neuen Abruf braucht.
+
+### Teil c1: Methodenwechsel nach dem dritten Lauf – Obergrenze zuerst (Jakob 15.11.2026, festgehalten vor der Rechnung)
+
+Festgehalten am 15.11.2026 um 09:10, **vor** der Rechnung.
+
+**Begründung – dritter Lauf gescheitert** (Bericht `docs/berichte/2026-11-13_abspaltungen_tiingo_3.md`, bleibt stehen):
+Die Stichprobe hat 0 von 10 echten Abspaltungen am Treffertag; die Treffer kommen aus Anhängen (Anleihebedingungen,
+Abfindungsregeln, Definitionen) oder aus Erwähnungen früherer bzw. künftiger Abspaltungen. Die Probe TWX 06.06.2014 ist
+fälschlich Treffer (die Zwei-Tage-Regel zählt den ersten Tag allein). Die Trefferquote ist gut: alle Teil-a-Fälle
+einschließlich der kleinsten (OXY 25.02.2016) und CSC 30.11.2015 werden gefunden. **Die Suchwörter werden nicht weiter
+geändert.** Statt die Treffer einzeln zu prüfen, wird zuerst die größtmögliche Wirkung gemessen.
+
+**a) Obergrenze**
+
+- **Kandidaten:** nur die Ereignisse des dritten Laufs (Treffer und „unklar“), aus dem Bericht gelesen; kein neuer
+  Suchlauf, keine neuen Abrufe.
+  - **Backtest A:** Ereignistage, an denen das Buch den Titel zum Vortagesschluss tatsächlich hielt und deren
+    Gesamtrendite (Tag oder Zwei-Tage-Fenster) −3 % oder schlechter ist.
+  - **Index-Nachbau:** Ereignistage mit Gesamtrendite −15 % oder schlechter innerhalb der Mitgliedschaft (die
+    Verlängerung bis zum nächsten Stichtag zählt nicht).
+- **Warum diese Menge für eine Obergrenze konservativ ist:** Die Trefferquote des dritten Laufs ist gut (alle in Teil a
+  per SEC bestätigten Abspaltungen am jeweiligen Tag gefunden, auch die kleinste); große Rückgänge ohne SEC-Beleg stehen
+  zusätzlich in „unklar“. Echte Abspaltungen sind damit in der Menge enthalten. Die vielen Fehltreffer aus S2 (normale
+  Kursrückgänge mit einem zufälligen „spin-off“ im 8-K) werden ebenfalls als Scheinverlust gezählt; sie vergrößern die
+  Grenze nur und können sie nie verkleinern.
+- **Rechnung:** Jeder Kandidatentag gilt als vollständiger Scheinverlust (Tagesrendite 0 statt des gemessenen Werts).
+  - Index-Nachbau: neu gebaut mit unveränderten Gewichten und Marktwerten, nur die Renditen dieser Tage auf 0; gemessen
+    die Differenz der annualisierten Rendite im Abnahmezeitraum 01.10.2016–31.12.2024; je Jahr und die drei Kriterien der
+    Gegenprobe nur zur Information.
+  - Backtest A: Bestand aus `trades.csv` der abgelegten Läufe `20261113T100231_fundamental_schatten_eq_offer`
+    (maßgeblich) und `…_eq_bisher` (Information); Tagesrendite des Buchs um Gewicht × Verlust angehoben; gemessen die
+    Differenz der CAGR nach Kosten, vor Steuern. Näherung ohne Neusimulation (ohne Kosten- und Steuerwirkung und ohne
+    geänderte Rebalancing-Entscheidungen).
+- **Schwelle:** vernachlässigbar, wenn **beide** Differenzen unter **0,05 Prozentpunkten p. a.** liegen. Dann wird das
+  Ergebnis dokumentiert und c1 geschlossen; sonst b).
+- **Zusatzregel Neulauf Teil c:** Der Neulauf kann andere Titel halten. Dieselbe Rechnung (dieselben Tage, dieselbe
+  Schwelle) wird am Bestand des Neulaufs wiederholt und im Bericht von Teil c ausgewiesen.
+- **Werkzeug:** `tools/obergrenze_abspaltungen_tiingo.py` (nur lesend), Bericht
+  `docs/berichte/2026-11-15_abspaltungen_obergrenze.md`.
+
+**b) Gezielte Prüfung (nur, wenn a) die Schwelle verfehlt):** Buch A nur Tage mit tatsächlichem Bestand und
+Gesamtrendite über das Zwei-Tage-Fenster −3 % oder schlechter; Index-Nachbau nur Tage −15 % oder schlechter während der
+Mitgliedschaft. Jeder Fall wird am Hauptdokument des 8-K (ohne Anhänge) bzw. an einer Pressemitteilung geprüft; die
+Liste mit Beleg geht an Jakob, bevor etwas korrigiert wird.
