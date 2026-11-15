@@ -219,7 +219,8 @@ Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit
   Datenlücken (Abschnitt 9b). Ein Test prüft die Git-Prüfsumme von `engines/regime/signale.py`. In der Konfiguration
   stehen keine Signal-Parameter.
 - **Buch:** 10.000 €, Art Skalierung, Rolle Core, Sammelfreigabe, höchstens 2 Orders je Tag, 100 % SPYI.DE oder Kasse zu
-  0 %. Das Senden ist zum Start gesperrt; Jakob schaltet nach Probelauf und erstem echten Vorschlag frei.
+  0 %. Das Senden war zum Start gesperrt; Jakob hat es am 15.11.2026 nach dem zweiten Probelauf freigeschaltet
+  (`senden_freigeschaltet: true`).
 - **Bewertung:** am letzten Xetra-Handelstag des Monats nach Börsenschluss; die Order gilt für den nächsten Handelstag.
   Ein verpasster Abend wird im nächsten Lauf nachgeholt, mit dem Wissensstand des Monatsendes (ALFRED).
 - **Start (Entscheidung 1):** Der erste Lauf protokolliert die Vorgeschichte ab Oktober 2012 (Kurse ab 2012, wie im
@@ -227,6 +228,8 @@ Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit
 - **Protokoll (Entscheidung 3):** Jede Monatsbewertung steht mit den vier Signalen, dem Rohzustand und dem Zustand mit
   Haltepflicht im Buchzustand des Journals. Für protokollierte Monate gilt das Protokoll. Weicht eine Neuberechnung ab
   (zum Beispiel geänderte Yahoo-Kurse), wird das einmal laut gemeldet, nichts wird übernommen, das Buch läuft weiter.
+- **Protokoll und Tresor (Jakob 15.11.2026):** Das Betriebsprotokoll enthält Zustände aus dem Tresorzeitraum (ab 2025).
+  Aus dem Protokoll wird keine Wertentwicklung für diesen Zeitraum ausgewertet; es dient nur dem Zustand des Buchs.
 - **Makrodaten:** FRED/ALFRED wird nur geladen, wenn eine Bewertung ansteht, und dann immer neu. Die Tabellen liegen im
   Betriebsbereich (`daten/betrieb/cache/makro`), getrennt vom Backtest-Cache. Ist FRED nicht erreichbar oder fehlt ein
   Signal, gibt es keinen neuen Zustand: Die Position bleibt, das Buch meldet es, der nächste Lauf holt nach.

@@ -65,7 +65,7 @@ buecher:
     max_orders_pro_tag: 2
     freigabe: sammel
     verkauf: {typ: limit, abschlag_vortagesschluss: 0.02}   # Limit = Vortagesschluss − 2 %; verfallen → nächster Abend erneut
-    senden_freigeschaltet: false          # Jakob schaltet nach Probelauf und erstem echten Vorschlag frei
+    senden_freigeschaltet: true           # 15.11.2026: freigeschaltet (Jakob, nach dem Probelauf mit erster Bewertung)
 
 ibkr:
   host: 127.0.0.1                      # nur lokal

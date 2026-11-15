@@ -199,7 +199,7 @@ def test_verkaufslimit_ist_eine_einstellung_des_buchs():
     assert all(verkaufslimit_abschlag(b, n) is None for n in b["buecher"] if n != "regime")
     r = b["buecher"]["regime"]
     assert (r["art"], r["budget_eur"], r["freigabe"], r["rolle"], r["instrument"]) == ("skalierung", 10000.0, "sammel", "core", "SPYI.DE")
-    assert r["senden_freigeschaltet"] is False                                    # Jakob schaltet nach dem Probelauf frei
+    assert r["senden_freigeschaltet"] is True                                     # von Jakob am 15.11.2026 freigeschaltet
 
 
 def test_risk_manager_verkauf_im_regime_nur_mit_limit_hoechstens_zwei_prozent(umgebung):
@@ -243,13 +243,13 @@ def test_tageslauf_start_kauf_dann_wechsel_verkauf_mit_limit_und_wiederholung(um
     j, rm = umgebung
     m, k = Makro(), kurse_attrappe()
     c = kursreihe("2026-12-02", fallend_ab="2026-11-10")
-    # 16.11.: Start, Risiko an → Kauf mit Limit; das Buch ist in der echten Konfiguration nicht freigebbar
+    # 16.11.: Start, Risiko an → Kauf mit Limit; ohne Freischaltung des Buchs nicht freigebbar
     e = lauf(j, rm, jetzt=abend(2026, 11, 16), regime_daten=daten(c, m))
     (bv, u), = _regime(e)
     assert u.frei and bv.vorschlag.richtung == 1 and bv.limit_order and e.regime["risiko_aus"] is False and e.regime["start"]
     assert e.regime["naechste_bewertung"] == pd.Timestamp("2026-11-30") and not any("regime" in s for s in e.sofort)
     assert any("nicht freigeschaltet" in x for x in freigeben_und_senden(j, [bv.vorschlag.id], BrokerAttrappe(), abend(2026, 11, 16), risk=rm,
-                                                                         kurse_laden=k))
+                                                                         kurse_laden=k, konfig_betrieb=betrieb_mit(True)))
     b = BrokerAttrappe()
     freigeben_und_senden(j, [bv.vorschlag.id], b, abend(2026, 11, 16), risk=rm, kurse_laden=k, konfig_betrieb=MIT_REGIME)
     assert [(a.buch, a.richtung, a.limit) for a in b.gesendet] == [("regime", 1, bv.limit_order)]
