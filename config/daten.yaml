@@ -45,6 +45,9 @@ fred:
     DGS10:    {revidiert: false, verzoegerung_tage: 1, beschreibung: "Rendite 10-jährige US-Staatsanleihen"}
     DGS3MO:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Rendite 3-monatige US-Staatsanleihen"}
     T10Y2Y:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Zinsstruktur 10 Jahre minus 2 Jahre"}
+    # Regime-Engine (docs/REGIME.md, 15.11.2026): Marktreihen, bei FRED nicht nachträglich geändert (Stände 2014/2019 gegen heute geprüft)
+    T10Y3M:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Zinsstruktur 10 Jahre minus 3 Monate"}
+    BAA10Y:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "Kreditaufschlag Moody's Baa minus 10-jährige US-Staatsanleihen"}
     VIXCLS:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "CBOE-Volatilitätsindex VIX"}
     ECBDFR:   {revidiert: false, verzoegerung_tage: 1, beschreibung: "EZB-Einlagesatz"}
     CPIAUCSL: {revidiert: true, beschreibung: "US-Verbraucherpreisindex, saisonbereinigt"}

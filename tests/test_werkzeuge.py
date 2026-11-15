@@ -199,3 +199,28 @@ def test_scores_marktwert_wahl_rueckfall_ohne_rohkurs_bis_zum_stichtag():
         3.4e10, None, "Rohkurs erst nach dem Stichtag (Teil b)")
     assert w.marktwert_wahl({"marktwert": 5.4e10, "grund": None}, 1.06e10, None) == (5.4e10, None, "roh")
     assert w.marktwert_wahl({"marktwert": None, "grund": "Streubesitz 16% des Marktwerts"}, 1.06e10, None)[0] is None
+
+
+def _geldmarkt(tage, zins_pa=0.0):
+    return pd.Series(100 * (1 + zins_pa / 365) ** np.arange(len(tage)), index=tage)
+
+
+def test_geldmarkt_etf_kriterien_aus_regime_md():
+    w = _werkzeug("pruefe_regime_daten")
+    tage = pd.bdate_range("2012-01-02", "2013-12-31")
+    satz = pd.Series([0.0], index=[pd.Timestamp("2011-06-01")])
+    assert w.pruefe_geldmarkt_etf(_geldmarkt(tage), tage, satz)["bestanden"]
+
+    sprung = _geldmarkt(tage)
+    sprung.iloc[300] *= 1.005                                   # ein Ausreißertag: +0,5 % und zurück
+    e = w.pruefe_geldmarkt_etf(sprung, tage, satz)
+    assert not e["bestanden"] and e["kriterien"] == {"1 Lücken": True, "2 Tagesänderung": False, "3 Jahresrendite": True}
+    assert len(e["spruenge"]) == 2
+
+    luecke = _geldmarkt(tage).drop(tage[100:106])               # 6 Handelstage fehlen
+    assert w.pruefe_geldmarkt_etf(luecke, tage, satz)["kriterien"]["1 Lücken"] is False
+    assert w.pruefe_geldmarkt_etf(_geldmarkt(tage).drop(tage[100:105]), tage, satz)["kriterien"]["1 Lücken"] is True
+    assert w.pruefe_geldmarkt_etf(_geldmarkt(tage)[5:], tage, satz)["kriterien"]["1 Lücken"] is False     # beginnt zu spät
+
+    e = w.pruefe_geldmarkt_etf(_geldmarkt(tage, 0.02), tage, satz)                                       # 2 % p. a. gegen Satz 0 %
+    assert e["kriterien"]["3 Jahresrendite"] is False and e["kriterien"]["2 Tagesänderung"] is True

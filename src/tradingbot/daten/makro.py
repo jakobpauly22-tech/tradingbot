@@ -209,11 +209,31 @@ def lade_makro_tabelle(
 
 def makro_am_stichtag(serie: str, stichtag, **kwargs) -> pd.Series:
     """Für Backtests: die Serie mit dem Wissensstand des Stichtags (kein Look-ahead)."""
-    from tradingbot.backtest.tresor import begrenze
+    from tradingbot.backtest.tresor import begrenze, datengrenze
 
-    werte = begrenze(stand_am(lade_makro_tabelle(serie, **kwargs), stichtag))   # Tresor: nur bis zur Datumsgrenze
+    # Tresor: Beobachtungen nur bis zur Datumsgrenze UND Wissensstand höchstens der Grenze. Sonst kämen Werte aus 2024
+    # mit ihrem 2025 gemeldeten oder revidierten Stand durch (docs/REGIME.md, Abschnitt 3).
+    grenze = datengrenze()
+    tag = pd.Timestamp(stichtag).normalize()
+    if grenze is not None:
+        tag = min(tag, grenze)
+    werte = begrenze(stand_am(lade_makro_tabelle(serie, **kwargs), tag))
     werte.name = serie
     return werte
+
+
+def erster_datenstand(tabelle: pd.DataFrame) -> pd.Timestamp | None:
+    """Frühester Tag, ab dem die Serie überhaupt Werte liefert (erster ALFRED-Stand bzw. erste Beobachtung + Verzögerung)."""
+    return None if tabelle.empty else pd.Timestamp(tabelle["gueltig_ab"].min())
+
+
+def pruefe_abdeckung(serie: str, tabelle: pd.DataFrame, beginn) -> None:
+    """Wirft `DatenFehler`, wenn die Serie am Tag `beginn` noch keinen Datenstand hat (ein Backtest ab `beginn` sähe
+    sonst still keine Werte). Für revidierte Serien ist das der erste ALFRED-Stand."""
+    erster = erster_datenstand(tabelle)
+    if erster is None or erster > pd.Timestamp(beginn):
+        raise DatenFehler(f"FRED {serie}: erster Datenstand {'fehlt' if erster is None else erster.date()}, "
+                          f"gebraucht ab {pd.Timestamp(beginn).date()}")
 
 
 def lade_makro(serie: str, start=None, ende=None, **kwargs) -> pd.Series:

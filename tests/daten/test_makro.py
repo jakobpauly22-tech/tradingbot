@@ -116,3 +116,65 @@ def test_schluessel_erscheint_nie_in_fehlermeldungen(monkeypatch):
     with pytest.raises(DatenFehler) as info:
         holen("series/observations", {"series_id": "GDP"})
     assert geheim not in str(info.value) and "***" in str(info.value)
+
+
+# --- Regime-Engine, Sitzung 1 (docs/REGIME.md, Abschnitt 3) ---
+
+# US-Arbeitslosenquote. Echt laut ALFRED (Abruf 15.11.2026): April 2020 am 08.05.2020 mit 14,7 gemeldet, später 14,8;
+# Januar 2009 am 06.02.2009 mit 7,6 gemeldet, später 7,8. Die Tage der Revisionen sind ausgedacht.
+UNRATE_ZEILEN = [
+    {"date": "2020-04-01", "value": "14.7", "realtime_start": "2020-05-08", "realtime_end": "2021-01-07"},
+    {"date": "2020-04-01", "value": "14.8", "realtime_start": "2021-01-08", "realtime_end": "9999-12-31"},
+    {"date": "2024-11-01", "value": "4.2", "realtime_start": "2024-12-06", "realtime_end": "2025-01-09"},
+    {"date": "2024-11-01", "value": "4.1", "realtime_start": "2025-01-10", "realtime_end": "9999-12-31"},
+    {"date": "2024-12-01", "value": "4.1", "realtime_start": "2025-01-10", "realtime_end": "9999-12-31"},
+]
+
+
+def _unrate_im_cache(cache):
+    from tradingbot.daten.makro import lade_makro_tabelle
+
+    konfig = {"cache": {"makro_max_alter_stunden": 24}, "fred": {"serien": {"UNRATE": {"revidiert": True}}}}
+    kw = dict(cache=cache, holen=FredAttrappe(UNRATE_ZEILEN, ["2020-05-08"]), konfig=konfig)
+    lade_makro_tabelle("UNRATE", **kw)
+    return kw
+
+
+def test_backtest_sieht_erstmeldung_nicht_die_revision(cache):
+    from tradingbot.daten.makro import makro_am_stichtag
+
+    kw = _unrate_im_cache(cache)
+    assert makro_am_stichtag("UNRATE", "2020-05-07", **kw).empty                    # vor der Veröffentlichung
+    assert makro_am_stichtag("UNRATE", "2020-05-29", **kw).tolist() == [14.7]       # Erstmeldung
+    assert makro_am_stichtag("UNRATE", "2021-06-30", **kw).tolist() == [14.8]       # erst nach der Revision
+
+
+def test_tresor_wissensstand_hoechstens_die_datengrenze(cache):
+    """Stichtag nach der Grenze: weder Beobachtungen ab 2025 noch 2025 gemeldete oder revidierte Werte aus 2024."""
+    from tradingbot.daten.makro import makro_am_stichtag
+
+    kw = _unrate_im_cache(cache)
+    werte = makro_am_stichtag("UNRATE", "2025-06-30", **kw)
+    assert werte.loc["2024-11-01"] == 4.2                     # Stand vom 31.12.2024, nicht die Revision vom 10.01.2025
+    assert pd.Timestamp("2024-12-01") not in werte.index      # Dezember 2024 wurde erst 2025 gemeldet
+
+
+def test_abdeckung_erster_datenstand():
+    from tradingbot.daten.makro import erster_datenstand, pruefe_abdeckung
+
+    tabelle = fred_tabelle("UNRATE", revidiert=True, holen=FredAttrappe(UNRATE_ZEILEN, ["2020-05-08"]))
+    assert erster_datenstand(tabelle) == pd.Timestamp("2020-05-08")
+    pruefe_abdeckung("UNRATE", tabelle, "2020-05-08")
+    with pytest.raises(DatenFehler, match="erster Datenstand 2020-05-08"):
+        pruefe_abdeckung("UNRATE", tabelle, "2012-01-01")
+    with pytest.raises(DatenFehler, match="fehlt"):
+        pruefe_abdeckung("UNRATE", tabelle.iloc[0:0], "2012-01-01")
+
+
+def test_regime_reihen_sind_konfiguriert():
+    from tradingbot.konfiguration import lade_konfiguration
+
+    serien = lade_konfiguration("daten")["fred"]["serien"]
+    assert serien["UNRATE"]["revidiert"] is True
+    for marktreihe in ("T10Y3M", "BAA10Y", "DGS3MO"):
+        assert serien[marktreihe]["revidiert"] is False and serien[marktreihe]["verzoegerung_tage"] == 1

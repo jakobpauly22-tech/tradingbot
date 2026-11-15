@@ -84,6 +84,20 @@ XEON.DE besteht, wenn für 02.01.2012–31.12.2024 alle drei Punkte gelten; sons
 2. Keine Tagesänderung des Schlusskurses über ±0,25 %.
 3. Jede Kalenderjahresrendite liegt höchstens 0,5 Pp. vom Jahresdurchschnitt des EZB-Einlagesatzes (ECBDFR) entfernt.
 
+**Ergebnis 15.11.2026 (`tools/pruefe_regime_daten.py`, Bericht `docs/berichte/2026-11-15_regime_daten.md`): nicht
+bestanden.** Kriterium 1 (keine Lücke) und 3 (Abstand zum Einlagesatz höchstens 0,12 Pp.) bestanden; Kriterium 2 verfehlt
+durch drei Tage: 16.03.2020 +0,53 %, 17.03.2020 −0,47 %, 21.04.2020 −0,31 %. **Damit ist die defensive Anlage Kasse zu
+0 %** (Jakob 15.11.2026: „sonst Kasse zu 0 %“). Die Kriterien werden nicht angepasst. Folge für Kriterium b: Die statische
+Mischung hält ihren defensiven Teil ebenfalls als Kasse zu 0 %.
+
+## 6a. Ergebnis der Abdeckungsprüfung (15.11.2026)
+
+UNRATE: erster ALFRED-Stand 15.03.1960. T10Y3M ab 1982, BAA10Y ab 1986, DGS3MO ab 1981 (Marktreihen, nicht revidiert).
+^SP500TR ab 04.01.1988. **Der Langtest 1995–2011 ist möglich.** Neue Reihen in `config/daten.yaml`: T10Y3M, BAA10Y.
+Tresor-Lücke geschlossen: `makro_am_stichtag` lieferte für einen Stichtag nach der Grenze den 2025 revidierten Stand von
+Beobachtungen aus 2024; jetzt höchstens der Wissensstand der Grenze (Test in `tests/daten/test_makro.py`). Bisher nutzte
+kein Backtest einen solchen Stichtag.
+
 ## 7. Varianten
 
 Jeder Lauf kommt in `daten/regime/varianten.csv` (V1, D1–D4, Langtest), auch Diagnosen und Wiederholungen nach
