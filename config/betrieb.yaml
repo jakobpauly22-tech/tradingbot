@@ -54,6 +54,18 @@ buecher:
     max_orders_pro_tag: 25
     freigabe: sammel
     senden_freigeschaltet: true           # 04.11.2026: freigeschaltet (Jakob; Fundamental nach Fertigstellung von Nachkauf und Limit-On-Open)
+  regime:
+    # Schattenbuch der Makro-/Regime-Engine (Jakob 15.11.2026, docs/REGIME.md Abschnitt 9): V1 genau aus dem
+    # Festlegungs-Commit b628678, 100 % SPYI.DE oder Kasse zu 0 %, Monatsbewertung mit zwei Monaten Haltepflicht.
+    # V1 hat den Backtest nicht bestanden; das Buch beobachtet nur. Keine Signal-Parameter hier (eingefroren im Code).
+    art: skalierung
+    budget_eur: 10000.0
+    rolle: core
+    instrument: SPYI.DE
+    max_orders_pro_tag: 2
+    freigabe: sammel
+    verkauf: {typ: limit, abschlag_vortagesschluss: 0.02}   # Limit = Vortagesschluss − 2 %; verfallen → nächster Abend erneut
+    senden_freigeschaltet: false          # Jakob schaltet nach Probelauf und erstem echten Vorschlag frei
 
 ibkr:
   host: 127.0.0.1                      # nur lokal
@@ -67,7 +79,7 @@ ibkr:
 
 orders:
   kauf: {typ: limit, aufschlag_vortagesschluss: 0.02}   # gesendet sofort nach der Abendfreigabe, geht in die Xetra-Eröffnungsauktion
-  verkauf: {typ: market}               # ohne Limit
+  verkauf: {typ: market}               # ohne Limit; Ausnahme je Buch: buecher.<buch>.verkauf (regime: Limit −2 %)
   gueltigkeit: naechster_handelstag    # gültig für den nächsten Handelstag; nicht ausgeführte verfallen und stehen im Journal
 
 waehrung:

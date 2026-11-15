@@ -19,7 +19,8 @@ dazu Hinweise (kein Veto). Regeln (CLAUDE.md „Feste Regeln“, config/risiko.y
    der Signalqualität nicht abbricht; im Realbuch sperren sie (Entscheidung 02.11.2026). Alle übrigen Regeln gelten in
    allen Büchern hart. Core-Notbremse (12 Monate > 10 Pp. hinter MSCI ACWI IMI) ist ein Review-Hinweis, kein Veto.
 8. Plausibilität je Buch: Orderwert ≤ Budget des Buchs; Orders je Tag ≤ Höchstzahl des Buchs (Realbuch 5,
-   Skalierungsbücher 25); Kauflimit vorhanden und höchstens 2 % über dem letzten Kurs; Verkäufe ohne Limit.
+   Skalierungsbücher 25); Kauflimit vorhanden und höchstens 2 % über dem letzten Kurs; Verkäufe ohne Limit. Ausnahme
+   (Jakob 15.11.2026): Bücher mit `verkauf: {typ: limit}` (regime) verkaufen nur mit Limit, höchstens 2 % unter dem letzten Kurs.
 9. Doppel-Orders: Ein Vorschlag (ID) kann nur einmal gesendet werden; keine zweite Order, solange im selben Buch für
    denselben Ticker und dieselbe Richtung eine offene Order besteht (andere Bücher dürfen denselben Ticker handeln).
 10. Kasse je Währung (Jakob 03.11.2026): Käufe werden in ihrer Handelswährung bezahlt (USD-Aktien, SXRM auf Xetra in USD).
@@ -46,7 +47,7 @@ class OrderVorschlag:
     stueck: int
     letzter_kurs: float           # EUR
     art: str = "etf"              # etf | etc | aktie
-    limit: float | None = None    # Kauflimit in EUR; Verkäufe ohne Limit
+    limit: float | None = None    # Kauflimit in EUR; Verkäufe ohne Limit (außer Bücher mit Verkaufslimit)
     stop: float | None = None     # Satellite: Stopkurs (für die 1-%-Risikoregel)
     gebuehrenplan: str = "EUR"    # Schlüssel in config/backtest.yaml `kosten.gebuehren` (USD für US-Aktien)
     eur_kurs: float = 1.0         # Einheiten der Handelswährung je 1 EUR (auch für den USD-Gebührenplan)
@@ -166,8 +167,17 @@ class RiskManager:
             elif v.limit > v.letzter_kurs * (1 + abstand) + 1e-9:
                 g.append(f"Limit {v.limit:.2f} mehr als {abstand * 100:.0f} % über dem letzten Kurs {v.letzter_kurs:.2f}")
             self._kaufregeln(v, k, b, g, h)
-        elif v.limit is not None:
-            g.append("Verkäufe ohne Limit (Entscheidung 02.11.2026)")
+        else:
+            from tradingbot.broker.basis import verkaufslimit_abschlag
+
+            abschlag = verkaufslimit_abschlag(self.b, v.buch)
+            if abschlag is None:
+                if v.limit is not None:
+                    g.append("Verkäufe ohne Limit (Entscheidung 02.11.2026)")
+            elif v.limit is None:
+                g.append(f"Verkauf ohne Limit (Buch {v.buch} verkauft nur mit Limit, Jakob 15.11.2026)")
+            elif v.limit < v.letzter_kurs * (1 - abschlag) - 1e-9:
+                g.append(f"Verkaufslimit {v.limit:.2f} mehr als {abschlag * 100:.0f} % unter dem letzten Kurs {v.letzter_kurs:.2f}")
         if b["rolle"] == "core" and k.core_rueckstand_12m_pp < -10:
             h.append(f"Core-Notbremse im Buch {v.buch}: 12 Monate {k.core_rueckstand_12m_pp:.1f} Pp. hinter MSCI ACWI IMI – Review")
         return Urteil(not g, g, h)

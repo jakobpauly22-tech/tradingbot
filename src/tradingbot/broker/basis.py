@@ -60,7 +60,8 @@ class OffeneOrder:
 
 @dataclass(frozen=True)
 class Auftrag:
-    """Freigegebener Vorschlag, bereit zum Senden. Kauf mit Limit, Verkauf ohne Limit; gültig für den nächsten Handelstag."""
+    """Freigegebener Vorschlag, bereit zum Senden. Kauf mit Limit, Verkauf ohne Limit (außer in Büchern mit Verkaufslimit,
+    `verkaufslimit_abschlag`); gültig für den nächsten Handelstag."""
     buch: str
     vorschlag_id: str
     ticker: str
@@ -84,6 +85,14 @@ class Broker(Protocol):
     def offene_orders(self) -> list[OffeneOrder]: ...
     def sende(self, auftrag: Auftrag, gesendete_refs: set[str]) -> str: ...
     def ausfuehrungen(self) -> list[dict]: ...
+
+
+def verkaufslimit_abschlag(betrieb: dict, buch: str) -> float | None:
+    """Abschlag des Verkaufslimits, wenn das Buch mit Limit verkauft (config/betrieb.yaml `buecher.<buch>.verkauf`:
+    typ limit, Limit = Vortagesschluss · (1 − Abschlag); Jakob 15.11.2026 für das Buch regime). Sonst None: Verkäufe
+    ohne Limit (Entscheidung 02.11.2026)."""
+    v = ((betrieb.get("buecher") or {}).get(buch) or {}).get("verkauf") or {}
+    return float(v.get("abschlag_vortagesschluss", 0.02)) if v.get("typ") == "limit" else None
 
 
 def pruefe_verbindung(host: str, port: int, betrieb: dict) -> None:
@@ -121,7 +130,11 @@ def pruefe_senden(*, konto_id: str, port: int, modus: str | None, betrieb: dict,
         gruende.append(f"offene Order im Buch {auftrag.buch} für {auftrag.ticker} in derselben Richtung besteht schon")
     if auftrag.richtung > 0 and auftrag.limit is None and auftrag.art != "fx":
         gruende.append("Kauf ohne Limit")
-    if auftrag.richtung < 0 and auftrag.limit is not None:
-        gruende.append("Verkauf mit Limit (Verkäufe ohne Limit)")
+    if auftrag.richtung < 0 and auftrag.art != "fx":
+        if verkaufslimit_abschlag(betrieb, auftrag.buch) is None:
+            if auftrag.limit is not None:
+                gruende.append("Verkauf mit Limit (Verkäufe ohne Limit)")
+        elif auftrag.limit is None:
+            gruende.append(f"Verkauf ohne Limit (Buch {auftrag.buch} verkauft nur mit Limit)")
     if gruende:
         raise SendenGesperrt("; ".join(gruende))

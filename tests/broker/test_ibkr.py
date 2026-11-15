@@ -265,6 +265,22 @@ def test_limit_im_auftrag_auf_kursstufe(tmp_path):
     assert b.limit_runden("EUNM.DE", 53.617, 1) == (53.61, 0.01)
 
 
+def test_verkauf_mit_limit_nur_im_buch_regime(tmp_path):
+    """Jakob 15.11.2026: Das Buch regime verkauft mit Limit (aufgerundet auf die Kursstufe), alle anderen ohne Limit."""
+    konfig = betrieb()
+    konfig["buecher"]["regime"] = {**konfig["buecher"]["regime"], "senden_freigeschaltet": True}
+    b = IbkrBroker(konfig, tmp_path, host="127.0.0.1", port=4002, client_id=7, modus="paper", ib=IBAttrappe("DU1234567", ()))
+    b.sende(Auftrag("regime", "r1", "SXR1.DE", -1, 11, 221.34), set())
+    _, o = b.ib.gesendet[-1]
+    assert (o.action, o.orderType, o.lmtPrice, o.tif) == ("SELL", "LMT", 221.35, "DAY")
+    with pytest.raises(SendenGesperrt, match="ohne Limit"):
+        b.sende(Auftrag("regime", "r2", "SXR1.DE", -1, 11, None), set())
+    with pytest.raises(SendenGesperrt, match="Verkauf mit Limit"):
+        b.sende(Auftrag("crossover", "c1", "SXR1.DE", -1, 11, 221.34), set())
+    b.sende(Auftrag("crossover", "c2", "SXR1.DE", -1, 11, None), set())
+    assert b.ib.gesendet[-1][1].orderType == "MKT"
+
+
 def test_ausfuehrungsplatz(tmp_path):
     b = broker(tmp_path)
     b.ib.fills = lambda: [SimpleNamespace(execution=SimpleNamespace(orderRef="real:v1", execId="e1", side="BOT", shares=2.0, price=11.8,

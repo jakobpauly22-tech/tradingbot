@@ -207,4 +207,44 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
 | 2 | Signale, Monatslogik mit Haltepflicht, Tests | 15.11.2026 |
 | 3 | Backtest des Buchs, Vergleichsportfolios, Bericht (ohne Gesamturteil) | 15.11.2026 |
 | 4 | US-Langtest 1995–2011 | nicht gerechnet; Diagnose im Backlog, ohne Wirkung auf das Urteil (15.11.2026) |
-| 5 | Schattenbuch im Tageslauf | offen |
+| 5 | Schattenbuch im Tageslauf: Logik, Protokoll im Journal, Orders mit Limit, Tests (Abschnitt 9) | 15.11.2026 |
+| 6 | Schattenbuch: Anzeige, Benachrichtigung, Probelauf | offen |
+
+## 9. Schattenbuch „regime“ im Betrieb (Jakob 15.11.2026)
+
+Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit) und drei Entscheidungen. Code:
+`betrieb/regimebuch.py`, Einbindung in `betrieb/tageslauf.py`, Konfiguration `config/betrieb.yaml` (`buecher.regime`).
+
+- **Regeln:** V1 genau aus dem Festlegungs-Commit b628678. Das Buch nutzt `engines/regime/signale.py` unverändert; ein
+  Test prüft die Git-Prüfsumme der Datei gegen b628678. In der Konfiguration stehen keine Signal-Parameter.
+- **Buch:** 10.000 €, Art Skalierung, Rolle Core, Sammelfreigabe, höchstens 2 Orders je Tag, 100 % SPYI.DE oder Kasse zu
+  0 %. Das Senden ist zum Start gesperrt; Jakob schaltet nach Probelauf und erstem echten Vorschlag frei.
+- **Bewertung:** am letzten Xetra-Handelstag des Monats nach Börsenschluss; die Order gilt für den nächsten Handelstag.
+  Ein verpasster Abend wird im nächsten Lauf nachgeholt, mit dem Wissensstand des Monatsendes (ALFRED).
+- **Start (Entscheidung 1):** Der erste Lauf protokolliert die Vorgeschichte ab Oktober 2012 (Kurse ab 2012, wie im
+  Backtest) und nimmt die Position sofort nach dem aktuellen Zustand ein.
+- **Protokoll (Entscheidung 3):** Jede Monatsbewertung steht mit den vier Signalen, dem Rohzustand und dem Zustand mit
+  Haltepflicht im Buchzustand des Journals. Für protokollierte Monate gilt das Protokoll. Weicht eine Neuberechnung ab
+  (zum Beispiel geänderte Yahoo-Kurse), wird das einmal laut gemeldet, nichts wird übernommen, das Buch läuft weiter.
+- **Makrodaten:** FRED/ALFRED wird nur geladen, wenn eine Bewertung ansteht, und dann immer neu. Die Tabellen liegen im
+  Betriebsbereich (`daten/betrieb/cache/makro`), getrennt vom Backtest-Cache. Ist FRED nicht erreichbar oder fehlt ein
+  Signal, gibt es keinen neuen Zustand: Die Position bleibt, das Buch meldet es, der nächste Lauf holt nach.
+- **Orders (Änderung von Jakob):**
+  - Kauf in ganzen Stücken, Limit = Vortagesschluss + 2 % (abgerundet), wie in den anderen Büchern.
+  - Verkauf des ganzen Bestands, Limit = Vortagesschluss − 2 % (aufgerundet), nicht als Market-Order. Grund: Wechsel
+    auf „Risiko aus“ fallen oft auf unruhige Tage, die Eröffnungsauktion kann dann stark abweichen.
+  - Verfällt ein Limit, kommt der Vorschlag am nächsten Abend wieder. Gehandelt wird nur, wenn der Bestand nicht zum
+    Zustand passt und keine Order unterwegs ist (wie `RegimeStrategie` im Backtest).
+  - Das Verkaufslimit ist eine Einstellung des Buchs (`buecher.regime.verkauf`). Risk-Manager und Senderiegel erlauben
+    es nur dort und verlangen es dort; in allen anderen Büchern bleiben Verkäufe ohne Limit (Entscheidung 02.11.2026).
+- **Bekannte Abweichungen vom Backtest:**
+  - Der Backtest handelt zur Eröffnung ohne Limit. Im Betrieb kann ein verfallenes Limit Einstieg oder Ausstieg um
+    einen Tag oder mehr verschieben.
+  - FRED stellt den Wert eines Tages erst am Folgetag gegen 22 Uhr deutscher Zeit ein. Läuft der Tageslauf davor, fehlt
+    im Monatsdurchschnitt von Zinskurve und Kreditaufschlag der Vortag. Der Backtest hat ihn mitgezählt.
+  - Nach einer Teilausführung kauft das Buch nicht nach (der Backtest kennt keine Teilausführungen).
+  - Der Trend nutzt die splitbereinigte Yahoo-Reihe (Split 25:1 am 23.02.2026). Das Signal ist ein Verhältnis und
+    ändert sich dadurch nicht.
+- **Zwei Bücher mit SPYI.DE:** Realbuch und „regime“ halten denselben Titel. Der Abgleich mit IBKR summiert je Titel;
+  eine Abweichung stoppt beide Bücher, nicht den ganzen Lauf. Die Doppel-Order-Regel gilt je Buch.
+- **Zweck:** V1 hat den Backtest nicht bestanden. Das Buch beobachtet nur und begründet nie echte Trades.

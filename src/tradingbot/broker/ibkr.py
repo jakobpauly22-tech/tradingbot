@@ -390,6 +390,10 @@ class IbkrBroker:
             # Nimmt IBKR OPG nicht an, wird die Order abgelehnt gemeldet – kein Ersatz-Ordertyp ohne Jakobs Zustimmung.
             tif = "OPG" if us_aktie(auftrag) else "DAY"
             order = LimitOrder(aktion, auftrag.stueck, limit, tif=tif, orderRef=auftrag.order_ref)
+        elif auftrag.limit is not None:
+            # Verkauf mit Limit (nur Bücher mit Verkaufslimit, von `pruefe_senden` geprüft; Jakob 15.11.2026): aufrunden
+            limit, _ = self.limit_runden(auftrag.ticker, auftrag.limit, auftrag.richtung)
+            order = LimitOrder(aktion, auftrag.stueck, limit, tif="DAY", orderRef=auftrag.order_ref)
         else:
             order = MarketOrder(aktion, auftrag.stueck, tif="DAY", orderRef=auftrag.order_ref)
         trade = self.ib.placeOrder(k, order)

@@ -23,7 +23,7 @@ import pandas as pd
 
 from tradingbot.betrieb.buecher import BuchVorschlag, _verkauf, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
 from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung, pruefe_tageskurse
-from tradingbot.broker.basis import Auftrag, KontraktUnbekannt, SendeErgebnis, SendenGesperrt
+from tradingbot.broker.basis import Auftrag, KontraktUnbekannt, SendeErgebnis, SendenGesperrt, verkaufslimit_abschlag
 from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urteil
 
 FREIGABE_VON = time(18, 0)
@@ -50,6 +50,7 @@ class Laufergebnis:
     abgleich: str = "nicht_geprueft"                                  # ok | teilweise | gestoppt | nicht_geprueft (Benachrichtigung)
     buchstopps: dict[str, dict] = field(default_factory=dict)         # gestoppte Bücher (A1, betrieb/buchstopp.py)
     sofort: list[str] = field(default_factory=list)                   # Sofortmeldungen (Buchstopp, Stop gerissen, Aufhebung)
+    regime: dict = field(default_factory=dict)                        # Schattenbuch regime: Zustand, Signale, Bewertungen (Anzeige, Meldung)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -459,10 +460,11 @@ def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None
 
 # --- Tageslauf --------------------------------------------------------------------------------------------------------
 def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundamental_bewertung=None, risk: RiskManager | None = None,
-              konfig: dict | None = None, sichern: bool = True, flex="env") -> Laufergebnis:
+              konfig: dict | None = None, sichern: bool = True, flex="env", regime_daten=None) -> Laufergebnis:
     """Ein Tageslauf. `kurse_laden(ticker, bis, art) -> DataFrame` (EUR-Kurse) und `fundamental_bewertung(tag)` sind
     austauschbar (Tests); Standard sind Yahoo-Kurse und engines/fundamental/aktuell.py. `flex`: Beleg-Quelle für
-    Ausführungen außerhalb des API-Zeitfensters („env“ = Flex-Abfrage aus .env, None = keine, sonst Funktion)."""
+    Ausführungen außerhalb des API-Zeitfensters („env“ = Flex-Abfrage aus .env, None = keine, sonst Funktion).
+    `regime_daten(tag, ticker) -> (Schlusskurse ab 2012, makro_laden)` für das Schattenbuch regime (betrieb/regimebuch.py)."""
     from tradingbot.konfiguration import lade_konfiguration
 
     konfig = konfig or {n: lade_konfiguration(n) for n in ("betrieb", "technik", "fundamental", "backtest")}
@@ -589,6 +591,11 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         frei_real, _ = kasse_frei(journal, "real", fx)
         if not any(z["ticker"] == etf for z in journal.unterwegs("real")):
             roh += realbuch(tag, etf, kurs, frei_real, aufschlag, gebuehr_fuer("EUR"))
+
+    # Schattenbuch regime (V1 aus der Festlegung b628678; betrieb/regimebuch.py, Jakob 15.11.2026)
+    if "regime" in b["buecher"]:
+        roh += _regimebuch(journal, b, tag, xetra, kurse_laden, k_real, regime_daten, gest, pruefen, werte_buch, fx, aufschlag,
+                           gebuehr_fuer("EUR"), erg)
 
     # Technik-Bücher
     etfs = kt["universum"]["etfs"]
@@ -778,6 +785,61 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         ziel = journal.sichern(None, jetzt=jetzt)
         erg.meldungen.append(f"Journal gesichert: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
     return erg
+
+
+def _regimebuch(journal, b: dict, tag, xetra, kurse_laden, k_real: dict, regime_daten, gest: dict, pruefen, werte_buch: dict, fx, aufschlag: float,
+                gebuehr, erg: Laufergebnis) -> list[BuchVorschlag]:
+    """Schattenbuch regime: Monatsbewertung (mit Protokoll im Journal) und Order zum Zustand. Ein Fehler in der Bewertung
+    (z. B. FRED nicht erreichbar) bricht den Lauf nie ab: kein neuer Zustand, Position bleibt, Meldung."""
+    from tradingbot.betrieb import regimebuch
+
+    buch, bk = regimebuch.BUCH, b["buecher"]["regime"]
+    ticker = bk.get("instrument", b["core"]["etf"])
+    if buch in gest:
+        return []
+    kurse = k_real if ticker in k_real else {ticker: kurse_laden(ticker, tag.date(), "etf")}
+    if not pruefen(buch, kurse, xetra):
+        return []
+    kurs = float(kurse[ticker]["close"].iloc[-1])
+    erg.kurse_eur[ticker] = kurs
+    bestand = journal.bestand(buch).get(ticker, 0.0)
+    werte_buch[buch] = journal.kasse(buch) + bestand * kurs
+    zustand = journal.zustand(buch)
+    try:
+        schluss, makro_laden = (regime_daten or regimebuch.daten_betrieb)(tag, ticker)
+        neu, stand = regimebuch.bewerten(tag, schluss, makro_laden, zustand)
+        if neu != zustand:
+            journal.zustand_speichern(buch, neu)
+            for m in stand.neu:
+                journal.ereignis("regime_bewertung", next(x for x in stand.meldungen if f"Monatsbewertung {m}" in x), buch)
+        for text in stand.laut:
+            journal.ereignis("regime_meldung", text, buch)
+    except Exception as f:  # noqa: BLE001 – Bewertung darf den Lauf der übrigen Bücher nie abbrechen
+        protokoll = zustand.get("protokoll") or {}
+        letzter = protokoll[max(protokoll)] if protokoll else None
+        stand = regimebuch.Stand(risiko_aus=None if letzter is None else bool(letzter["risiko_aus"]), monat=max(protokoll) if protokoll else None,
+                                 eintrag=letzter or {})
+        text = (f"regime: Monatsbewertung nicht möglich ({type(f).__name__}: {str(f)[:200]}) – kein neuer Zustand, "
+                f"{'Position bleibt (' + regimebuch.zustand_text(stand.risiko_aus) + ')' if letzter else 'Buch bleibt in Kasse'}; "
+                "wird im nächsten Lauf nachgeholt")
+        stand.laut.append(text)
+        journal.ereignis("regime_meldung", text, buch)
+        erg.regime["fehler"] = text
+    erg.meldungen += stand.meldungen + stand.laut
+    erg.sofort += stand.laut
+    erg.regime.update({"risiko_aus": stand.risiko_aus, "monat": stand.monat, "eintrag": dict(stand.eintrag), "neu": list(stand.neu),
+                       "wechsel": stand.wechsel, "start": stand.start, "ticker": ticker,
+                       "naechste_bewertung": regimebuch.naechste_bewertung(tag)})
+    if any(z["ticker"] == ticker for z in journal.unterwegs(buch)):
+        erg.meldungen.append(f"regime: Order für {ticker} unterwegs – kein neuer Vorschlag")
+        return []
+    frei, _ = kasse_frei(journal, buch, fx)
+    abschlag = verkaufslimit_abschlag(b, buch)
+    v = regimebuch.vorschlaege(tag, ticker, kurs, stand, bestand, frei, aufschlag, 0.02 if abschlag is None else abschlag, gebuehr)
+    if stand.risiko_aus is not None:
+        erg.meldungen.append(f"regime: {regimebuch.zustand_text(stand.risiko_aus)} (Bewertung {stand.monat}), Bestand {bestand:g} Stück, "
+                             f"{len(v)} Vorschlag" + ("" if len(v) == 1 else "e"))
+    return v
 
 
 def verkauf_gesperrt_merken(z: dict, ohne_conid: set[str], bestand: dict[str, float], grund: str) -> dict:
@@ -1016,7 +1078,9 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
             journal.status_setzen(z["id"], "veto")
             meldungen.append(f"{z['id']}: Veto bei der zweiten Prüfung – {'; '.join(u.gruende)}")
             continue
-        auftrag = Auftrag(z["buch"], z["id"], z["ticker"], z["richtung"], z["stueck"], z["limit_preis"] if z["richtung"] > 0 else None,
+        # Limit: Käufe immer; Verkäufe nur in Büchern mit Verkaufslimit (regime, Jakob 15.11.2026), sonst ohne Limit
+        mit_limit = z["richtung"] > 0 or (z["art"] != "fx" and verkaufslimit_abschlag(b, z["buch"]) is not None)
+        auftrag = Auftrag(z["buch"], z["id"], z["ticker"], z["richtung"], z["stueck"], z["limit_preis"] if mit_limit else None,
                           z["art"], z["waehrung"])
         try:
             antwort = broker.sende(auftrag, gesendet)

@@ -468,7 +468,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 Echtgeld erst später; neue Engines kommen als neue Schattenbücher, bestehende Bücher bleiben unverändert (Jakob, eingetragen am 15.11.2026).
 
 1. **Kapitalmaßnahmen und Benachrichtigungen** – erledigt (A0–A4, B); A5 Vorwarnung ist Pflicht vor Echtgeld.
-2. **Makro-/Regime-Engine:** Plan, vorab festgelegte Kriterien, Backtest, dann als Schattenbuch – Backtest am 15.11.2026: V1 nicht bestanden (`docs/REGIME.md`, Abschnitt 7e), keine Anpassung; Schattenbuch „regime“ in Arbeit. Backlog, reine Diagnose ohne Wirkung auf das Urteil: US-Langtest 1995–2011 (Regeln in `docs/REGIME.md`, Abschnitt 5).
+2. **Makro-/Regime-Engine:** Plan, vorab festgelegte Kriterien, Backtest, dann als Schattenbuch – Backtest am 15.11.2026: V1 nicht bestanden (`docs/REGIME.md`, Abschnitt 7e), keine Anpassung; Schattenbuch „regime“ im Tageslauf eingebaut am 15.11.2026 (Logik und Tests, `docs/REGIME.md` Abschnitt 9; Senden gesperrt), offen: Anzeige, Benachrichtigung, Probelauf. Backlog, reine Diagnose ohne Wirkung auf das Urteil: US-Langtest 1995–2011 (Regeln in `docs/REGIME.md`, Abschnitt 5).
 3. **Briefing-Archiv anbinden:** parallel, reine Datenarbeit (Export täglich 21:41).
 4. **Risiko-Übersicht** über alle Bücher mit Value at Risk und Stresstests.
 5. **Januar 2027:** erster Quartalswechsel der Fundamental-Bücher und automatischer Quartals-Review; Datenkorrekturen (EQ_OFFER, Marktwert) wirksam ab 04.01.2027.
