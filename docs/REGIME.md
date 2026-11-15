@@ -208,7 +208,7 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
 | 3 | Backtest des Buchs, Vergleichsportfolios, Bericht (ohne Gesamturteil) | 15.11.2026 |
 | 4 | US-Langtest 1995–2011 | nicht gerechnet; Diagnose im Backlog, ohne Wirkung auf das Urteil (15.11.2026) |
 | 5 | Schattenbuch im Tageslauf: Logik, Protokoll im Journal, Orders mit Limit, Tests (Abschnitt 9) | 15.11.2026 |
-| 6 | Schattenbuch: Anzeige, Benachrichtigung, Probelauf | offen |
+| 6 | Schattenbuch: Anzeige, Benachrichtigung, Probelauf | 15.11.2026; Probelauf ohne Zustand, Entscheidung offen (Abschnitt 9a) |
 
 ## 9. Schattenbuch „regime“ im Betrieb (Jakob 15.11.2026)
 
@@ -248,3 +248,20 @@ Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit
 - **Zwei Bücher mit SPYI.DE:** Realbuch und „regime“ halten denselben Titel. Der Abgleich mit IBKR summiert je Titel;
   eine Abweichung stoppt beide Bücher, nicht den ganzen Lauf. Die Doppel-Order-Regel gilt je Buch.
 - **Zweck:** V1 hat den Backtest nicht bestanden. Das Buch beobachtet nur und begründet nie echte Trades.
+
+## 9a. Probelauf vom 15.11.2026 (Kopie des echten Journals, nichts gesendet)
+
+- **Ergebnis:** Das Buch hat keinen Zustand und bleibt in Kasse (10.000 €), keine Vorschläge. Abgleich und alle anderen
+  Bücher liefen normal.
+- **Ursache:** Die US-Arbeitslosenquote für Oktober 2025 wurde nie veröffentlicht (ALFRED führt den Monat seit dem
+  16.12.2025 ohne Wert). Die eingefrorene Sahm-Regel verlangt 15 lückenlose Monate bis zum jüngsten Monat. Sie ist
+  deshalb seit der Bewertung vom 30.12.2025 nicht bestimmbar, und V1 hat ohne alle vier Signale keinen Zustand.
+- **Dauer nach der eingefrorenen Regel:** bis der jüngste Monat Januar 2027 ist (Veröffentlichung Anfang Februar 2027),
+  also voraussichtlich erste Bewertung am 26.02.2027.
+- **Einordnung:** Trend, Zinskurve und Kreditaufschlag waren von Dezember 2025 bis Oktober 2026 bestimmbar; der Trend
+  war durchgehend „an“. Im Backtest-Zeitraum bis 2024 gab es keine solche Lücke.
+- **Nichts geändert:** `engines/regime/signale.py` bleibt wie in b628678. Wie das Buch mit der Lücke umgeht, entscheidet
+  Jakob; bis dahin meldet jeder Lauf „Monatsbewertung nicht möglich“ mit Signal und Beginn.
+- **Anzeige und Benachrichtigung:** Buchkarte mit Zustand, letzter und nächster Bewertung, Haltepflicht und den vier
+  Signalen mit Wert und Schwelle; Zeile in der Kurzfassung am Bewertungstag, beim Start und bei einem Problem;
+  Sofortmeldung bei Wechsel, Ausfall und Abweichung vom Protokoll.

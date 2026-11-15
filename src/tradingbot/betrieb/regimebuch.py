@@ -86,6 +86,117 @@ def signale_text(eintrag: dict) -> str:
     return ", ".join(f"{SIGNALNAMEN[s]} {'aus' if eintrag.get(s) else 'an'}" for s in signale.SIGNALE)
 
 
+def signalwerte(monatsende, schlusskurse: pd.Series, makro) -> dict:
+    """Werte und Schwellen der vier Signale am Monatsende, nur zur Anzeige (dieselben Daten und Hilfsfunktionen wie die
+    eingefrorenen Signale; entschieden wird allein in `signale.signale_am`)."""
+    tag = pd.Timestamp(monatsende).normalize()
+    c = schlusskurse.dropna().sort_index().loc[:tag]
+    enden = signale.monatsenden(c.index)
+    monat = c.loc[enden]
+    periode = tag.to_period("M")
+    kurve = signale._monatsmittel(makro(signale.REIHEN["kurve"], tag))
+    kredit = signale._monatsmittel(makro(signale.REIHEN["kredit"], tag))
+    fenster = kredit.reindex(pd.period_range(periode - (signale.KREDIT_MONATE - 1), periode, freq="M"))
+    sahm = signale.sahm_wert(makro(signale.REIHEN["arbeit"], tag - pd.Timedelta(days=1)))
+
+    def zahl(x):
+        return None if x is None or pd.isna(x) else round(float(x), 4)
+
+    return {"schluss": zahl(monat.iloc[-1]), "schluss_mittel": zahl(monat.iloc[-signale.TREND_MONATE:].mean()),
+            "kurve": zahl(kurve.get(periode)), "kredit": zahl(fenster.iloc[-1]), "kredit_mittel": zahl(fenster.mean()), "sahm": zahl(sahm)}
+
+
+def haltepflicht_bis(protokoll: dict) -> str | None:
+    """Monat (JJJJ-MM), an dessen Ende der Zustand frühestens wieder wechseln kann: zwei Monate nach dem letzten Wechsel
+    (die erste Bewertung zählt als Wechsel). None, wenn dieser Monat schon bewertet ist (keine Haltepflicht mehr)."""
+    monate = sorted(protokoll)
+    if not monate:
+        return None
+    wechsel = monate[0]
+    for vor, m in zip(monate, monate[1:]):
+        if protokoll[m]["risiko_aus"] != protokoll[vor]["risiko_aus"]:
+            wechsel = m
+    frei = str(pd.Period(wechsel, "M") + signale.HALTEPFLICHT_MONATE)
+    return frei if frei > monate[-1] else None
+
+
+def seit(protokoll: dict) -> str | None:
+    """Monat des letzten Wechsels auf den aktuellen Zustand."""
+    monate = sorted(protokoll)
+    if not monate:
+        return None
+    wechsel = monate[0]
+    for vor, m in zip(monate, monate[1:]):
+        if protokoll[m]["risiko_aus"] != protokoll[vor]["risiko_aus"]:
+            wechsel = m
+    return wechsel
+
+
+def _de(x, n=2) -> str:
+    return "–" if x is None else f"{x:,.{n}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def signalzeilen(eintrag: dict) -> list[str]:
+    """Die vier Signale mit Wert und Schwelle (Werte fehlen in der Vorgeschichte: dann nur an/aus)."""
+    w = eintrag.get("werte") or {}
+
+    def lage(s):
+        return "aus" if eintrag.get(s) else "an"
+
+    return [f"Trend {lage('trend_aus')}: Monatsschluss {_de(w.get('schluss'))} gegen 10-Monats-Durchschnitt {_de(w.get('schluss_mittel'))} (aus, wenn darunter)",
+            f"Zinskurve {lage('kurve_aus')}: 10 Jahre − 3 Monate im Monatsdurchschnitt {_de(w.get('kurve'))} Pp. (aus, wenn unter 0)",
+            f"Kreditaufschlag {lage('kredit_aus')}: Baa − 10 Jahre {_de(w.get('kredit'))} Pp. gegen 10-Monats-Durchschnitt {_de(w.get('kredit_mittel'))} (aus, wenn darüber)",
+            f"Arbeitsmarkt {lage('arbeit_aus')}: Sahm-Wert {_de(w.get('sahm'))} Pp. (aus ab 0,50)"]
+
+
+def karte(zustand: dict, tag) -> list[tuple[str, str]]:
+    """Zeilen für die Buchkarte: Zustand, letzte und nächste Bewertung, Haltepflicht, die vier Signale, Hinweis."""
+    protokoll = zustand.get("protokoll") or {}
+    if not protokoll:
+        return [("Regime", "noch keine Bewertung (kein Zustand, Buch bleibt in Kasse)"), ("Hinweis", HINWEIS)]
+    monat = max(protokoll)
+    e = protokoll[monat]
+    halte = haltepflicht_bis(protokoll)
+    zeilen = [("Regime", f"{zustand_text(e['risiko_aus'])} seit der Bewertung {seit(protokoll)} (Rohzustand {'aus' if e['roh_aus'] else 'an'})"),
+              ("Bewertung", f"letzte {pd.Timestamp(e['monatsende']):%d.%m.%Y}"
+                            + (f" (nachgeholt am {pd.Timestamp(e['bewertet_am']):%d.%m.%Y})" if e.get("art") == "nachgeholt" else "")
+                            + f", nächste {naechste_bewertung(tag):%d.%m.%Y}"),
+              ("Haltepflicht", f"Wechsel frühestens mit der Bewertung {halte}" if halte else "keine (Wechsel mit der nächsten Bewertung möglich)")]
+    zeilen += [("Signal", z) for z in signalzeilen(e)]
+    return zeilen + [("Hinweis", HINWEIS)]
+
+
+def kurzzeile(regime: dict) -> str | None:
+    """Zeile für die Kurzfassung: nur am Bewertungstag (auch nachgeholt), beim Start oder bei einem Problem."""
+    if not regime:
+        return None
+    if regime.get("fehler"):
+        return "Regime: Monatsbewertung nicht möglich – Position bleibt, wird nachgeholt"
+    if not (regime.get("neu") or regime.get("start")) or regime.get("risiko_aus") is None:
+        return None
+    e = regime.get("eintrag") or {}
+    art = "Start" if regime.get("start") else ("Wechsel" if regime.get("wechsel") else "unverändert")
+    return f"Regime: Bewertung {regime.get('monat')} – {zustand_text(regime['risiko_aus'])} ({art}; {signale_text(e)})"
+
+
+def fehlende_signale(c: pd.Series, makro) -> str:
+    """Diagnose, wenn die eingefrorene Rechnung abbricht: erstes Monatsende nach Beginn, an dem ein Signal nicht bestimmbar
+    ist, und das letzte Monatsende der Reihe (nur Text für die Meldung; an den Regeln ändert das nichts)."""
+    enden = signale.monatsenden(c.index, letzter_monat_abgeschlossen=ist_monatsende(c.index[-1]))
+    monat, begonnen, erster = c.loc[enden], False, None
+    for t in enden:
+        z = signale.signale_am(t, monat, makro)
+        fehlt = [SIGNALNAMEN[k] for k in signale.SIGNALE if z[k] is None]
+        if not fehlt:
+            begonnen = True
+        elif begonnen and erster is None:
+            erster = (t, fehlt)
+    if erster is None:
+        return "kein Signal fehlt"
+    text = f"nicht bestimmbar seit {erster[0]:%d.%m.%Y}: {', '.join(erster[1])}"
+    return text + (f"; am {enden[-1]:%d.%m.%Y} weiter nicht bestimmbar: {', '.join(fehlt)}" if fehlt else f"; am {enden[-1]:%d.%m.%Y} wieder bestimmbar")
+
+
 def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[dict, Stand]:
     """Zustand des Buchs am Signaltag `tag`. `makro_laden()` liefert den MakroStand und wird nur gerufen, wenn eine
     Bewertung ansteht. Gibt den neuen Buchzustand (fürs Journal) und den Stand zurück. Fehler (keine Makrodaten, Lücke)
@@ -97,7 +208,11 @@ def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[
     faellig = faellige_monate(schlusskurse, tag, protokoll)
     if faellig:
         c = _schluesse(schlusskurse, tag)
-        verlauf = signale.regime_verlauf(c, makro_laden(), variante=VARIANTE, letzter_monat_abgeschlossen=ist_monatsende(c.index[-1]))
+        makro = makro_laden()
+        try:
+            verlauf = signale.regime_verlauf(c, makro, variante=VARIANTE, letzter_monat_abgeschlossen=ist_monatsende(c.index[-1]))
+        except ValueError as f:
+            raise ValueError(f"{f}; {fehlende_signale(c, makro)}") from None
         verlauf = verlauf[verlauf["roh_aus"].notna()]
         neu_gerechnet = {str(pd.Timestamp(e).to_period("M")): (pd.Timestamp(e), z) for e, z in verlauf.iterrows()}
         # Protokoll gegen Neuberechnung: das Protokoll gilt, jede Abweichung wird einmal laut gemeldet
@@ -130,6 +245,8 @@ def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[
         for m in monate:
             protokoll[m].setdefault("risiko_aus", bool(mit[m]))
         stand.wechsel = vorher is not None and protokoll[monate[-1]]["risiko_aus"] != vorher
+        for m in ([monate[-1]] if stand.start else stand.neu):          # Werte und Schwellen zur Anzeige (Vorgeschichte: nur der letzte Monat)
+            protokoll[m]["werte"] = signalwerte(protokoll[m]["monatsende"], c, makro)
     if protokoll:
         stand.monat = max(protokoll)
         stand.eintrag = protokoll[stand.monat]

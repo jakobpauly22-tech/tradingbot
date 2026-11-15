@@ -82,8 +82,11 @@ def test_start_protokolliert_die_vorgeschichte_und_setzt_den_zustand():
     assert s.start and s.risiko_aus is False and s.monat == "2026-10" and not s.neu and not s.wechsel and not s.laut
     assert min(z["protokoll"]) == "2012-10" and max(z["protokoll"]) == "2026-10"          # erste Bewertung wie im Backtest
     e = z["protokoll"]["2026-10"]
+    werte = e.pop("werte")
     assert e == {"monatsende": "2026-10-30", "trend_aus": False, "kurve_aus": True, "kredit_aus": False, "arbeit_aus": False,
                  "roh_aus": False, "risiko_aus": False, "bewertet_am": "2026-11-16", "art": "start"}
+    assert werte["schluss"] > werte["schluss_mittel"] and werte["kurve"] == -0.5 and werte["kredit"] == werte["kredit_mittel"] == 2.0
+    assert werte["sahm"] == 0.0 and "werte" not in z["protokoll"]["2026-09"]             # Vorgeschichte ohne Werte
     assert z["festlegung"] == "b628678" and z["variante"] == "V1"
     assert any("Start" in x and "Risiko an" in x for x in s.meldungen)
 
@@ -358,3 +361,84 @@ def test_makro_cache_des_betriebs_liegt_im_betriebsbereich(tmp_path, monkeypatch
         laden()
     assert sorted(r for r, _, _ in pfade) == ["BAA10Y", "T10Y3M", "UNRATE"]
     assert all(w == tmp_path / "betrieb" / "cache" and alter == 0.0 for _, w, alter in pfade)
+
+
+# --- Anzeige und Benachrichtigung (Sitzung 6) -------------------------------------------------------------------------------
+def test_haltepflicht_und_karte():
+    m = Makro()
+    c = kursreihe("2027-02-26", fallend_ab="2026-11-02", steigend_ab="2026-12-01")
+    z, _ = regimebuch.bewerten("2026-11-16", c.loc[:"2026-11-16"], m.laden, {})
+    assert regimebuch.haltepflicht_bis(z["protokoll"]) is None                            # seit 2012 unverändert an
+    k = dict(regimebuch.karte(z, "2026-11-16"))
+    assert k["Regime"].startswith("Risiko an seit der Bewertung 2012-10") and "nächste 30.11.2026" in k["Bewertung"]
+    assert k["Haltepflicht"].startswith("keine") and "nicht bestanden" in k["Hinweis"]
+    z, _ = regimebuch.bewerten("2026-11-30", c.loc[:"2026-11-30"], m.laden, z)           # Wechsel auf Risiko aus
+    assert regimebuch.haltepflicht_bis(z["protokoll"]) == "2027-01" and regimebuch.seit(z["protokoll"]) == "2026-11"
+    zeilen = regimebuch.karte(z, "2026-11-30")
+    k = dict(zeilen)
+    assert k["Regime"].startswith("Risiko aus seit der Bewertung 2026-11") and "letzte 30.11.2026, nächste 30.12.2026" in k["Bewertung"]
+    assert "Bewertung 2027-01" in k["Haltepflicht"]
+    signale_z = [t for n, t in zeilen if n == "Signal"]
+    assert len(signale_z) == 4 and signale_z[0].startswith("Trend aus: Monatsschluss") and "10-Monats-Durchschnitt" in signale_z[0]
+    assert signale_z[1].startswith("Zinskurve aus") and "-0,50" in signale_z[1] and "Sahm-Wert 0,00" in signale_z[3]
+    z, _ = regimebuch.bewerten("2027-01-29", c.loc[:"2027-01-29"], m.laden, regimebuch.bewerten("2026-12-30", c.loc[:"2026-12-30"], m.laden, z)[0])
+    assert regimebuch.haltepflicht_bis(z["protokoll"]) == "2027-03"                       # zurück auf an: wieder zwei Monate
+    assert dict(regimebuch.karte({}, "2026-11-16"))["Regime"].startswith("noch keine Bewertung")
+
+
+def test_signalwerte_passen_zu_den_eingefrorenen_signalen():
+    m = Makro()
+    c = kursreihe("2026-11-30", fallend_ab="2026-11-02")
+    w = regimebuch.signalwerte("2026-11-30", c, m.stand)
+    s = signale.signale_am(pd.Timestamp("2026-11-30"), c.loc[signale.monatsenden(c.index)], m.stand)
+    assert (w["schluss"] < w["schluss_mittel"]) is s["trend_aus"] is True
+    assert (w["kurve"] < 0) is s["kurve_aus"] and (w["kredit"] > w["kredit_mittel"]) is s["kredit_aus"]
+    assert (w["sahm"] >= 0.5) is s["arbeit_aus"]
+
+
+def test_kurzfassung_zeile_nur_am_bewertungstag(umgebung):
+    from tradingbot.betrieb.benachrichtigung import kurzfassung
+
+    j, rm = umgebung
+    m = Makro()
+    c = kursreihe("2026-12-02", fallend_ab="2026-11-10")
+    b = lade_konfiguration("betrieb")
+    e = lauf(j, rm, jetzt=abend(2026, 11, 16), regime_daten=daten(c, m))
+    assert "Regime: Bewertung 2026-10 – Risiko an (Start; Trend an, Zinskurve aus" in kurzfassung(e, j, b)
+    e = lauf(j, rm, jetzt=abend(2026, 11, 17), regime_daten=daten(c, m))
+    assert "Regime:" not in kurzfassung(e, j, b)                                          # kein Bewertungstag: keine Zeile
+    e = lauf(j, rm, jetzt=abend(2026, 11, 30), regime_daten=daten(c, m))
+    assert "Regime: Bewertung 2026-11 – Risiko aus (Wechsel; Trend aus" in kurzfassung(e, j, b)
+    e = lauf(j, rm, jetzt=abend(2026, 12, 30), regime_daten=daten(kursreihe("2026-12-30", fallend_ab="2026-11-10"), Makro(ausfall=True)))
+    assert "Regime: Monatsbewertung nicht möglich" in kurzfassung(e, j, b)
+
+
+def test_buchkarte_zeigt_zustand_signale_und_fehler(umgebung):
+    from tradingbot.betrieb.ansicht import buchuebersicht
+
+    j, rm = umgebung
+    b = lade_konfiguration("betrieb")
+    c = kursreihe("2026-12-02", fallend_ab="2026-11-10")
+    e = lauf(j, rm, jetzt=abend(2026, 11, 16), regime_daten=daten(c, Makro()))
+    karten = {k.buch: k for k in buchuebersicht(j, b, e)}
+    assert karten["real"].zusatz == [] and karten["crossover"].zusatz == []
+    namen = [n for n, _ in karten["regime"].zusatz]
+    assert namen == ["Regime", "Bewertung", "Haltepflicht", "Signal", "Signal", "Signal", "Signal", "Hinweis"]
+    e = lauf(j, rm, jetzt=abend(2026, 11, 30), regime_daten=daten(c, Makro(ausfall=True)))
+    zusatz = {k.buch: k for k in buchuebersicht(j, b, e)}["regime"].zusatz
+    assert zusatz[0][0] == "Achtung" and "nicht möglich" in zusatz[0][1] and zusatz[1][1].startswith("Risiko an")
+
+
+def test_fehlender_monat_der_arbeitslosenquote_wird_benannt():
+    """Probelauf 15.11.2026: Die Arbeitslosenquote für Oktober 2025 wurde nie veröffentlicht. Die eingefrorene Sahm-Regel
+    verlangt lückenlose Monate; ohne sie gibt es keinen Zustand. Die Meldung nennt Signal und Beginn, nichts wird geschätzt."""
+    m = Makro()
+    original = m.stand
+
+    def mit_luecke(reihe, stichtag):
+        w = original(reihe, stichtag)
+        return w.drop(pd.Timestamp("2025-10-01"), errors="ignore") if reihe == "UNRATE" else w
+
+    m.stand = mit_luecke
+    with pytest.raises(ValueError, match="nicht bestimmbar seit 31.12.2025: Arbeitsmarkt.*weiter nicht bestimmbar: Arbeitsmarkt"):
+        regimebuch.bewerten("2026-11-16", kursreihe("2026-11-16"), m.laden, {})

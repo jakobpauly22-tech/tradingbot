@@ -133,6 +133,12 @@ def kurzfassung(erg, journal, betrieb: dict, *, eurobetraege: bool = True, seit:
     for b, befunde in sorted(erg.befunde.items()):
         zeilen.append(f"Datenprüfung: {b} ohne Vorschläge ({len(befunde)} Befund{'e' if len(befunde) != 1 else ''})")
 
+    if not erg.gestoppt:                             # Schattenbuch regime: nur am Bewertungstag, beim Start oder bei einem Problem
+        from tradingbot.betrieb.regimebuch import kurzzeile
+        zeile = kurzzeile(getattr(erg, "regime", None) or {})
+        if zeile:
+            zeilen.append(zeile)
+
     zeilen += kassenzeilen(journal, eurobetraege=eurobetraege, seit=seit)
     if seit:
         for status, wort in (("abgelehnt", "Abgelehnt"), ("verfallen", "Verfallen")):

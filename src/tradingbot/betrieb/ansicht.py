@@ -183,6 +183,7 @@ class BuchKarte:
     positionen: list[Position] = field(default_factory=list)
     offene: list[dict] = field(default_factory=list)
     technik: bool = False           # Satellite-Buch (Stop-Spalte)
+    zusatz: list[tuple[str, str]] = field(default_factory=list)   # weitere Zeilen (Buch regime: Zustand, Signale, Haltepflicht)
 
 
 def einzahlungen(journal, buch: str) -> pd.Series:
@@ -297,8 +298,20 @@ def buchuebersicht(journal, betrieb: dict, erg) -> list[BuchKarte]:
             None if letzter is None else letzter["wert"], None if letzter is None else letzter["wert_modell"],
             None if letzter is None else letzter["tag"], kasse, reserviert,
             rendite_seit_messbeginn(werte, einz), None if bis is None else rendite_spyi(erg.spyi, einz, bis), positionen, offene,
-            technik))
+            technik, regime_zeilen(journal, buch, erg)))
     return karten
+
+
+def regime_zeilen(journal, buch: str, erg) -> list[tuple[str, str]]:
+    """Buch regime: Zustand, Bewertungen, Haltepflicht und Signale aus dem Protokoll im Journal (betrieb/regimebuch.py)."""
+    from tradingbot.betrieb import regimebuch
+
+    if buch != regimebuch.BUCH:
+        return []
+    tag = erg.xetra if getattr(erg, "xetra", None) is not None else erg.jetzt.date()
+    zeilen = regimebuch.karte(journal.zustand(buch), tag)
+    fehler = (getattr(erg, "regime", None) or {}).get("fehler")
+    return ([("Achtung", fehler)] if fehler else []) + zeilen
 
 
 # --- Namen (Jakob 10.11.2026: „Domino's Pizza (DPZ)“, „iShares Core MSCI Japan (EUNN)“) ---------------------------------

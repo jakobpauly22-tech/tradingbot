@@ -334,3 +334,17 @@ def test_uebernahme_bestaetigen_und_ablehnen_in_der_oberflaeche(wurzel, journal)
     assert buchstopp.gestoppt(journal)["fundamental_a"]["quittung_noetig"]
     assert journal.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art IN ('massnahme_bestaetigt','massnahme_abgelehnt')").fetchone()[0] == 2
     assert kapitalmassnahmen.bestaetigung_offen(journal) == []
+
+
+def test_buchkarte_regime_zeigt_zustand_und_signale(wurzel, journal):
+    """Buch regime (15.11.2026): Zustand, Bewertung, Haltepflicht, vier Signale und Hinweis aus dem Protokoll im Journal."""
+    e = {"monatsende": "2026-10-30", "trend_aus": False, "kurve_aus": True, "kredit_aus": False, "arbeit_aus": False, "roh_aus": False,
+         "risiko_aus": False, "bewertet_am": "2026-11-16", "art": "start",
+         "werte": {"schluss": 12.1, "schluss_mittel": 11.5, "kurve": -0.2, "kredit": 1.7, "kredit_mittel": 1.8, "sahm": 0.1}}
+    journal.buch_anlegen("regime", 10000.0)
+    journal.zustand_speichern("regime", {"protokoll": {"2026-09": {**e, "monatsende": "2026-09-30", "werte": None}, "2026-10": e}})
+    f = fenster(wurzel, journal)
+    zeilen = f.zusatz_zeilen["regime"]
+    assert [n for n, _ in zeilen] == ["Regime", "Bewertung", "Haltepflicht", "Signal", "Signal", "Signal", "Signal", "Hinweis"]
+    assert zeilen[0][1].startswith("Risiko an") and "12,10" in zeilen[3][1] and "nicht bestanden" in zeilen[-1][1]
+    assert f.zusatz_zeilen["real"] == []

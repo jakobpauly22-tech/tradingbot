@@ -196,6 +196,7 @@ class Tagesfenster:
         self.positionen_rahmen: dict[str, ttk.Frame] = {}
         self.positionen_knoepfe: dict[str, ttk.Button] = {}
         self.differenz_labels: dict[str, tk.Label] = {}
+        self.zusatz_zeilen: dict[str, list[tuple[str, str]]] = {}
         self.positionen_tabellen: dict[str, ttk.Treeview] = {}
         try:
             karten = ansicht.buchuebersicht(self.journal, self.betrieb, self.erg)
@@ -228,6 +229,13 @@ class Tagesfenster:
                 self.differenz_labels[k.buch] = tk.Label(z, text=f"Differenz {diff * 100:+.2f} Pp.", font=("Segoe UI", 9, "bold"),
                                                          fg="#2e7d32" if diff >= 0 else "#c62828")
                 self.differenz_labels[k.buch].pack(side="left", padx=6)
+        for name, text in k.zusatz:                          # Buch regime: Zustand, Bewertung, Haltepflicht, Signale (15.11.2026)
+            z = ttk.Frame(rahmen)
+            z.pack(fill="x")
+            ttk.Label(z, text=f"{name}:", width=12, font=("Segoe UI", 9, "bold")).pack(side="left")
+            farbe = {"Achtung": "#c62828", "Hinweis": "#555555"}.get(name, "#222222")
+            ttk.Label(z, text=text, wraplength=900, justify="left", foreground=farbe).pack(side="left")
+        self.zusatz_zeilen[k.buch] = list(k.zusatz)
         self._stopp_zeile(rahmen, k.buch)
         # Positionen (einklappbar, Jakob 10.11.2026)
         kopf = ttk.Frame(rahmen)
