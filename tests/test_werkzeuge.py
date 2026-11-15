@@ -164,3 +164,38 @@ def test_schluss_naechster_bericht():
                                    "reportDate": ["", "2023-06-30", "2023-06-30", "2023-12-31"]}}}
     assert w.naechster_bericht(subs, pd.Timestamp("2023-06-15"))["accessionNumber"] == "b"
     assert w.naechster_bericht(subs, pd.Timestamp("2024-03-01")) is None
+
+
+# --- tools/pruefe_rohkurse.py und stichprobe_marktwert_roh.py (c2 (2), Jakob 15.11.2026) -----------------------------------
+def test_rohkurse_namenspruefung():
+    w = _werkzeug("pruefe_rohkurse")
+    assert w.name_passt("LKQ Corp", "LKQ Corporation") and w.name_passt("Conoco Phillips", "ConocoPhillips")
+    assert w.name_passt("F5 Inc", "F5, Inc.") and not w.name_passt("Fleetcor Technologies Inc", "Corpay, Inc.")
+
+
+def test_stichprobe_auswahl_deterministisch_mit_festen_firmen_und_jahren():
+    import pandas as pd
+
+    w = _werkzeug("stichprobe_marktwert_roh")
+    kand = pd.DataFrame([{"firma": f, "messtag": pd.Timestamp(f"{j}-06-30"), "jahr": j, "streubesitz": 1e9}
+                         for f in range(1, 40) for j in range(2016, 2025)])
+    a = w.auswahl(kand, {"X": 5, "Y": 7}, {11, 12, 13, 14})
+    b = w.auswahl(kand, {"X": 5, "Y": 7}, {11, 12, 13, 14})
+    assert a.equals(b) and len(a) == 20 and a["firma"].is_unique
+    assert {5, 7} <= set(a["firma"]) and len(set(a["firma"]) & {11, 12, 13, 14}) >= 3
+    assert set(range(2016, 2025)) <= set(a["jahr"])
+
+
+def test_stichprobe_eingefrorene_auswahl():
+    w = _werkzeug("stichprobe_marktwert_roh")
+    assert len(w.FESTE_AUSWAHL) == 20 and len({f for _, f, _ in w.FESTE_AUSWAHL}) == 20
+    assert {"MA", "UPS", "GOOGL"} <= {t for t, _, _ in w.FESTE_AUSWAHL}
+    assert {int(m[:4]) for _, _, m in w.FESTE_AUSWAHL} == set(range(2016, 2025))
+
+
+def test_scores_marktwert_wahl_rueckfall_ohne_rohkurs_bis_zum_stichtag():
+    w = _werkzeug("auswertung_scores")
+    assert w.marktwert_wahl({"marktwert": None, "grund": "kein Rohkurs bis zum Stichtag"}, 3.4e10, None) == (
+        3.4e10, None, "Rohkurs erst nach dem Stichtag (Teil b)")
+    assert w.marktwert_wahl({"marktwert": 5.4e10, "grund": None}, 1.06e10, None) == (5.4e10, None, "roh")
+    assert w.marktwert_wahl({"marktwert": None, "grund": "Streubesitz 16% des Marktwerts"}, 1.06e10, None)[0] is None

@@ -22,13 +22,21 @@ from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitgl
 from tradingbot.engines.fundamental.aktienzahl import lade_aktienfakten, signal_alt_neu, vergleich_fuer_abschluesse
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
 from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
-from tradingbot.engines.fundamental.multiples import marktwert_am, marktwert_korrigiert, multiples, perzentil_raenge
+from tradingbot.engines.fundamental.multiples import marktwert_am, marktwert_korrigiert, marktwert_rohkurs, multiples, perzentil_raenge
 from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
 from tradingbot.engines.fundamental.scores import _w, accruals_quote, altman, beneish, piotroski
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
 warnings.simplefilter("ignore")
 Z2_GRUND = "Altman Z'' "
+
+
+def marktwert_wahl(mr: dict, mw_teil_b, grund_teil_b) -> tuple:
+    """c2 (2): Marktwert aus dem Rohkurs; gibt es bis zum Stichtag keinen Rohkurs (Rohreihe beginnt später, z. B. LIN
+    ab 31.10.2018), Rückfall auf Teil b wie bei fehlender Rohreihe. Rückgabe (Marktwert, Grund, Kennzeichen Kurs)."""
+    if str(mr.get("grund") or "").startswith("kein Rohkurs"):
+        return mw_teil_b, grund_teil_b, "Rohkurs erst nach dem Stichtag (Teil b)"
+    return mr["marktwert"], mr["grund"], "roh"
 
 
 def main(argv=None) -> int:
@@ -40,15 +48,31 @@ def main(argv=None) -> int:
     a.add_argument("--marktwert-korrektur", action="store_true",
                    help="Datenkorrektur Marktwert (Jakob 13.11.2026): Abspaltungen nicht als Split, Ersatz-Aktienzahl; "
                         "Vergleichsspalten zur bisherigen Rechnung, eigener Cache-Schlüssel (Zusatz „_marktwert“)")
+    a.add_argument("--marktwert-rohkurse", action="store_true",
+                   help="c2 (2), Jakob 15.11.2026: Marktwert aus unbereinigten Rohkursen (Weg A), schließt --marktwert-korrektur ein; "
+                        "Rückfall auf Teil b je Firma ohne abgenommene Rohreihe; eigener Cache-Schlüssel (Zusatz „_roh“). "
+                        "Sperre c3: startet nur, wenn jede Reihe eine Abnahme hat (tools/pruefe_rohkurse.py)")
+    a.add_argument("--probe", action="store_true",
+                   help="mit --marktwert-rohkurse: Teilabdeckung erlaubt (Zusatz „_probe“); zählt nie als c3")
     argumente = a.parse_args(argv)
-    korrektur, mw_korrektur = argumente.eq_offer_splitbereinigt, argumente.marktwert_korrektur
+    korrektur, mw_korrektur, mw_roh = argumente.eq_offer_splitbereinigt, argumente.marktwert_korrektur, argumente.marktwert_rohkurse
+    mw_korrektur = mw_korrektur or mw_roh
+    if mw_roh and not argumente.probe:
+        from tradingbot.daten.rohkurse_marktwert import dauerhaft_nicht_verfuegbar, fehlende_fuer_c3, lade_abnahme
+
+        fehlend = fehlende_fuer_c3(pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv"), lade_abnahme(),
+                                   dauerhaft_nicht_verfuegbar())
+        if fehlend:
+            return laut_melden(RuntimeError(f"Sperre c3: {len(fehlend)} Reihen ohne Abnahme der Rohkurse (erst nachladen und "
+                                            f"tools/pruefe_rohkurse.py, oder --probe): {', '.join(fehlend[:30])}"
+                                            + (" …" if len(fehlend) > 30 else "")))
     konfig = lade_konfiguration("fundamental")
     kennzahlen, filt, mult = konfig["kennzahlen"], konfig["filter"], konfig["multiples"]
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
     universum, _ = lade_universum()
     status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
-    daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0])
+    daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0], rohkurse=mw_roh)
     stichtage = [t for t in rebalancing_stichtage() if t >= pd.Timestamp(ABNAHME_ZEITRAUM[0])]
     cache = standard_cache()
 
@@ -105,6 +129,17 @@ def main(argv=None) -> int:
                           "marktwert_ungeklaert": "; ".join(f"{u['datum']} {u['faktor_kursreihe']:g} ({u['art']})" for u in mk["ungeklaert"]),
                           "ep_alt": multiples(t, mw)["ep"], "ebit_ev_alt": multiples(t, mw)["ebit_ev"]})
                 mw, mw_grund = mk["marktwert"], mk["grund"]
+                if mw_roh:                           # c2 (2): Rohkurs; Teil b als Vergleich und Rückfall
+                    z.update({"marktwert_teil_b": mw, "marktwert_grund_teil_b": mw_grund,
+                              "marktwert_kurs": daten.rohkurse_status.get(firma, "keine Kursreihe")})
+                    if daten.rohkurse_status.get(firma) == "roh":
+                        mr = marktwert_rohkurs(tag, daten.rohkurse[firma], daten.kurse[firma], aktien_roh.get(firma),
+                                               daten.streubesitz_gueltig.get(firma), ereignisse=ereignisse.get(firma),
+                                               ersatz_fakten=ersatz_fakten.get(firma), max_alter_monate=max_alter)
+                        z.update({"marktwert_splitfaktor_roh": mr["splitfaktor"], "marktwert_rohkurs": mr["rohkurs"],
+                                  "marktwert_ungeklaert_roh": "; ".join(f"{x['datum']} {x['faktor_kursreihe']:g} ({x['art']})" for x in mr["ungeklaert"])})
+                        mw, mw_grund, kurs = marktwert_wahl(mr, mw, mw_grund)
+                        z["marktwert_kurs"] = kurs
             industrie = industrie_von <= sic <= industrie_bis
             eq = (vergleich_fuer_abschluesse(t, aktienfakten.get(firma), tag, daten.kurse[firma]["split"]) if korrektur else None)
             p, a, b, acc, m = (piotroski(t, eq_offer=eq), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t),
@@ -142,11 +177,14 @@ def main(argv=None) -> int:
         raenge.append(perzentil_raenge(gruppe, min_firmen=mult["gruppe_min_firmen"], kappung=tuple(mult["kappung_perzentile"])))
     tabelle = tabelle.merge(pd.concat(raenge)[["stichtag", "firma", "gruppe_ep", "rang_ep", "gruppe_ebit_ev", "rang_ebit_ev"]],
                             on=["stichtag", "firma"], how="left")
-    schluessel = "scores" + ("_eq_offer" if korrektur else "") + ("_marktwert" if mw_korrektur else "")
+    schluessel = ("scores" + ("_eq_offer" if korrektur else "") + ("_marktwert" if mw_korrektur else "") + ("_roh" if mw_roh else "")
+                  + ("_probe" if mw_roh and argumente.probe else ""))
     cache.schreiben("fundamental", schluessel, tabelle.astype({"firma": "int64"}),
                     {"stichtage": len(stichtage), "zeitraum": list(ABNAHME_ZEITRAUM),
                      "datenkorrekturen": (["Piotroski EQ_OFFER splitbereinigt (Jakob 13.11.2026)"] if korrektur else [])
-                     + (["Marktwert: Abspaltungen, Ersatz-Aktienzahl, Kursreihe E. I. du Pont gekappt (Jakob 13.11.2026)"] if mw_korrektur else [])})
+                     + (["Marktwert: Abspaltungen, Ersatz-Aktienzahl, Kursreihe E. I. du Pont gekappt (Jakob 13.11.2026)"] if mw_korrektur else [])
+                     + (["Marktwert aus Rohkursen, Weg A (Jakob 15.11.2026)" + (" – PROBE, zählt nicht als c3" if argumente.probe else "")]
+                        if mw_roh else [])})
 
     # --- Bericht ------------------------------------------------------------------------------
     b = tabelle.assign(jahr=tabelle["stichtag"].dt.year)
@@ -201,7 +239,8 @@ def main(argv=None) -> int:
              f"Negativer EV (markiert, ohne EBIT/EV): {int(bewertbar['ev_negativ'].fillna(False).sum())} Firmen-Stichtage."]
     ziel = PROJEKT_WURZEL / "daten" / "fundamental"
     ziel.mkdir(parents=True, exist_ok=True)
-    (ziel / ("auswertung_scores_eq_offer.md" if korrektur else "auswertung_scores.md")).write_text("\n".join(text), encoding="utf-8")
+    # eigener Bericht je Schalter (scores_eq_offer, scores_marktwert, scores_marktwert_roh[_probe]); Basisbericht bleibt
+    (ziel / (f"auswertung_{schluessel}.md" if (korrektur or mw_korrektur) else "auswertung_scores.md")).write_text("\n".join(text), encoding="utf-8")
     print("\n".join(text))
     return 0
 

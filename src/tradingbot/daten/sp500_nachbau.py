@@ -48,6 +48,8 @@ class Firmendaten:
     verworfen: pd.DataFrame             # verworfene Streubesitzwerte mit Grund
     relevant: pd.DataFrame              # Mitgliedschaften im Zeitraum
     sic: dict = field(default_factory=dict)
+    rohkurse: dict = field(default_factory=dict)          # Firma → unbereinigte Reihe (close, split); nur mit rohkurse=True
+    rohkurse_status: dict = field(default_factory=dict)   # Firma → "roh" oder Grund für den Rückfall
 
 
 def _kappungs_eintraege() -> list:
@@ -153,8 +155,10 @@ def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_tick
 
 
 def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historien: dict, *, von=VORLAUF, bis=ENDE,
-                     mitglied_ab=START, tiingo=None) -> Firmendaten:
-    """Kurse, Streubesitz (roh und geprüft) und SIC-Historie je Firma; Fehlerschwelle 5 % beim Laden der Kurse."""
+                     mitglied_ab=START, tiingo=None, rohkurse: bool = False) -> Firmendaten:
+    """Kurse, Streubesitz (roh und geprüft) und SIC-Historie je Firma; Fehlerschwelle 5 % beim Laden der Kurse.
+    `rohkurse` (c2 (2), nur Backtest-Auswertung): zusätzlich unbereinigte Reihen je Firma, nur wenn jede Teilreihe der
+    Firma eine bestandene Abnahme hat (daten/rohkurse_marktwert.py); sonst Grund in `rohkurse_status`. Nur lokale Dateien."""
     from tradingbot.daten.tiingo import TiingoClient
     from tradingbot.konfiguration import lade_konfiguration
 
@@ -165,6 +169,11 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()
     eingefroren = eingefrorene_kurse()
+    roh_kurse, roh_status, roh_ok = {}, {}, set()
+    if rohkurse:
+        from tradingbot.daten.rohkurse_marktwert import abgenommen, lade_abnahme, rohreihe
+
+        roh_ok = abgenommen(lade_abnahme())
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -184,6 +193,16 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             k = buche_abspaltungen(k, abspaltungen.get((firma, str(z["ticker"]).upper()), []))
             k = ersetze_eingefrorene(k, eingefroren.get((firma, str(z["ticker"]).upper()), []))
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
+            if rohkurse and roh_status.get(firma, "roh") == "roh":
+                r = rohreihe(s["quelle"], s["symbol"]) if (s["quelle"], s["symbol"]) in roh_ok else None
+                if r is None:
+                    roh_status[firma] = ("Abnahme fehlt oder nicht bestanden" if (s["quelle"], s["symbol"]) not in roh_ok
+                                         else "Rohreihe fehlt") + f" ({s['symbol']})"
+                    roh_kurse.pop(firma, None)
+                else:
+                    r = kappe_reihe(r[["close", "split"]].sort_index().loc[pd.Timestamp(von):bis], firma, z["ticker"], kappung, kappung_ticker)
+                    roh_kurse[firma] = r if firma not in roh_kurse else roh_kurse[firma].combine_first(r)
+                    roh_status[firma] = "roh"
         except DatenkorrekturPasstNicht:
             raise                                             # nie still als Ladefehler zählen
         except Exception as f:  # zählt gegen die Fehlerschwelle
@@ -216,7 +235,8 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             g, v = streubesitz_pruefen(roh[firma], kurse[firma]["close"], pd.concat(aktien) if aktien else pd.Series(dtype=float))
             gueltig[firma] = g
             verworfen += [{"cik": firma, "ende": e.date(), "wert_mrd": r.wert / 1e9, "grund": r.grund} for e, r in v.iterrows()]
-    return Firmendaten(kurse, roh, gueltig, pd.DataFrame(verworfen, columns=["cik", "ende", "wert_mrd", "grund"]), relevant, sic)
+    return Firmendaten(kurse, roh, gueltig, pd.DataFrame(verworfen, columns=["cik", "ende", "wert_mrd", "grund"]), relevant, sic,
+                       roh_kurse, roh_status)
 
 
 def finanzwert_maske(sic: dict, tage: pd.DatetimeIndex, firmen: list) -> pd.DataFrame:

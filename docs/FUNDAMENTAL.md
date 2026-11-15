@@ -658,3 +658,43 @@ Rohkurse (Gewichte aus dem fortgeschriebenen Streubesitz, nur Kursverhältnisse)
 - **Kriterium:** 0,70 ≤ q ≤ 1,05 (Streubesitz ohne verbundene Aktionäre, daher höchstens rund 1; bis 5 % darüber wegen
   verschiedener Zähltage der Aktien; mehr als 30 % verbundene Aktionäre ist selten). Abweichungen gehen an Jakob, es wird
   nichts angepasst.
+
+### c2 (2): umgesetzt; Präzisierung und eingefrorene Auswahl der Stichprobe (festgehalten 15.11.2026 11:23, vor dem gewerteten Lauf)
+
+- **Code:** `daten/rohkurse_marktwert.py` (Rohreihe, Abnahme, Sperre c3), `multiples.marktwert_rohkurs` und
+  `aktienzahl_waehlen` (dieselbe Auswahl wie Teil b), `lade_firmendaten(rohkurse=True)` (Rohreihe je Firma nur, wenn
+  jede Teilreihe abgenommen ist; Kappungen wie bei den bereinigten Reihen), `tools/auswertung_scores.py
+  --marktwert-rohkurse [--probe]` (Cache-Schlüssel `scores_marktwert_roh[_probe]`, Vergleichsspalten
+  `marktwert_teil_b`, `marktwert_kurs`, `marktwert_splitfaktor_roh`, `marktwert_rohkurs`; Bericht je Schalter unter
+  `daten/fundamental/auswertung_<schlüssel>.md`, der Basisbericht bleibt unberührt).
+- **Erste Abnahme** (`docs/berichte/2026-11-15_rohkurse_abnahme.md`): 563 Rohreihen, 556 bestanden, 7 nicht (HWM, BX,
+  MTCH, DD (Yahoo) wegen Abweichungen; GEV, AMTM, BXLT zu kurz) → Rückfall auf Teil b. Verdeckter Faktor H ≠ 1 bei 22
+  Reihen (z. B. ORLY 15, BKNG 25, NFLX 10, KLAC 10, NKTR 1/15, Abspaltungen nach 2024 wie FTV 1,327, FDX 1,241). Für
+  c3 offen: 158 Reihen (Nachladen ab 01.12.2026, dann Abnahme erneut).
+- **Präzisierung der Stichprobe** (nach der ersten Auswahl, vor jeder Marktwert-Rechnung; die erste Auswahl enthielt CEG
+  2021 mit Streubesitz 0 vor dem Börsengang und DD als Firma mit H ≠ 1 ohne nutzbare Rohreihe): Kandidat nur mit
+  Streubesitz > 0 und Messtag in der Indexmitgliedschaft; Firmen mit H ≠ 1 nur, wenn sie die Rohreihe nutzen, Zuordnung
+  über die Kursreihe, nicht den Ticker.
+- **Eingefrorene Auswahl** (die Zufallsauswahl hängt über H ≠ 1 vom Stand der Abnahme ab und würde sich nach dem
+  Nachladen verschieben; der gewertete Lauf nutzt genau diese 20, `FESTE_AUSWAHL` im Werkzeug): MA 30.06.2020,
+  UPS 30.06.2021, GOOGL 29.06.2018, J 29.03.2019 (H), LEN 31.05.2017 (H), AMCR 31.12.2023 (H), ANDV 30.06.2016,
+  CF 30.06.2022, PANW 31.01.2024, FISV 30.06.2021, KMX 31.08.2016, WAT 01.10.2016, FANG 30.06.2023, EIX 30.06.2016,
+  FLR 29.06.2018, FBHS 30.06.2020, SNA 28.06.2019, NOV 30.06.2017, HAS 24.06.2016, KLAC 31.12.2020 (H). UPS, WAT
+  und SNA brauchen die Rohreihen aus dem Dezember.
+- **Korrektur nach dem ersten Probelauf (15.11.2026):** Die Annahme „Tiingo führt Abspaltungen nicht als Split“ war
+  falsch: Manche Abspaltungen stehen auch bei Tiingo als splitFactor (MRK/Organon 2021: 1,048; IBM/Kyndryl 2021: 1,046).
+  Die Formel rechnet deshalb s_e = Tiingo-Splitfaktor mit K(d, T) aus Teil b (Abspaltungen der Liste: s_e = 1); Faktoren
+  außerhalb der Liste bleiben und werden als ungeklärt gemeldet (Spalte `marktwert_ungeklaert_roh`). Der Probelauf zählt
+  nicht als c3 (Cache-Schlüssel `scores_marktwert_roh_probe`).
+- **Zweiter Probelauf (15.11.2026, mit K):** Bei 10.043 Firmen-Stichtagen mit Rohkurs weichen 460 um mehr als 1 % von
+  Teil b ab, genau die 16 Firmen mit verdecktem Faktor H ≠ 1 (Verhältnis = H, z. B. ORLY 15, BKNG 25, KLAC 10, NKTR
+  1/15); keine ungeklärten Tiingo-Faktoren. Bei NFLX, CRWD, BDX und DD liefert nur der Rohkurs einen plausiblen Wert
+  (Teil b um H zu klein).
+- **Rückfall ergänzt:** Gibt es bis zum Stichtag keinen Rohkurs (LIN: Tiingo-Rohreihe erst ab 31.10.2018), gilt Teil b,
+  markiert „Rohkurs erst nach dem Stichtag (Teil b)“ (`auswertung_scores.marktwert_wahl`).
+- **Offener Befund (Jakob entscheidet, nichts geändert):** Die Prüfung der Streubesitzwerte (`streubesitz_pruefen` in
+  `lade_firmendaten`) rechnet mit dem bereinigten Kurs × SEC-Aktienzahl und hat damit denselben verdeckten Faktor H. Bei
+  H-Firmen verwirft sie richtige Streubesitzwerte und behält unpassende. Folge 1: Der richtige Rohkurs-Marktwert fällt
+  durch die Plausibilitätsprüfung (NOW 2020–2022: rund 54 Mrd. USD, „Streubesitz 16 %“), während Teil b (um H = 5 zu
+  klein) durchkommt. Folge 2: Der Index-Nachbau gewichtet H-Firmen mit diesen Streubesitzwerten; die Aussage oben, der
+  Index-Nachbau brauche keine Rohkurse, gilt deshalb nur für die Fortschreibung, nicht für die Prüfung der Streubesitzwerte.

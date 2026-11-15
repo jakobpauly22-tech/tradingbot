@@ -71,6 +71,73 @@ def _unplausibel(mw: float, tag, kurse: pd.Series, schluss: pd.Series, streubesi
     return None
 
 
+def aktienzahl_waehlen(tag, aktien: pd.DataFrame | None, ersatz_fakten: pd.DataFrame | None, max_alter_monate: int):
+    """Aktienzahl für den Marktwert (Teil b, Jakob 13.11.2026): Deckblatt, wenn höchstens `max_alter_monate` alt (nach
+    `filed`, gegen T); sonst Ersatz = jüngste gewichtete Basic-Zahl (Messtag = filed). Rückgabe ((wert, messtag, filed,
+    quelle) oder None, Grund)."""
+    from tradingbot.engines.fundamental.aktienzahl import ersatz_aktienzahl
+
+    tag = pd.Timestamp(tag)
+    grenze = tag - pd.DateOffset(months=max_alter_monate)
+    bekannt = aktien[(aktien["filed"] + pd.Timedelta(days=1)) <= tag].dropna(subset=["wert"]) if aktien is not None and len(aktien) else None
+    if bekannt is not None and len(bekannt):
+        letzte = bekannt.sort_values("filed").iloc[-1]
+        if letzte["filed"] >= grenze:
+            return (float(letzte["wert"]), pd.Timestamp(letzte.name), letzte["filed"], "Deckblatt"), None
+    e = ersatz_aktienzahl(ersatz_fakten, tag)
+    if e is not None and e["filed"] >= grenze:
+        return (e["wert"], e["filed"], e["filed"], f"Ersatz (Basic, Periode bis {e['ende'].date()})"), None
+    if bekannt is not None and len(bekannt):
+        return None, f"Aktienzahl älter als {max_alter_monate} Monate, kein aktueller Ersatz"
+    return None, "keine Aktienzahl bekannt" + ("" if e is None else f", Ersatz älter als {max_alter_monate} Monate")
+
+
+def marktwert_rohkurs(stichtag, roh: pd.DataFrame, kurse: pd.DataFrame, aktien: pd.DataFrame | None, streubesitz: pd.DataFrame | None, *,
+                      ereignisse: pd.DataFrame | None = None, ersatz_fakten: pd.DataFrame | None = None, max_alter_monate: int = 15,
+                      plausibilitaet: bool = True) -> dict:
+    """Marktwert EK aus dem unbereinigten Kurs (c2 (2), Weg A, Jakob 15.11.2026, docs/FUNDAMENTAL.md).
+
+        MW_T = Roh_T · A_d · Π_{d<e≤T} s_e
+
+    Roh_T: letzter unbereinigter Schluss bis T (`roh`, Spalten close, split; daten/rohkurse_marktwert.rohreihe);
+    A_d: Aktienzahl vom Messtag d mit derselben Auswahl wie Teil b (`aktienzahl_waehlen`); s_e: Aktien-Splitfaktoren
+    zwischen d und T = Tiingo-Splitfaktoren der Rohreihe mit K(d, T) aus Teil b: Tiingo führt manche Abspaltungen ebenfalls
+    als splitFactor (MRK/Organon 2021: 1,048, IBM/Kyndryl 2021: 1,046); K nimmt Abspaltungen der Liste heraus (s_e = 1),
+    Faktoren außerhalb der Liste bleiben und werden als ungeklärt gemeldet. Der Rohkurs enthält keine Bereinigung um
+    Splits nach der Tresorgrenze.
+    Plausibilität gegen den Streubesitz wie bisher: Die Fortschreibung F_e · C_T / C_e nutzt die bereinigte Reihe `kurse`
+    (nur Kursverhältnis) mit K(e, T) für Abspaltungen, die Yahoo als Split führt. `plausibilitaet=False` (Stichprobe)
+    liefert den Wert ohne Filter.
+    Rückgabe: marktwert, grund, quelle (Deckblatt | Ersatz), aktien_filed, splitfaktor (Π s_e nach K), rohkurs, ungeklaert.
+    """
+    from tradingbot.daten.kapitalmassnahmen_historie import korrektur
+
+    tag = pd.Timestamp(stichtag)
+    ergebnis = {"marktwert": None, "grund": None, "quelle": None, "aktien_filed": None, "splitfaktor": 1.0, "rohkurs": None,
+                "ungeklaert": []}
+    roh_bis = roh["close"].loc[:tag].dropna()
+    if roh_bis.empty:
+        return {**ergebnis, "grund": "kein Rohkurs bis zum Stichtag"}
+    wahl, grund_wahl = aktienzahl_waehlen(tag, aktien, ersatz_fakten, max_alter_monate)
+    if wahl is None:
+        return {**ergebnis, "grund": grund_wahl}
+    wert, messtag, filed, quelle = wahl
+    roh_split = roh["split"] if "split" in roh.columns else None
+    s = roh_split.fillna(0) if roh_split is not None else pd.Series(dtype=float)
+    s = s[(s > 0) & (s.index > messtag) & (s.index <= tag)]
+    k_roh, ungeklaert = korrektur(roh_split, ereignisse, messtag, tag)
+    faktor = (float(s.prod()) if len(s) else 1.0) * k_roh
+    mw = float(roh_bis.iloc[-1]) * wert * faktor
+    grund = None
+    if plausibilitaet:
+        schluss = kurse["close"]
+        splits = kurse["split"] if "split" in kurse.columns else None
+        grund = _unplausibel(mw, tag, schluss.loc[:tag].dropna(), schluss, streubesitz,
+                             fortschreibung=lambda e: korrektur(splits, ereignisse, e, tag)[0])
+    return {"marktwert": None if grund else mw, "grund": grund, "quelle": quelle, "aktien_filed": filed, "splitfaktor": faktor,
+            "rohkurs": float(roh_bis.iloc[-1]), "ungeklaert": ungeklaert}
+
+
 def marktwert_korrigiert(stichtag, kurse: pd.DataFrame, aktien: pd.DataFrame, streubesitz: pd.DataFrame | None, *,
                          ereignisse: pd.DataFrame | None = None, ersatz_fakten: pd.DataFrame | None = None,
                          max_alter_monate: int = 15, automatisch_einordnen: bool = False) -> dict:
@@ -88,7 +155,6 @@ def marktwert_korrigiert(stichtag, kurse: pd.DataFrame, aktien: pd.DataFrame, st
     Rückgabe: marktwert, grund, quelle (Deckblatt | Ersatz), aktien_filed, korrektur (K), ungeklaert (Liste).
     """
     from tradingbot.daten.kapitalmassnahmen_historie import korrektur
-    from tradingbot.engines.fundamental.aktienzahl import ersatz_aktienzahl
 
     tag = pd.Timestamp(stichtag)
     ergebnis = {"marktwert": None, "grund": None, "quelle": None, "aktien_filed": None, "korrektur": 1.0, "ungeklaert": []}
@@ -97,21 +163,9 @@ def marktwert_korrigiert(stichtag, kurse: pd.DataFrame, aktien: pd.DataFrame, st
     if kurse_bis.empty:
         return {**ergebnis, "grund": "kein Kurs bis zum Stichtag"}
     splits = kurse["split"] if "split" in kurse.columns else None
-    grenze = tag - pd.DateOffset(months=max_alter_monate)
-    bekannt = aktien[(aktien["filed"] + pd.Timedelta(days=1)) <= tag].dropna(subset=["wert"]) if aktien is not None and len(aktien) else None
-    wahl = None
-    if bekannt is not None and len(bekannt):
-        letzte = bekannt.sort_values("filed").iloc[-1]
-        if letzte["filed"] >= grenze:
-            wahl = (float(letzte["wert"]), pd.Timestamp(letzte.name), letzte["filed"], "Deckblatt")
+    wahl, grund_wahl = aktienzahl_waehlen(tag, aktien, ersatz_fakten, max_alter_monate)
     if wahl is None:
-        e = ersatz_aktienzahl(ersatz_fakten, tag)
-        if e is not None and e["filed"] >= grenze:
-            wahl = (e["wert"], e["filed"], e["filed"], f"Ersatz (Basic, Periode bis {e['ende'].date()})")
-        elif bekannt is not None and len(bekannt):
-            return {**ergebnis, "grund": f"Aktienzahl älter als {max_alter_monate} Monate, kein aktueller Ersatz"}
-        else:
-            return {**ergebnis, "grund": "keine Aktienzahl bekannt" + ("" if e is None else f", Ersatz älter als {max_alter_monate} Monate")}
+        return {**ergebnis, "grund": grund_wahl}
     wert, messtag, filed, quelle = wahl
     faktoren = splits[splits.fillna(0) > 0] if splits is not None else pd.Series(dtype=float)
     alle_nach = float(faktoren[faktoren.index > messtag].prod()) if len(faktoren) else 1.0
