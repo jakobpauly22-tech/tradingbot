@@ -74,9 +74,9 @@ daten/        lokale Daten und Caches, nicht in Git
 1. **Setup:** Python-Umgebung (`.venv`), Abhängigkeiten, pytest, Grundstruktur.
 2. **Phase 1, Fundament:** Datenbasis, Backtest-Framework, Fundamental-Engine.
 3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung (IB Gateway), Investment-These pro Trade, Technik-Engine. **Abgeschlossen am 03.11.2026** mit dokumentierter Ausnahme (Kriterium 2 verfehlt, `docs/PHASE2.md`).
-4. **Phase 3, News:** Briefing-Auswertung, Makro-Kalender, PEAD.
+4. **Phase 3, News und Regime:** Briefing-Auswertung, Makro-Kalender, PEAD; Makro-/Regime-Engine (vorgezogen am 15.11.2026, Festlegungen vor dem ersten Lauf in `docs/REGIME.md`).
 5. **Phase 4, Smart Money:** 13F-Tracking, Konsens-Score, Insider-Trades.
-6. **Phase 5, Ausbau:** Regime-Erkennung, ESG, Stresstests (2008, 2020, 2022), Dashboard.
+6. **Phase 5, Ausbau:** ESG, Stresstests (2008, 2020, 2022), Dashboard.
 
 Eine Phase ist fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
 

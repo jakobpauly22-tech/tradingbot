@@ -457,7 +457,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Briefing-Anhang (JSON) | News | 3 | Mittel | In Arbeit |
 | 13F-Tracking und Konsens-Score | Smart Money | 4 | Mittel | Idee |
 | Insider-Trades | Smart Money | 4 | Mittel | Idee |
-| Regime-Erkennung | Scoring | 5 | Niedrig | Idee |
+| Regime-Erkennung (Makro-/Regime-Engine) | Scoring | 3 | Hoch | In Arbeit: Schritt 2 der Entwicklungsreihenfolge ab 12.11.2026 (Jakob 15.11.2026); Festlegungen in docs/REGIME.md |
 | ESG-Score | Weitere | 5 | Niedrig | Idee |
 | Stresstests | Weitere | 5 | Niedrig | Idee |
 | Dashboard und Wochenreport | Weitere | 5 | Niedrig | Idee |
@@ -470,9 +470,9 @@ Der Bot entsteht Modul für Modul. Eine Phase gilt erst als fertig, wenn ihr Bac
 1. **Setup:** Python, Git und GitHub-Account, Claude Code. Repository mit Grundstruktur und einer CLAUDE.md anlegen, die Ziele, Regeln und Architektur festhält.
 2. **Phase 1, Fundament:** Datenbasis, Backtest-Framework, Fundamental-Engine.
 3. **Phase 2, Risiko:** Risk-Manager, Paper-Trading-Anbindung, Investment-These pro Trade, Technik-Engine. **Abgeschlossen am 03.11.2026** mit dokumentierter Ausnahme (`docs/PHASE2.md`); Senden bleibt aus bis zu Jakobs Freigabe.
-4. **Phase 3, News:** Briefing-Auswertung, Makro-Kalender, PEAD.
+4. **Phase 3, News und Regime:** Briefing-Auswertung, Makro-Kalender, PEAD; Regime-Erkennung (vorgezogen am 15.11.2026, `docs/REGIME.md`).
 5. **Phase 4, Smart Money:** 13F-Tracking, Konsens-Score, Insider-Trades.
-6. **Phase 5, Ausbau:** Regime-Erkennung, ESG, Stresstests, Dashboard.
+6. **Phase 5, Ausbau:** ESG, Stresstests, Dashboard.
 
 **Meine Aufgaben:** Regeln festlegen (Anlagehorizont, Aktienuniversum, Risikolimits), Accounts und API-Schlüssel anlegen, Fachlogik prüfen, Ergebnisse bewerten und entscheiden.
 
