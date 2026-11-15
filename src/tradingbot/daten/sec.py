@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from tradingbot.daten.abruf import DatenFehler, Drossel, VoruebergehenderFehler, mit_wiederholung
+from tradingbot.daten.abruf import NETZ_PAUSEN_S, DatenFehler, Drossel, VoruebergehenderFehler, mit_wiederholung
 
 log = logging.getLogger(__name__)
 
@@ -45,10 +45,16 @@ def cik10(cik) -> str:
 
 
 class SecClient:
-    """HTTP-Zugriff auf EDGAR mit Drosselung, Wiederholung und Datei-Cache (gzip-JSON)."""
+    """HTTP-Zugriff auf EDGAR mit Drosselung, Wiederholung und Datei-Cache (gzip-JSON).
+
+    Wiederholung (Jakob 15.11.2026): Verbindungsabbrüche (z. B. ConnectionResetError 10054), Zeitüberschreitungen und
+    HTTP 429/5xx werden mit wachsender Pause wiederholt (`abruf.NETZ_PAUSEN_S`, zusammen gut 9 Minuten, auch für den
+    Ruhezustand des Laptops). Jeder Versuch läuft durch die Drossel, die SEC-Grenze von 10 Abrufen je Sekunde bleibt gewahrt.
+    """
 
     def __init__(self, user_agent: str | None = None, *, cache_wurzel: Path | None = None, sitzung=None,
-                 drossel: Drossel | None = None, max_alter: timedelta | None = None, jetzt=None):
+                 drossel: Drossel | None = None, max_alter: timedelta | None = None, jetzt=None,
+                 pausen: tuple[float, ...] = NETZ_PAUSEN_S, schlafen=None):
         from tradingbot.konfiguration import PROJEKT_WURZEL, geheimnis, lade_konfiguration
 
         konfig = lade_konfiguration("fundamental")["sec"]
@@ -58,6 +64,7 @@ class SecClient:
         self.drossel = drossel or Drossel(min_abstand_s=1.0 / float(konfig["max_anfragen_pro_sekunde"]))
         self.max_alter = max_alter or timedelta(days=float(konfig["cache_max_alter_tage"]))
         self._jetzt = jetzt or (lambda: datetime.now(timezone.utc))
+        self.pausen, self._schlafen = tuple(pausen), schlafen
 
     # --- Cache ------------------------------------------------------------------------------------
     def _cache_lesen(self, datei: Path) -> tuple[dict | None, datetime | None]:
@@ -90,7 +97,27 @@ class SecClient:
                 raise DatenFehler(f"SEC: nicht gefunden ({url})")
             raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
 
-        return mit_wiederholung(einmal, beschreibung=f"SEC {url}", pause_s=2.0)
+        return self._wiederholt(einmal, f"SEC {url}")
+
+    def _wiederholt(self, funktion, beschreibung: str):
+        return mit_wiederholung(funktion, beschreibung=beschreibung, pausen=self.pausen, schlafen=self._schlafen)
+
+    def text_holen(self, url: str, *, timeout: float = 120) -> str:
+        """Text eines Dokuments (z. B. vollständige Einreichung <accn>.txt) mit Drossel und Wiederholung.
+        404 → DatenFehler (nicht gefunden); nach allen Versuchen ohne Netz → VoruebergehenderFehler."""
+        def einmal():
+            self.drossel.warten()
+            try:
+                antwort = self.sitzung.get(url, headers={"User-Agent": self.user_agent}, timeout=timeout)
+            except requests.RequestException as fehler:
+                raise VoruebergehenderFehler(f"SEC nicht erreichbar ({type(fehler).__name__})") from None
+            if antwort.status_code == 200:
+                return antwort.text
+            if antwort.status_code in (429, 500, 502, 503, 504):
+                raise VoruebergehenderFehler(f"SEC HTTP {antwort.status_code} für {url}")
+            raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
+
+        return self._wiederholt(einmal, f"SEC {url}")
 
     def json_mit_cache(self, url: str, datei: Path) -> tuple[dict, datetime]:
         """JSON aus dem Cache, wenn jünger als `max_alter`; sonst neu laden. Gibt (Daten, Abrufzeit) zurück."""
@@ -146,11 +173,11 @@ class SecClient:
 
         # .hdr.sgml gibt es für alle Jahrgänge (klein); -index-headers.html nur für neuere Einreichungen
         try:
-            text = mit_wiederholung(lambda: einmal(ordner + ".hdr.sgml"), beschreibung=f"SEC Kopf {accn}")
+            text = self._wiederholt(lambda: einmal(ordner + ".hdr.sgml"), f"SEC Kopf {accn}")
         except DatenFehler as fehler:
             if isinstance(fehler, VoruebergehenderFehler):
                 raise
-            text = mit_wiederholung(lambda: einmal(ordner + "-index-headers.html"), beschreibung=f"SEC Kopf {accn}")
+            text = self._wiederholt(lambda: einmal(ordner + "-index-headers.html"), f"SEC Kopf {accn}")
         datei.parent.mkdir(parents=True, exist_ok=True)
         with gzip.open(datei, "wt", encoding="utf-8") as f:
             f.write(text)

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import pytest
 
-from tradingbot.daten.abruf import DatenFehler, Drossel
+from tradingbot.daten.abruf import NETZ_PAUSEN_S, DatenFehler, Drossel, VoruebergehenderFehler
 from tradingbot.daten.sec import (
     SecClient,
     abdeckung,
@@ -190,8 +190,42 @@ def test_client_fehler(tmp_path, monkeypatch):
     with pytest.raises(DatenFehler, match="nicht gefunden"):
         _client(tmp_path, _Sitzung([_Antwort(404)]), jetzt).companyfacts(9)
     # Vorübergehender Fehler mit vorhandenem (abgelaufenem) Cache: alter Stand wird genutzt
-    client = _client(tmp_path, _Sitzung([_Antwort(200, FAKTEN)] + [_Antwort(503)] * 3), jetzt)
+    client = _client(tmp_path, _Sitzung([_Antwort(200, FAKTEN)] + [_Antwort(503)] * (len(NETZ_PAUSEN_S) + 1)), jetzt)
     client.companyfacts(1)
     jetzt[0] += timedelta(days=8)
     daten, zeitpunkt = client.companyfacts(1)
     assert daten["entityName"] == "Beispiel AG" and zeitpunkt == datetime(2026, 11, 2, tzinfo=timezone.utc)
+
+
+def test_verbindungsabbruch_wird_mit_wachsender_pause_wiederholt(tmp_path):
+    """ConnectionResetError (WinError 10054, STJ im dritten c1-Lauf) beendet den Lauf nicht (Jakob 15.11.2026)."""
+    import requests
+
+    uhr = _Uhr()
+    abbruch = requests.ConnectionError(ConnectionResetError(10054, "Verbindung vom Remotehost geschlossen"))
+    sitzung = _Sitzung([abbruch, abbruch, _Antwort(503), _Antwort(200, FAKTEN)])
+    client = SecClient("Test Nutzer test@example.com", cache_wurzel=tmp_path, sitzung=sitzung,
+                       drossel=Drossel(0.125, uhr=uhr, schlafen=uhr.schlafen), schlafen=uhr.schlafen)
+    daten, _ = client.companyfacts(1)
+    assert daten["entityName"] == "Beispiel AG"
+    assert [p for p in uhr.pausen if p >= 1] == list(NETZ_PAUSEN_S[:3])
+    assert len(sitzung.aufrufe) == 4
+
+
+def test_text_holen_wiederholt_und_meldet(tmp_path):
+    import requests
+
+    uhr = _Uhr()
+    abbruch = requests.ConnectionError("reset")
+    ok = _Antwort(200)
+    ok.text = "<DOCUMENT>text</DOCUMENT>"
+    sitzung = _Sitzung([abbruch, ok, _Antwort(404)] + [abbruch] * (len(NETZ_PAUSEN_S) + 1))
+    client = SecClient("Test Nutzer test@example.com", cache_wurzel=tmp_path, sitzung=sitzung,
+                       drossel=Drossel(0.125, uhr=uhr, schlafen=uhr.schlafen), schlafen=uhr.schlafen)
+    assert client.text_holen("https://www.sec.gov/x.txt") == "<DOCUMENT>text</DOCUMENT>"
+    with pytest.raises(DatenFehler, match="404"):
+        client.text_holen("https://www.sec.gov/fehlt.txt")
+    with pytest.raises(VoruebergehenderFehler, match="nach 7 Versuchen"):
+        client.text_holen("https://www.sec.gov/netz_weg.txt")
+    # Drossel: jeder Versuch hält den Mindestabstand ein (SEC-Grenze 10/s)
+    assert all(p >= 0 for p in uhr.pausen)

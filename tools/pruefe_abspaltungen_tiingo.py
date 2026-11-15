@@ -26,6 +26,7 @@ import pandas as pd
 
 from tradingbot.backtest.tresor import begrenze
 from tradingbot.daten.abdeckung import rebalancing_stichtage
+from tradingbot.daten.abruf import DatenFehler, VoruebergehenderFehler
 from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile
 from tradingbot.daten.tiingo import TiingoClient
@@ -39,6 +40,7 @@ VOLLTEXT = PROJEKT_WURZEL / "daten" / "cache" / "sec" / "volltext_8k_text"
 S1, UNKLAR, FENSTER = -0.03, -0.15, (30, 5)
 WORTE = re.compile(r"spin[- ]?off|separation and distribution|distribution of all", re.I)
 OHNE_TEXT = re.compile(r"^(GRAPHIC|ZIP|EXCEL|PDF|XML|JSON|EX-101|EX-104)", re.I)
+ABRUFFEHLER: list[str] = []      # gemeldet statt still übersprungen (Jakob 15.11.2026)
 PROBE_TREFFER = [("CSC", "2015-11-30")]
 PROBE_KEIN_TREFFER = [("TGNA", "2017-06-01"), ("TWX", "2014-06-06"), ("TWX", "2014-06-09")]
 PROBE_S2 = [(1336920, "LDOS", "2013-09-30"), (23082, "CSC/DXC", "2015-11-30"), (797468, "OXY", "2016-02-25"), (1585689, "HLT", "2017-01-04"),
@@ -50,14 +52,15 @@ def einreichungen(client, ciks) -> pd.DataFrame:
     for c in ciks:
         try:
             subs, _ = client.submissions(int(c))
-        except Exception:  # noqa: BLE001
+        except Exception as f:  # noqa: BLE001
+            ABRUFFEHLER.append(f"Einreichungsliste CIK {int(c)}: {type(f).__name__} {str(f)[:150]}")
             continue
         seiten = [subs.get("filings", {}).get("recent", {})]
         for f in subs.get("filings", {}).get("files", []) or []:
             try:
                 seiten.append(client.submissions_seite(f["name"])[0])
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as fehler:  # noqa: BLE001
+                ABRUFFEHLER.append(f"Einreichungsliste {f['name']}: {type(fehler).__name__} {str(fehler)[:150]}")
         for s in seiten:
             n = len(s.get("form", []))
             teile.append(pd.DataFrame({"cik": int(c), "datum": s.get("filingDate", []), "form": s.get("form", []),
@@ -93,12 +96,15 @@ def volltext(client, cik: int, accn: str) -> str | None:
         with gzip.open(datei, "rt", encoding="utf-8") as f:
             return f.read()
     url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accn.replace('-', '')}/{accn}.txt"
-    client.drossel.warten()
-    antwort = client.sitzung.get(url, headers={"User-Agent": client.user_agent}, timeout=120)
-    if antwort.status_code != 200:
+    try:   # Drossel und Wiederholung mit Wartezeit im SecClient (Verbindungsabbruch, Ruhezustand; Jakob 15.11.2026)
+        roh = client.text_holen(url)
+    except VoruebergehenderFehler:
+        raise                                   # Netz auch nach allen Versuchen weg: Lauf anhalten, Cache macht den Neustart billig
+    except DatenFehler as f:
+        ABRUFFEHLER.append(f"8-K {accn}: {str(f)[:150]}")
         return None
-    text = text_aus_einreichung(antwort.text)
-    del antwort
+    text = text_aus_einreichung(roh)
+    del roh
     VOLLTEXT.mkdir(parents=True, exist_ok=True)
     tmp = datei.with_suffix(".tmp")
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
@@ -216,6 +222,7 @@ def main() -> int:
     text += ["", "## Unklar (≤ −15 % ohne SEC-Beleg)", "", "| Ticker (CIK) | Name | Tage | Gesamtrendite |", "| --- | --- | --- | --- |"]
     for x in u.itertuples():
         text.append(f"| {x.ticker} ({x.cik}) | {x.name} | {x.von}" + (f" bis {x.bis}" if x.bis != x.von else "") + f" | {x.rendite:+.1%} |")
+    text += ["", f"## Abruffehler ({len(ABRUFFEHLER)})", ""] + [f"- {x}" for x in ABRUFFEHLER]
     BERICHT.write_text("\n".join(text) + "\n", encoding="utf-8")
     print("\n".join(text[:40]))
     return 0

@@ -34,9 +34,11 @@ class _Sitzung:
         return _Antwort(200, {"ticker": ticker, "name": f"{ticker.upper()} Inc"})
 
 
-def _nachlader(tmp_path, sitzung, grenzen=None, heute=date(2026, 11, 14)):
+def _nachlader(tmp_path, sitzung, grenzen=None, heute=date(2026, 11, 14), gelistet=(), pausen=None):
     client = TiingoClient("test", cache_wurzel=tmp_path, sitzung=sitzung, anfragen_pro_stunde=1000)
-    return Nachlader(client, grenzen=grenzen, heute=lambda: heute, ende="2024-12-31")
+    zusatz = {"pausen": pausen} if pausen is not None else {}
+    return Nachlader(client, grenzen=grenzen, heute=lambda: heute, ende="2024-12-31", bekannt=lambda t: t in set(gelistet),
+                     schlafen=lambda s: None, **zusatz)
 
 
 def test_zeitraum_bis_tresorgrenze_und_nichts_danach(tmp_path):
@@ -91,3 +93,70 @@ def test_ohne_tresorgrenze_kein_nachladen(monkeypatch, tmp_path):
 
 def test_ticker_schreibweise():
     assert tiingo_ticker("BRK-B") == "brk-b" and tiingo_ticker("BF.B") == "bf-b"
+
+
+
+# --- META (14.11.2026) und Netzfehler (Jakob 15.11.2026) ---------------------------------------------------------------
+class _MetaSitzung(_Sitzung):
+    """Wie bei META: Metadaten-URL /tiingo/daily/meta liefert 404, die Kurse unter /meta/prices gibt es."""
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        if url.rstrip("/").endswith("/daily/meta"):
+            self.aufrufe.append((url, dict(params or {})))
+            return _Antwort(404, {"detail": "not found"})
+        return super().get(url, params, headers, timeout)
+
+
+def test_meta_metadaten_404_laedt_trotzdem_kurse(tmp_path):
+    n = _nachlader(tmp_path, _MetaSitzung(), gelistet={"meta"})
+    assert n.lade("meta") == "geladen"
+    k = lade_rohkurse("META", ablage=n.ablage)
+    assert k["close"].iloc[-1] == 1185.8 and k.attrs["name"] is None
+    assert "meta" not in n.stand()["fehler"]
+
+
+def test_alter_dauerfehler_aus_metadaten_wird_erneut_versucht(tmp_path):
+    n = _nachlader(tmp_path, _MetaSitzung(), gelistet={"meta"})
+    s = n.stand()
+    s["fehler"]["meta"] = {"zeit": "2026-11-14T18:39:04", "fehler": "Tiingo: https://api.tiingo.com/tiingo/daily/meta nicht gefunden",
+                           "dauerhaft": True}
+    s["monate"]["2026-11"] = {"symbole": ["meta"], "bytes": 0}
+    n._speichern(s)
+    assert n.lade("meta") == "geladen"
+
+
+def test_kurs_404_bei_gelistetem_ticker_nicht_dauerhaft(tmp_path):
+    n = _nachlader(tmp_path, _Sitzung(fehlt={"neu"}), gelistet={"neu"})
+    assert n.lade("neu") == "fehler"
+    eintrag = n.stand()["fehler"]["neu"]
+    assert not eintrag["dauerhaft"] and "Tiingos Liste" in eintrag["fehler"]
+    assert n.lade("neu") == "fehler"                         # wird erneut versucht, nicht übersprungen
+
+
+class _WackeligeSitzung(_Sitzung):
+    def __init__(self, abbrueche):
+        super().__init__()
+        self.abbrueche = abbrueche
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        import requests
+
+        if self.abbrueche > 0:
+            self.abbrueche -= 1
+            self.aufrufe.append((url, dict(params or {})))
+            raise requests.ConnectionError(ConnectionResetError(10054, "Verbindung vom Remotehost geschlossen"))
+        return super().get(url, params, headers, timeout)
+
+
+def test_verbindungsabbruch_wird_wiederholt_und_gezaehlt(tmp_path):
+    n = _nachlader(tmp_path, _WackeligeSitzung(2))
+    assert n.lade("orly") == "geladen"
+    assert n.stand()["tage"]["2026-11-14"] == 4               # 2 gezählt vorab + 2 Wiederholungen
+
+
+def test_netz_dauerhaft_weg_haelt_an(tmp_path):
+    n = _nachlader(tmp_path, _WackeligeSitzung(100), pausen=(1, 2))
+    assert n.lade("orly") == "netz"
+    eintrag = n.stand()["fehler"]["orly"]
+    assert not eintrag["dauerhaft"] and "nach 3 Versuchen" in eintrag["fehler"]
+    assert not n.datei("orly").exists()

@@ -10,6 +10,11 @@ Tiingo liefert `close` unbereinigt und `splitFactor` nur für echte Splits.
   Prozesse hinweg), 1.000 je Tag, 500 verschiedene Symbole und 1 GB Datenvolumen je Monat. Das Werkzeug bleibt mit
   Abstand darunter (Monat 450 Symbole, 900 MB; Tag 900 Anfragen) und hört an einer Grenze sauber auf.
 - Wiederaufnehmbar: vorhandene Dateien werden übersprungen; Zähler je Monat und Tag in `stand.json` im Ablageordner.
+- Netzfehler (Verbindungsabbruch, Ruhezustand des Laptops) werden mit wachsender Pause wiederholt (`abruf.NETZ_PAUSEN_S`);
+  jeder weitere Versuch zählt vorsichtig gegen die Tagesgrenze. Ist das Netz danach weg, hält der Lauf an („netz“).
+- Metadaten (Name) sind Beiwerk: Scheitert ihr Abruf, werden die Kurse trotzdem geladen (Anlass META, 14.11.2026:
+  `/tiingo/daily/meta` liefert 404, vermutlich Kollision mit einem API-Pfad). Dauerhaft übersprungen wird ein Ticker
+  nur, wenn der Kursabruf 404 liefert und der Ticker nicht in Tiingos Tickerliste steht (Jakob 15.11.2026).
 """
 from __future__ import annotations
 
@@ -22,7 +27,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tradingbot.daten.abruf import DatenFehler, VoruebergehenderFehler
+from tradingbot.daten.abruf import NETZ_PAUSEN_S, DatenFehler, VoruebergehenderFehler, mit_wiederholung
 
 START = "2011-01-01"
 MONAT_SYMBOLE, MONAT_BYTES, TAG_ANFRAGEN = 450, 900 * 1024**2, 900
@@ -57,8 +62,10 @@ def ende_datum() -> str:
 
 
 class Nachlader:
-    def __init__(self, client, *, ablage: Path | None = None, grenzen: Grenzen | None = None, heute=None, ende: str | None = None):
+    def __init__(self, client, *, ablage: Path | None = None, grenzen: Grenzen | None = None, heute=None, ende: str | None = None,
+                 bekannt=None, pausen: tuple[float, ...] = NETZ_PAUSEN_S, schlafen=None):
         self.client, self.grenzen = client, grenzen or Grenzen()
+        self._bekannt, self.pausen, self._schlafen = bekannt, tuple(pausen), schlafen
         self.ablage = ablage or ordner(client.cache_wurzel)
         self.heute = heute or date.today
         self.ende = ende or ende_datum()
@@ -80,6 +87,45 @@ class Nachlader:
         tmp.write_text(json.dumps(s, indent=1, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, self._stand_datei())
 
+    def bei_tiingo_gelistet(self, ticker: str) -> bool:
+        """Steht der Ticker in Tiingos Tickerliste (lokal gecachte Datei, kein API-Abruf)? Im Zweifel True: lieber erneut
+        versuchen als dauerhaft überspringen."""
+        if self._bekannt is None:
+            if not (Path(self.client.cache_wurzel) / "supported_tickers.zip").exists():
+                return True                       # nie herunterladen (kein Netz hier); im Zweifel nicht dauerhaft
+            try:
+                from tradingbot.daten.tiingo import lade_tiingo_liste
+
+                liste = lade_tiingo_liste(self.client.cache_wurzel, max_alter=timedelta(days=36500))
+                namen = set(liste["ticker"].astype(str).str.lower())
+                self._bekannt = lambda t: t.lower() in namen
+            except Exception:  # noqa: BLE001
+                return True
+        return bool(self._bekannt(ticker))
+
+    @staticmethod
+    def _dauerhaft(eintrag: dict, ticker: str) -> bool:
+        """Dauerhaft übersprungen nur bei einem Kursabruf-404. Ältere Einträge aus dem Metadatenabruf
+        („…/daily/<ticker> nicht gefunden“, META 14.11.2026) zählen nicht mehr als dauerhaft."""
+        if not eintrag.get("dauerhaft"):
+            return False
+        return not str(eintrag.get("fehler", "")).endswith(f"/daily/{ticker} nicht gefunden")
+
+    def _mit_wiederholung(self, funktion, beschreibung: str):
+        """Wiederholt bei Netzfehlern; jeder weitere Versuch zählt +1 gegen die Tagesgrenze (vorsichtig)."""
+        erster = [True]
+
+        def versuch():
+            if not erster[0]:
+                s = self.stand()
+                tag = self.heute().isoformat()
+                s["tage"][tag] = s["tage"].get(tag, 0) + 1
+                self._speichern(s)
+            erster[0] = False
+            return funktion()
+
+        return mit_wiederholung(versuch, beschreibung=beschreibung, pausen=self.pausen, schlafen=self._schlafen)
+
     def datei(self, ticker: str) -> Path:
         return self.ablage / f"{ticker}.json.gz"
 
@@ -96,11 +142,12 @@ class Nachlader:
 
     # --- Abruf -------------------------------------------------------------------------------
     def lade(self, ticker: str) -> str:
-        """Lädt Metadaten und Rohkurse eines Tickers. Rückgabe: vorhanden | geladen | fehler | uebersprungen | grenze."""
+        """Lädt Metadaten und Rohkurse eines Tickers.
+        Rückgabe: vorhanden | geladen | fehler | uebersprungen | grenze | netz (Netz auch nach allen Versuchen weg)."""
         if self.datei(ticker).exists():
             return "vorhanden"
         s = self.stand()
-        if s["fehler"].get(ticker, {}).get("dauerhaft"):
+        if self._dauerhaft(s["fehler"].get(ticker, {}), ticker):
             return "uebersprungen"               # z. B. bei Tiingo nicht vorhanden: nicht bei jedem Neustart erneut abfragen
         if self.grenze_erreicht(s):
             return "grenze"
@@ -110,19 +157,28 @@ class Nachlader:
             monat["symbole"].append(ticker)
         s["tage"][heute.isoformat()] = s["tage"].get(heute.isoformat(), 0) + 2
         self._speichern(s)                       # Zähler vor dem Abruf: ein Abbruch zählt lieber zu viel als zu wenig
+        meta, meta_fehler = {}, None
         try:
-            meta = self.client.metadaten(ticker, max_alter=timedelta(days=36500))   # Name für die spätere Namensprüfung
-            roh = self.client._holen(f"https://api.tiingo.com/tiingo/daily/{ticker}/prices",
-                                     {"startDate": START, "endDate": self.ende, "resampleFreq": "daily"})
-        except (DatenFehler, VoruebergehenderFehler) as f:
-            s = self.stand()
-            s["fehler"][ticker] = {"zeit": datetime.now().isoformat(timespec="seconds"), "fehler": str(f)[:200],
-                                   "dauerhaft": isinstance(f, DatenFehler)}
-            self._speichern(s)
-            return "fehler"
+            # Name für die spätere Namensprüfung; Beiwerk, ein Fehler hier verhindert die Kurse nicht
+            meta = self._mit_wiederholung(lambda: self.client.metadaten(ticker, max_alter=timedelta(days=36500)),
+                                          f"Tiingo Metadaten {ticker}")
+        except VoruebergehenderFehler as f:
+            return self._fehler(ticker, f, dauerhaft=False, ergebnis="netz")
+        except DatenFehler as f:
+            meta_fehler = str(f)[:200]
+        try:
+            roh = self._mit_wiederholung(lambda: self.client._holen(f"https://api.tiingo.com/tiingo/daily/{ticker}/prices",
+                                                                    {"startDate": START, "endDate": self.ende, "resampleFreq": "daily"}),
+                                         f"Tiingo Kurse {ticker}")
+        except VoruebergehenderFehler as f:
+            return self._fehler(ticker, f, dauerhaft=False, ergebnis="netz")
+        except DatenFehler as f:
+            gelistet = self.bei_tiingo_gelistet(ticker)
+            text = str(f)[:200] + (" (Ticker steht in Tiingos Liste: nicht dauerhaft überspringen, prüfen)" if gelistet else "")
+            return self._fehler(ticker, text, dauerhaft=not gelistet)
         roh = [z for z in roh if str(z.get("date", ""))[:10] <= self.ende]       # Sicherheitsnetz Tresor
-        inhalt = json.dumps({"ticker": ticker, "name": meta.get("name"), "start": START, "ende": self.ende,
-                             "abgerufen_um": datetime.now().isoformat(timespec="seconds"), "kurse": roh})
+        inhalt = json.dumps({"ticker": ticker, "name": (meta or {}).get("name"), "metadaten_fehler": meta_fehler, "start": START,
+                             "ende": self.ende, "abgerufen_um": datetime.now().isoformat(timespec="seconds"), "kurse": roh})
         tmp = self.datei(ticker).with_suffix(".tmp")
         with gzip.open(tmp, "wt", encoding="utf-8") as f:
             f.write(inhalt)
@@ -132,6 +188,12 @@ class Nachlader:
         s["fehler"].pop(ticker, None)
         self._speichern(s)
         return "geladen"
+
+    def _fehler(self, ticker: str, fehler, *, dauerhaft: bool, ergebnis: str = "fehler") -> str:
+        s = self.stand()
+        s["fehler"][ticker] = {"zeit": datetime.now().isoformat(timespec="seconds"), "fehler": str(fehler)[:300], "dauerhaft": dauerhaft}
+        self._speichern(s)
+        return ergebnis
 
 
 def lade_rohkurse(ticker: str, *, ablage: Path | None = None) -> pd.DataFrame | None:

@@ -5,6 +5,8 @@ Aufruf (Git Bash, im Projektordner):  .venv/Scripts/python tools/tiingo_rohkurse
 Optionen: --anzahl N (höchstens N neue Symbole), --symbole A B … (nur diese).
 Wiederaufnehmbar: einfach erneut starten; vorhandene Dateien werden übersprungen. Das Werkzeug wartet selbst auf das
 Stundenlimit und hört an der Tages- oder Monatsgrenze auf (Meldung, wann es weitergeht). Abbruch mit Strg+C ist sicher.
+Netzfehler (auch nach dem Ruhezustand des Laptops) werden mit wachsender Pause wiederholt; bleibt das Netz weg, hält der
+Lauf an.
 """
 import argparse
 import sys
@@ -39,6 +41,10 @@ def main(argv=None) -> int:
         ergebnis = nachlader.lade(t)
         if ergebnis == "grenze":
             print("Halt: " + nachlader.grenze_erreicht(nachlader.stand()), flush=True)
+            break
+        if ergebnis == "netz":
+            print(f"Halt: Netz auch nach allen Wiederholungen nicht erreichbar ({t}: {nachlader.stand()['fehler'][t]['fehler']}). "
+                  "Einfach neu starten, vorhandene Dateien werden übersprungen.", flush=True)
             break
         zaehler[ergebnis] = zaehler.get(ergebnis, 0) + 1
         fehler = nachlader.stand()["fehler"].get(t, {}).get("fehler", "")

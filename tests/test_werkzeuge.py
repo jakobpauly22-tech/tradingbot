@@ -79,3 +79,34 @@ def test_abspaltung_text_nur_lesbare_dokumente():
            "<DOCUMENT><TYPE>EX-99.1<TEXT>Press release: pro rata distribution of all shares</TEXT></DOCUMENT></SEC-DOCUMENT>")
     text = w.text_aus_einreichung(roh)
     assert "completed the spin-off" in text and "distribution of all" in text and "bild.jpg" not in text and "<" not in text
+
+
+def test_abspaltung_volltext_nutzt_wiederholung_und_meldet_fehler(tmp_path, monkeypatch):
+    """8-K-Abruf über SecClient.text_holen (Wiederholung mit Wartezeit, Jakob 15.11.2026); 404 wird gemeldet, ein
+    dauerhafter Netzausfall hält den Lauf an statt still weiterzumachen."""
+    import pytest
+
+    from tradingbot.daten.abruf import DatenFehler, VoruebergehenderFehler
+
+    w = _werkzeug("pruefe_abspaltungen_tiingo")
+    monkeypatch.setattr(w, "VOLLTEXT", tmp_path)
+    monkeypatch.setattr(w, "ABRUFFEHLER", [])
+
+    class _Client:
+        def __init__(self, ergebnis):
+            self.ergebnis, self.urls = ergebnis, []
+
+        def text_holen(self, url):
+            self.urls.append(url)
+            if isinstance(self.ergebnis, Exception):
+                raise self.ergebnis
+            return self.ergebnis
+
+    ok = _Client("<DOCUMENT><TYPE>8-K<TEXT>the spin-off of Cars.com</TEXT></DOCUMENT>")
+    assert "spin-off" in w.volltext(ok, 39899, "0000039899-17-000001")
+    assert ok.urls == ["https://www.sec.gov/Archives/edgar/data/39899/000003989917000001/0000039899-17-000001.txt"]
+    assert w.volltext(_Client(RuntimeError("nie")), 39899, "0000039899-17-000001").strip().endswith("Cars.com")   # aus dem Cache
+    assert w.volltext(_Client(DatenFehler("SEC HTTP 404")), 1, "0000000001-17-000002") is None
+    assert w.ABRUFFEHLER == ["8-K 0000000001-17-000002: SEC HTTP 404"]
+    with pytest.raises(VoruebergehenderFehler):
+        w.volltext(_Client(VoruebergehenderFehler("nach 7 Versuchen")), 1, "0000000001-17-000003")
