@@ -164,12 +164,31 @@ Daten gerechnet.
 10. **Festlegungs-Commit:** Das Werkzeug verlangt den Commit und bricht ab, wenn diese Datei oder der Code unter
     `src/tradingbot/engines/regime` seitdem geändert wurde.
 
+Jakob hat die Punkte 2 und 3 (Steuern ohne Pauschbetrag; Wertreihe nach gezahlten Steuern, latente Steuer nicht abgezogen,
+Liquidationswert nur zur Einordnung) sowie die übrigen Konventionen und den SPYI-Hinweis am 15.11.2026 vor dem Lauf
+bestätigt. Der Festlegungs-Commit ist **b628678** (vor dem Lauf gepusht).
+
+## 7d. Ergebnis des ersten gewerteten Laufs (15.11.2026, Festlegung b628678)
+
+Bericht: `docs/berichte/2026-11-15_regime_backtest.md`; Läufe in `daten/backtests/20261115T1428*_regime_*`; gezählt in
+`daten/regime/varianten.csv` (V1, D1–D4, Mischung). **Kein Gesamturteil vor dem US-Langtest (Sitzung 4).** Nach diesem
+Lauf werden weder Schwellen noch Signale geändert.
+
+| Hälfte | Sharpe V1 | Sharpe Kaufen und Halten | Sharpe Mischung | max. Drawdown V1 | max. Drawdown KuH | a) | b) | c) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 (01.11.2012–30.11.2018) | 0,45 | 0,65 | 0,65 | −33,29 % | −24,12 % | nein | nein | nein |
+| 2 (01.12.2018–31.12.2024) | 0,64 | 0,69 | 0,64 | −18,18 % | −34,71 % | nein | ja | ja |
+
+Beobachtungen (keine Anpassung): In Hälfte 1 ist V1 2015/2016 zweimal ausgestiegen und teurer wieder eingestiegen
+(Verkauf 85,15 €, Kauf 95,40 €, Verkauf 85,13 €, Kauf 88,40 €); dazu kam die Steuer auf den 2015 realisierten Gewinn
+(816 €). In Hälfte 2 hat V1 den Einbruch 2020 gemieden, den Wiederanstieg aber erst ab September 2020 mitgemacht.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |
 | --- | --- | --- |
 | 1 | Festlegungen, neue Reihen, ALFRED-Abdeckung, Tresor- und Erstmeldungstests, XEON-Prüfung | 15.11.2026 |
 | 2 | Signale, Monatslogik mit Haltepflicht, Tests | 15.11.2026 |
-| 3 | Backtest des Buchs, Vergleichsportfolios, Bericht | offen |
+| 3 | Backtest des Buchs, Vergleichsportfolios, Bericht (ohne Gesamturteil) | 15.11.2026 |
 | 4 | US-Langtest 1995–2011 | offen |
 | 5 | Schattenbuch im Tageslauf | offen |

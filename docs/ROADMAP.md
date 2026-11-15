@@ -257,7 +257,7 @@ Die Briefing-Aufgaben in Claude und der Bot sehen sich nicht direkt. Die Brücke
 
 ### Anleitung: Tagesbriefing einbinden
 
-Das Tagesbriefing läuft als zwei geplante Aufgaben („Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in der Briefing-Seite. Diese Aufgaben lesen keine Projektanweisungen, deshalb entsteht der Anhang in einer eigenen Export-Aufgabe.
+Das Tagesbriefing läuft als zwei geplante Aufgaben (seit 12.11.2026 um 07:00, 15:00 und 21:00 Uhr, einen Lauf um 22 Uhr gibt es nicht mehr; zuvor „Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in der Briefing-Seite. Diese Aufgaben lesen keine Projektanweisungen, deshalb entsteht der Anhang in einer eigenen Export-Aufgabe.
 
 **Stufe 1: läuft seit 31.10.2026**
 
