@@ -129,3 +129,30 @@ def dauerhaft_nicht_verfuegbar(ablage: Path | None = None) -> set[str]:
         return set()
     stand = json.loads(datei.read_text(encoding="utf-8"))
     return {t for t, e in stand.get("fehler", {}).items() if Nachlader._dauerhaft(e, t)}
+
+
+def sperre_c3() -> list[str]:
+    """Sperre für den gewerteten Neulauf c3: Reihen ohne Abnahme der Rohkurse (leer = frei). Nur lokale Dateien."""
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv")
+    return fehlende_fuer_c3(status, lade_abnahme(), dauerhaft_nicht_verfuegbar())
+
+
+def c3_argumente(parser) -> None:
+    """Gemeinsame Schalter der Werkzeuge des Neulaufs c3 (docs/FUNDAMENTAL.md, Checkliste c3)."""
+    parser.add_argument("--c3", action="store_true",
+                        help="Neulauf c3: alle Datenkorrekturen (Marktwert Teil b in der Fortschreibung, Streubesitz-Prüfung und "
+                             "Marktwert mit Rohkursen); startet nur, wenn jede Reihe eine Abnahme der Rohkurse hat")
+    parser.add_argument("--probe", action="store_true", help="mit --c3: Teilabdeckung erlaubt, eigene Ausgaben, zählt nie als c3")
+
+
+def c3_sperre_melden(c3: bool, probe: bool) -> str | None:
+    """Text für den Abbruch, wenn c3 ohne --probe gesperrt ist; sonst None."""
+    if not c3 or probe:
+        return None
+    fehlend = sperre_c3()
+    if not fehlend:
+        return None
+    return (f"Sperre c3: {len(fehlend)} Reihen ohne Abnahme der Rohkurse (erst nachladen und tools/pruefe_rohkurse.py, "
+            f"oder --probe): {', '.join(fehlend[:30])}" + (" …" if len(fehlend) > 30 else ""))

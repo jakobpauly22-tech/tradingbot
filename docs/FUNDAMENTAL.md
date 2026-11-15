@@ -719,3 +719,59 @@ mit bereinigten Kursen den verdeckten Faktor H; sie wird deshalb ebenfalls auf R
   verfehlt, gilt die Regel aus docs/DATENQUALITAET.md (Ursachen suchen, mit Jakob besprechen, nicht nachjustieren).
 - **Test:** NOW (CIK 1373715) 2020–2022 als Fall: Mit Rohkurs werden die richtigen Streubesitzwerte angenommen, der
   Rohkurs-Marktwert besteht die Plausibilitätsprüfung.
+
+### c2 (3): umgesetzt (15.11.2026)
+
+- `sp500_nachbau.pruefbasis` und `lade_firmendaten(rohkurse=True)`: Für Firmen mit abgenommener Rohreihe prüft
+  `streubesitz_pruefen` gegen Roh / Π Tiingo-Splits bis zur Grenze und die SEC-Aktienzahl auf derselben Basis; sonst wie
+  bisher. NOW (CIK 1373715): ohne Rohkurse alle Streubesitzwerte 2017–2023 verworfen (348–384 % „des Börsenwerts“), mit
+  Rohkursen alle angenommen; der Rohkurs-Marktwert 2020–2022 besteht die Plausibilitätsprüfung (Test mit echten Daten,
+  übersprungen ohne lokalen Cache).
+- **Schalter `--c3` / `--probe`** in `tools/gegenprobe_index.py`, `tools/nachbau_sp500_ohne_finanzwerte.py` und
+  `tools/obergrenze_abspaltungen_tiingo.py` (dort zusätzlich `--backtest <Ordner>`): `--c3` schaltet alle Datenkorrekturen
+  ein (Rohkurse in `lade_firmendaten`, `baue_nachbau(marktwert_korrektur=True)` für die Fortschreibung nach Teil b) und
+  prüft die Sperre; `--probe` erlaubt Teilabdeckung mit eigenen Ausgaben (Zusatz „_probe“) und zählt nie als c3. Ohne
+  Schalter rechnen die Werkzeuge wie bisher. Befund dabei: Die Gegenprobe rief `baue_nachbau` bisher ohne
+  `marktwert_korrektur=True` auf; mit `--c3` ist die Korrektur aus Teil b im Index-Nachbau eingeschaltet.
+- Kappungen DD/DISCK/BMS, SIVB und CSC wirken in `lade_firmendaten` immer (ohne Schalter).
+
+## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
+
+Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt
+zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrekturen gelten „unabhängig vom Ergebnis
+übernommen“ (inklusive Wirkung auf Index-Nachbau und Benchmark). Kriterien der Gegenprobe unverändert.
+
+0. **Vorbereitung:** Datum per `date`; `git status` sauber, `git pull`; volle Testsuite grün
+   (`.venv\Scripts\python -m pytest`). Nicht parallel zum Tageslauf rechnen.
+1. **Rohkurse nachladen:** `.venv\Scripts\python tools\tiingo_rohkurse_nachladen.py` (wiederaufnehmbar; hält an Tages-,
+   Monats- oder Netzgrenze an, dann einfach erneut starten). Fertig, wenn „noch offen 0“ meldet oder nur Symbole bleiben,
+   die der Nachlader als dauerhaft nicht verfügbar führt. META muss geladen sein (Metadaten-404 ist kein Hindernis);
+   Fehler stehen in `daten/cache/tiingo/roh_bis_tresor/stand.json`.
+2. **Abnahme der Rohreihen:** `.venv\Scripts\python tools\pruefe_rohkurse.py` → `docs/berichte/<Datum>_rohkurse_abnahme.md`.
+   Erwartet: „Für c3 noch offen: 0“. Nicht bestandene Reihen nutzen Teil b (gemeldet); mehr als 5 % nicht bestanden →
+   Fehlerschwelle, Abbruch, mit Jakob besprechen. Namensmeldungen kurz prüfen (Umbenennungen sind in Ordnung).
+3. **Unabhängige Stichprobe:** `.venv\Scripts\python tools\stichprobe_marktwert_roh.py` (eingefrorene 20 Einheiten,
+   Kriterium 0,70 ≤ q ≤ 1,05) → `docs/berichte/<Datum>_stichprobe_marktwert_roh.md`, Titel muss „gewertet“ lauten.
+   **Ergebnis an Jakob, bevor es weitergeht;** Abweichungen nicht anpassen.
+4. **Scores:** `.venv\Scripts\python tools\auswertung_scores.py --eq-offer-splitbereinigt --marktwert-rohkurse`
+   (ohne `--probe`; bricht ab, solange Rohreihen ohne Abnahme sind) → Cache `fundamental/scores_eq_offer_marktwert_roh`,
+   Bericht `daten/fundamental/auswertung_scores_eq_offer_marktwert_roh.md`. Vergleichsspalten zu Teil b prüfen
+   (`marktwert_teil_b`, `marktwert_kurs`, `marktwert_ungeklaert_roh`).
+5. **Gegenprobe Index-Nachbau (Lauf 5):** `.venv\Scripts\python tools\gegenprobe_index.py --c3` →
+   `daten/universum/gegenprobe_index.md` (Lauf 4 wird als `…_lauf4` gesichert). Kriterien unverändert; Verfehlung →
+   docs/DATENQUALITAET.md (Ursachen suchen, mit Jakob besprechen, nicht nachjustieren) und **vor Schritt 6 anhalten**.
+6. **Benchmark S&P 500 ohne Finanzwerte:** `.venv\Scripts\python tools\nachbau_sp500_ohne_finanzwerte.py --c3`
+   (überschreibt den Cache `benchmarks/SP500_ohne_finanzwerte`; Kontrolle `daten/benchmarks/sp500_ohne_finanzwerte.md`).
+7. **Backtest A:** `.venv\Scripts\python tools\backtest_fundamental.py --scores scores_eq_offer_marktwert_roh --name
+   fundamental_schatten_c3 --anlass "Neulauf c3: alle Datenkorrekturen (Jakob)" --kopie backtest_bericht_c3.md`
+   → `daten/backtests/<Zeitstempel>_fundamental_schatten_c3/`; Eintrag in `daten/fundamental/varianten.csv` als
+   Datenkorrektur, keine neue Variante. Vergleich mit dem Lauf vom 13.11.2026 (eq_offer). B: nur Signale und Auswahl wie
+   beim Neulauf vom 13.11.2026 (Entscheidung 02.11.2026, kein Kennzahlen-Neulauf).
+8. **Zusatzregel c1 (Obergrenze am neuen Bestand):** `.venv\Scripts\python tools\obergrenze_abspaltungen_tiingo.py --c3
+   --backtest <Ordner aus 7>` → `docs/berichte/<Datum>_abspaltungen_obergrenze_c3.md`; Schwelle < 0,05 Pp. p. a. für
+   Backtest A und Index-Nachbau. Verfehlt: gezielte Prüfung der neuen Fälle wie c1 b), Liste an Jakob.
+9. **Bericht c3:** `docs/berichte/<Datum>_neulauf_c3.md` und Abschnitt in dieser Datei mit Wirkung je Datenkorrektur
+   (Scores, Gegenprobe, Benchmark, Backtest A); Verfehlungen bleiben stehen und werden begründet. Danach Teil d (A4,
+   bereits umgesetzt) und A5 (Pflicht vor Echtgeld). Im Betrieb gelten EQ_OFFER und Marktwert-Korrektur ab 04.01.2027
+   (`config/fundamental.yaml`); der Betrieb braucht keine Rohkurse.
+10. Volle Testsuite, committen, mit Jakob abstimmen, pushen.

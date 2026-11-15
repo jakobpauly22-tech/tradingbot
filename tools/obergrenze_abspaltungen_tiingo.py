@@ -74,12 +74,30 @@ def obergrenze_buch(ordner: str, kandidaten: dict, kurse_eur: dict) -> dict:
             "zeitraum": (tage[0].date(), tage[-1].date())}
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    import argparse
+
+    from tradingbot.daten.rohkurse_marktwert import c3_argumente, c3_sperre_melden
+
+    a = argparse.ArgumentParser(description="Obergrenze der Scheinverluste (Teil c1)")
+    c3_argumente(a)
+    a.add_argument("--backtest", default=None, help="mit --c3: Ordner des Neulaufs Backtest A unter daten/backtests/ (Zusatzregel c1)")
+    arg = a.parse_args(argv)
+    sperre = c3_sperre_melden(arg.c3, arg.probe)
+    if sperre:
+        from tradingbot.daten.fehlerschwelle import laut_melden
+
+        return laut_melden(RuntimeError(sperre))
+    if arg.c3 and not arg.backtest:
+        a.error("--c3 braucht --backtest <Ordner des Neulaufs>")
+    laeufe = {arg.backtest: "maßgeblich (c3)"} if arg.c3 else LAEUFE
+    bericht = (PROJEKT_WURZEL / "docs" / "berichte" / f"{datetime.now():%Y-%m-%d}_abspaltungen_obergrenze_c3{'_probe' if arg.probe else ''}.md"
+               if arg.c3 else BERICHT)
     ereignisse = lies_ereignisse(QUELLE.read_text(encoding="utf-8"))
     universum, _ = lade_universum()
     status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
-    daten = lade_firmendaten(universum, status, lade_sic_historien(universum), tiingo=TiingoClient(sitzung=OhneNetz()))
-    alt = baue_nachbau(daten)
+    daten = lade_firmendaten(universum, status, lade_sic_historien(universum), tiingo=TiingoClient(sitzung=OhneNetz()), rohkurse=arg.c3)
+    alt = baue_nachbau(daten, marktwert_korrektur=arg.c3)
     mitglied = alt["mitglied"]
 
     kandidaten_a, kandidaten_index, fehlend, index_faelle = {}, {}, [], []
@@ -107,7 +125,7 @@ def main() -> int:
     kurse_neu = dict(daten.kurse)
     for firma, tage in kandidaten_index.items():
         kurse_neu[firma] = neutralisiere(daten.kurse[firma], tage)
-    neu = baue_nachbau(dataclasses.replace(daten, kurse=kurse_neu))
+    neu = baue_nachbau(dataclasses.replace(daten, kurse=kurse_neu), marktwert_korrektur=arg.c3)
     referenz = lade_kurse("^SP500TR", VORLAUF, ENDE)["close"]
     g_alt, g_neu = abnahme_gegenprobe(alt["nachbau"]["index"], referenz), abnahme_gegenprobe(neu["nachbau"]["index"], referenz)
     von, bis = (pd.Timestamp(z) for z in ABNAHME_ZEITRAUM)
@@ -117,7 +135,7 @@ def main() -> int:
     # Backtest A: Kurse in Euro wie im Backtest (EURUSD=X)
     fx = lade_kurse(lade_konfiguration("daten")["kurse"]["wechselkurse"].get("USD", "EURUSD=X"), VORLAUF, ENDE)["close"]
     kurse_eur = {f"CIK{f}": in_euro(daten.kurse[f], "USD", fx) for f, _ in kandidaten_a if daten.kurse.get(f) is not None}
-    buecher = [obergrenze_buch(o, kandidaten_a, kurse_eur) for o in LAEUFE]
+    buecher = [obergrenze_buch(o, kandidaten_a, kurse_eur) for o in laeufe]
     d_a = (buecher[0]["cagr_neu"] - buecher[0]["cagr_alt"]) * 100
     vernachlaessigbar = abs(d_a) < SCHWELLE_PP and abs(d_index) < SCHWELLE_PP
 
@@ -129,13 +147,15 @@ def main() -> int:
             "Nichts wurde korrigiert.", "",
             f"## Ergebnis: {'vernachlässigbar – c1 kann geschlossen werden' if vernachlaessigbar else 'Schwelle verfehlt – weiter mit b) (gezielte Prüfung)'}", "",
             "| Messgröße | ohne Neutralisierung | mit Neutralisierung | Differenz | Schwelle | eingehalten |", "| --- | --- | --- | --- | --- | --- |",
-            f"| Backtest A (eq_offer), CAGR nach Kosten vor Steuern {buecher[0]['zeitraum'][0]}–{buecher[0]['zeitraum'][1]} | "
+            f"| Backtest A ({buecher[0]['ordner']}), CAGR nach Kosten vor Steuern {buecher[0]['zeitraum'][0]}–{buecher[0]['zeitraum'][1]} | "
             f"{buecher[0]['cagr_alt']:.4%} | {buecher[0]['cagr_neu']:.4%} | {d_a:+.4f} Pp. | < 0,05 Pp. | {'ja' if abs(d_a) < SCHWELLE_PP else 'NEIN'} |",
             f"| Index-Nachbau, annualisiert {von.date()}–{bis.date()} | {cagr_index_alt:.4%} | {cagr_index_neu:.4%} | {d_index:+.4f} Pp. | < 0,05 Pp. | "
             f"{'ja' if abs(d_index) < SCHWELLE_PP else 'NEIN'} |", "",
             "Zur Information:", "",
-            f"- Backtest A (eq_bisher): CAGR {buecher[1]['cagr_alt']:.4%} → {buecher[1]['cagr_neu']:.4%} "
-            f"({(buecher[1]['cagr_neu'] - buecher[1]['cagr_alt']) * 100:+.4f} Pp.).",
+            (f"- Backtest A ({buecher[1]['ordner']}): CAGR {buecher[1]['cagr_alt']:.4%} → {buecher[1]['cagr_neu']:.4%} "
+             f"({(buecher[1]['cagr_neu'] - buecher[1]['cagr_alt']) * 100:+.4f} Pp.)." if len(buecher) > 1 else
+             "- Neulauf c3 (Zusatzregel aus c1): dieselben Tage und dieselbe Schwelle am Bestand des Neulaufs."
+             + (" PROBE – zählt nicht als c3." if arg.probe else "")),
             f"- Gegenprobe Index-Nachbau ohne/mit Neutralisierung: Korrelation {g_alt['kriterien']['korrelation']['wert']:.4f} / "
             f"{g_neu['kriterien']['korrelation']['wert']:.4f}; größte Jahresabweichung {g_alt['kriterien']['jahresabweichung_max']['wert'] * 100:.2f} / "
             f"{g_neu['kriterien']['jahresabweichung_max']['wert'] * 100:.2f} Pp.; Abweichung annualisiert "
@@ -162,7 +182,7 @@ def main() -> int:
                  "Der Nachbau lädt nur Mitgliedschaften ab dem 04.01.2016; frühere Ereignisse liegen vor beiden Messzeiträumen "
                  f"(ab {von.date()}). Davon im Messzeitraum: {len(spaet)}" + (f" ({'; '.join(spaet)})" if spaet else "") + ".", ""]
         text += [f"- {x}" for x in fehlend]
-    BERICHT.write_text("\n".join(text) + "\n", encoding="utf-8")
+    bericht.write_text("\n".join(text) + "\n", encoding="utf-8")
     print("\n".join(text[:20]))
     return 0
 

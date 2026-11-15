@@ -123,3 +123,109 @@ def test_marktwert_rohkurs_abspaltung_als_tiingo_split_ueber_k():
     assert mit["splitfaktor"] == pytest.approx(4.0) and mit["ungeklaert"] == []
     ohne = marktwert_rohkurs("2020-12-31", roh, _bereinigt(roh), aktien, None, ereignisse=None, plausibilitaet=False)
     assert ohne["splitfaktor"] == pytest.approx(4.0 * 1.048) and len(ohne["ungeklaert"]) == 2
+
+
+# --- c2 (3): Prüfung der Streubesitzwerte mit Rohkursen (Jakob 15.11.2026) --------------------------------------------
+def test_pruefbasis_streubesitz_mit_verdecktem_faktor():
+    """Wie NOW: Split 5:1 nach der Tresorgrenze steckt im bereinigten Kurs; der richtige Streubesitz wird nur mit der
+    Rohkurs-Basis angenommen."""
+    from tradingbot.daten.index_nachbau import aktien_splitbereinigt, streubesitz_pruefen
+    from tradingbot.daten.sp500_nachbau import pruefbasis
+
+    tage = pd.bdate_range("2019-01-01", "2024-12-31")
+    roh = pd.DataFrame({"close": 400.0, "split": 0.0}, index=tage)               # kein Split bis zur Grenze
+    bereinigt = pd.DataFrame({"close": 80.0, "split": 0.0, "dividende": 0.0}, index=tage)   # Roh / 5 (Split 2025)
+    aktien = pd.Series([190e6], index=[pd.Timestamp("2020-04-30")])
+    streubesitz = pd.DataFrame({"wert": [57.8e9], "filed": [pd.Timestamp("2021-02-15")]}, index=[pd.Timestamp("2020-06-30")])
+    alt_c, alt_s = pruefbasis(bereinigt, None)
+    g_alt, v_alt = streubesitz_pruefen(streubesitz, alt_c, aktien_splitbereinigt(aktien, alt_s))
+    neu_c, neu_s = pruefbasis(bereinigt, roh)
+    g_neu, v_neu = streubesitz_pruefen(streubesitz, neu_c, aktien_splitbereinigt(aktien, neu_s))
+    assert len(g_alt) == 0 and "Börsenwerts" in v_alt["grund"].iloc[0]
+    assert len(g_neu) == 1 and v_neu.empty
+
+
+def test_pruefbasis_mit_split_vor_der_grenze():
+    """Ein Split vor der Grenze: Rohkurs auf die Split-Basis der Grenze gebracht, Aktienzahl mit demselben Faktor."""
+    from tradingbot.daten.sp500_nachbau import pruefbasis
+
+    tage = pd.bdate_range("2020-01-01", "2020-12-31")
+    roh = pd.DataFrame({"close": 100.0, "split": 0.0}, index=tage)
+    roh.loc["2020-07-01":, "close"] = 50.0
+    roh.loc["2020-07-01", "split"] = 2.0
+    c, s = pruefbasis(None, roh)
+    assert c.loc["2020-06-30"] == 50.0 and c.loc["2020-07-01"] == 50.0 and s.loc["2020-07-01"] == 2.0
+    assert pruefbasis(None, None) == (None, None)
+
+
+def _now_daten(rohkurse):
+    import warnings
+
+    from tradingbot.daten.sp500_nachbau import lade_firmendaten
+    from tradingbot.daten.tiingo import TiingoClient
+    from tradingbot.daten.universum import lade_sic_historien, lade_universum
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    class _OhneNetz:
+        def get(self, *a, **k):
+            raise RuntimeError("kein Netz im Test")
+
+    warnings.simplefilter("ignore")
+    u, _ = lade_universum()
+    u = u[u["cik"] == 1373715]
+    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    return lade_firmendaten(u, status, lade_sic_historien(u), tiingo=TiingoClient("test", sitzung=_OhneNetz()), rohkurse=rohkurse)
+
+
+def _now_cache_da() -> bool:
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    ablage = PROJEKT_WURZEL / "daten" / "cache" / "tiingo" / "roh_bis_tresor"
+    return (ablage / "now.json.gz").exists() and (ablage / "abnahme.csv").exists()
+
+
+@pytest.mark.skipif(not _now_cache_da(), reason="lokaler Cache mit Rohreihe NOW und Abnahme fehlt")
+def test_now_2020_bis_2022_mit_echten_daten():
+    """NOW (CIK 1373715) 2020–2022: Mit Rohkursen werden die Streubesitzwerte angenommen und der Rohkurs-Marktwert besteht
+    die Plausibilitätsprüfung; ohne Rohkurse wurden sie verworfen (rund 370 % des Börsenwerts, verdeckter Faktor 5)."""
+    from tradingbot.engines.fundamental.multiples import marktwert_rohkurs
+    from tradingbot.konfiguration import lade_konfiguration
+    from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
+    from tradingbot.daten.cache import standard_cache
+
+    alt, neu = _now_daten(False), _now_daten(True)
+    jahre = [pd.Timestamp(f"{j}-06-30") for j in (2020, 2021, 2022)]
+    assert not any(t in alt.streubesitz_gueltig[1373715].index for t in jahre)
+    assert all(t in neu.streubesitz_gueltig[1373715].index for t in jahre)
+    erst, _ = standard_cache().lesen("sec_erstmeldungen", cik10(1373715))
+    akt = kennzahl_jahreswerte(erst, lade_konfiguration("fundamental")["kennzahlen"]["aktien_ausstehend"], "2100-01-01")[["wert", "filed"]]
+    for stichtag in ("2020-07-01", "2021-07-01", "2022-07-01"):
+        mr = marktwert_rohkurs(stichtag, neu.rohkurse[1373715], neu.kurse[1373715], akt, neu.streubesitz_gueltig[1373715])
+        assert mr["grund"] is None and 4e10 < mr["marktwert"] < 2e11, (stichtag, mr)
+
+
+def test_c3_sperre_meldung(monkeypatch):
+    import tradingbot.daten.rohkurse_marktwert as rm
+
+    monkeypatch.setattr(rm, "sperre_c3", lambda: ["META (yfinance)", "UPS (yfinance)"])
+    assert rm.c3_sperre_melden(False, False) is None                    # ohne --c3: keine Sperre
+    assert rm.c3_sperre_melden(True, True) is None                      # Probe: Teilabdeckung erlaubt
+    assert "Sperre c3: 2 Reihen" in rm.c3_sperre_melden(True, False)
+    monkeypatch.setattr(rm, "sperre_c3", lambda: [])
+    assert rm.c3_sperre_melden(True, False) is None
+
+
+def test_c3_werkzeuge_brechen_ohne_abnahme_ab(monkeypatch, capsys):
+    """Gegenprobe, Nachbau und Obergrenze starten mit --c3 nicht, solange Rohreihen ohne Abnahme sind."""
+    import importlib.util
+
+    import tradingbot.daten.rohkurse_marktwert as rm
+
+    monkeypatch.setattr(rm, "sperre_c3", lambda: ["META (yfinance)"])
+    wurzel = Path(__file__).resolve().parents[2] / "tools"
+    for name in ("gegenprobe_index", "nachbau_sp500_ohne_finanzwerte", "obergrenze_abspaltungen_tiingo"):
+        spec = importlib.util.spec_from_file_location(f"werkzeug_{name}", wurzel / f"{name}.py")
+        modul = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modul)
+        assert modul.main(["--c3"] + (["--backtest", "x"] if name.startswith("obergrenze") else [])) == 1, name
+    assert "Sperre c3" in capsys.readouterr().err

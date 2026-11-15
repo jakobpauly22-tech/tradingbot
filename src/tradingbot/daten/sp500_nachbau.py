@@ -144,6 +144,20 @@ def ersetze_eingefrorene(k: pd.DataFrame, eintraege: list) -> pd.DataFrame:
     return k
 
 
+def pruefbasis(kurse: pd.DataFrame | None, rohreihe: pd.DataFrame | None) -> tuple:
+    """Kurs und Split-Spalte für die Prüfung der Streubesitzwerte (c2 (3), Jakob 15.11.2026).
+
+    Ohne Rohreihe: bereinigte Kursreihe (bisher). Mit abgenommener Rohreihe: Rohkurs auf der Split-Basis der Tresorgrenze,
+    C'_t = Roh_t / Π_{t<x≤Grenze} s_x (Tiingo-Splitfaktoren), dazu dieselben Splitfaktoren für die Aktienzahl. C'_t enthält
+    keinen verdeckten Faktor H aus Splits nach der Tresorgrenze; C'_e · A_e ist der Börsenwert am Messtag.
+    """
+    if rohreihe is None or rohreihe.empty:
+        return (None, None) if kurse is None else (kurse["close"], kurse["split"])
+    from tradingbot.daten.rohkurse_marktwert import faktor_nach
+
+    return rohreihe["close"] / faktor_nach(rohreihe["split"]), rohreihe["split"]
+
+
 def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_ticker: dict) -> pd.DataFrame:
     """Wendet beide Kappungen auf eine Teilreihe an."""
     if firma in kappung:                                       # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
@@ -216,6 +230,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             continue
         zeile = relevant[relevant["cik"] == firma].iloc[0]
         reihen, aktien = [], []
+        schluss_pruef, split_pruef = pruefbasis(kurse[firma], roh_kurse.get(firma) if roh_status.get(firma) == "roh" else None)
         for cik in ciks_der_zeile(zeile):
             sic.setdefault(firma, []).extend(sic_historien.get(cik, []))
             erst, _ = cache.lesen("sec_erstmeldungen", cik10(cik))
@@ -225,14 +240,14 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             if kurse[firma] is not None:
                 a = kennzahl_jahreswerte(erst, aktien_def, "2100-01-01")
                 if len(a):
-                    aktien.append(aktien_splitbereinigt(a["wert"], kurse[firma]["split"]))
+                    aktien.append(aktien_splitbereinigt(a["wert"], split_pruef))
         sic[firma] = sorted(sic.get(firma, []))
         if not reihen:
             continue
         reihe = pd.concat(reihen).sort_index()
         roh[firma] = reihe[~reihe.index.duplicated(keep="first")]
         if kurse[firma] is not None:
-            g, v = streubesitz_pruefen(roh[firma], kurse[firma]["close"], pd.concat(aktien) if aktien else pd.Series(dtype=float))
+            g, v = streubesitz_pruefen(roh[firma], schluss_pruef, pd.concat(aktien) if aktien else pd.Series(dtype=float))
             gueltig[firma] = g
             verworfen += [{"cik": firma, "ende": e.date(), "wert_mrd": r.wert / 1e9, "grund": r.grund} for e, r in v.iterrows()]
     return Firmendaten(kurse, roh, gueltig, pd.DataFrame(verworfen, columns=["cik", "ende", "wert_mrd", "grund"]), relevant, sic,

@@ -23,24 +23,47 @@ from tradingbot.daten.universum import lade_sic_historien, lade_universum
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
+AENDERUNG_C3 = ("Neulauf c3: alle Datenkorrekturen aus docs/FUNDAMENTAL.md (Marktwert Teil b in der Fortschreibung des "
+                "Streubesitzes, Prüfung der Streubesitzwerte mit Rohkursen, Kappungen DD/DISCK/BMS, SIVB, CSC); Kriterien unverändert, "
+                "Zusage „unabhängig vom Ergebnis übernommen“ (Jakob 15.11.2026).")
 LAUF, VORHERIGER = 4, 3
 AENDERUNG = ("Zeitraum nach der Regel für den gewerteten Beginn (erster Stichtag, ab dem alle folgenden unter 2 % nicht kaufbarem "
              "Gewicht liegen): 01.10.2016 statt 01.04.2016. Nachbau, Daten und Kriterien unverändert, keine Anpassung (Jakob 02.11.2026).")
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    import argparse
+    import shutil
+
+    from tradingbot.daten.rohkurse_marktwert import c3_argumente, c3_sperre_melden
+
+    a = argparse.ArgumentParser(description="Gegenprobe Index-Nachbau")
+    c3_argumente(a)
+    arg = a.parse_args(argv)
+    sperre = c3_sperre_melden(arg.c3, arg.probe)
+    if sperre:
+        return laut_melden(RuntimeError(sperre))
+    global LAUF, VORHERIGER, AENDERUNG
+    if arg.c3:
+        LAUF, VORHERIGER, AENDERUNG = 5, 4, AENDERUNG_C3 + (" PROBE – zählt nicht als c3." if arg.probe else "")
     universum, _ = lade_universum()
     status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
-    daten = lade_firmendaten(universum, status, lade_sic_historien(universum))
-    ergebnis_nachbau = baue_nachbau(daten)
+    daten = lade_firmendaten(universum, status, lade_sic_historien(universum), rohkurse=arg.c3)
+    ergebnis_nachbau = baue_nachbau(daten, marktwert_korrektur=arg.c3)
     nachbau, tage = ergebnis_nachbau["nachbau"], ergebnis_nachbau["tage"]
     referenz = lade_kurse("^SP500TR", VORLAUF, ENDE)["close"]
     ergebnis = abnahme_gegenprobe(nachbau["index"], referenz)
 
     ziel = PROJEKT_WURZEL / "daten" / "universum"
-    pd.concat({"nachbau": nachbau["index"], "abdeckung": nachbau["abdeckung"], "referenz": referenz.reindex(tage)}, axis=1).to_csv(ziel / "gegenprobe_index.csv")
+    name = "gegenprobe_index_probe" if arg.c3 and arg.probe else "gegenprobe_index"
+    if arg.c3 and not arg.probe:                    # Lauf 4 vor dem Überschreiben sichern
+        for basis, endung in (("gegenprobe_index", ".md"), ("gegenprobe_index", ".csv"), ("gegenprobe_streubesitz_verworfen", ".csv")):
+            alt, sicher = ziel / f"{basis}{endung}", ziel / f"{basis}_lauf4{endung}"
+            if alt.exists() and not sicher.exists():
+                shutil.copy2(alt, sicher)
+    pd.concat({"nachbau": nachbau["index"], "abdeckung": nachbau["abdeckung"], "referenz": referenz.reindex(tage)}, axis=1).to_csv(ziel / f"{name}.csv")
     v = daten.verworfen
-    v.to_csv(ziel / "gegenprobe_streubesitz_verworfen.csv", index=False)
+    v.to_csv(ziel / ("gegenprobe_streubesitz_verworfen" + ("_probe" if name.endswith("_probe") else "") + ".csv"), index=False)
     geprueft = sum(len(r) for f, r in daten.streubesitz_roh.items() if f in daten.streubesitz_gueltig)
     gruende = v["grund"].str.replace(r"[\d.,]+[-%]?", "x", regex=True).value_counts().to_dict() if len(v) else {}
     abn = nachbau["abdeckung"].loc[ABNAHME_ZEITRAUM[0]:]
@@ -59,7 +82,7 @@ def main() -> int:
             "", f"**Gesamt: {'bestanden' if ergebnis['bestanden'] else 'NICHT bestanden – nicht weiter anpassen, mit Jakob besprechen'}**", "",
             "| Jahr | Nachbau | S&P 500 TR | Abweichung |", "| --- | --- | --- | --- |"]
     text += [f"| {j}{' (ab ' + pd.Timestamp(ABNAHME_ZEITRAUM[0]).strftime('%d.%m.') + ')' if j == pd.Timestamp(ABNAHME_ZEITRAUM[0]).year else ''} | {r.nachbau:.2%} | {r.referenz:.2%} | {r.abweichung*100:+.2f} Pp. |" for j, r in ergebnis["jahre"].iterrows()]
-    (ziel / "gegenprobe_index.md").write_text("\n".join(text), encoding="utf-8")
+    (ziel / f"{name}.md").write_text("\n".join(text), encoding="utf-8")
     print("\n".join(text))
     return 0
 
