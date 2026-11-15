@@ -626,8 +626,11 @@ Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
 **Formel:** MW_T = Roh_T · A_d · Π_{d<e≤T} s_e (Roh_T unbereinigter Schluss bis T, A_d SEC-Aktienzahl mit derselben
 Auswahl wie in Teil b, s_e Tiingo-Splitfaktoren der Rohreihe). Plausibilität gegen den Streubesitz wie bisher (dessen
 Fortschreibung nutzt Kursverhältnisse der bereinigten Reihe). Nur über den Schalter `--marktwert-rohkurse` in
-`tools/auswertung_scores.py`; Tageslauf und Betriebsbewertung lesen keine Rohkurse. Der Index-Nachbau braucht keine
-Rohkurse (Gewichte aus dem fortgeschriebenen Streubesitz, nur Kursverhältnisse).
+`tools/auswertung_scores.py`; Tageslauf und Betriebsbewertung lesen keine Rohkurse. ~~Der Index-Nachbau braucht keine
+Rohkurse (Gewichte aus dem fortgeschriebenen Streubesitz, nur Kursverhältnisse).~~ **Korrigiert 15.11.2026:** Die
+Fortschreibung braucht nur Kursverhältnisse, die **Prüfung der Streubesitzwerte** aber den Börsenwert am Messtag und hat
+mit bereinigten Kursen den verdeckten Faktor H; sie wird deshalb ebenfalls auf Rohkurse umgestellt (Abschnitt
+„c2 (3)“ unten), und damit ändern sich die Gewichte des Index-Nachbaus.
 
 **Abnahme jeder Rohreihe** (`tools/pruefe_rohkurse.py`, Ergebnis `daten/cache/tiingo/roh_bis_tresor/abnahme.csv`):
 
@@ -698,3 +701,21 @@ Rohkurse (Gewichte aus dem fortgeschriebenen Streubesitz, nur Kursverhältnisse)
   durch die Plausibilitätsprüfung (NOW 2020–2022: rund 54 Mrd. USD, „Streubesitz 16 %“), während Teil b (um H = 5 zu
   klein) durchkommt. Folge 2: Der Index-Nachbau gewichtet H-Firmen mit diesen Streubesitzwerten; die Aussage oben, der
   Index-Nachbau brauche keine Rohkurse, gilt deshalb nur für die Fortschreibung, nicht für die Prüfung der Streubesitzwerte.
+
+### c2 (3): Prüfung der Streubesitzwerte mit Rohkursen (Jakob 15.11.2026, festgehalten 15.11.2026 12:02 vor der Umsetzung)
+
+- **Befund:** `streubesitz_pruefen` vergleicht den Streubesitz F_e mit C_e · A_e (bereinigter Kurs × SEC-Aktienzahl auf
+  der Split-Basis der Kursreihe). Bei Firmen mit verdecktem Faktor H ist C_e · A_e um H falsch; richtige Streubesitzwerte
+  werden verworfen, unpassende behalten (NOW 2020–2022). Davon hängen die Plausibilitätsprüfung des Marktwerts und die
+  **Gewichte im Index-Nachbau** ab.
+- **Korrektur:** Für Firmen mit abgenommener Rohreihe prüft `streubesitz_pruefen` gegen den Rohkurs auf der Split-Basis
+  der Tresorgrenze (Roh / Π Tiingo-Splits danach bis zur Grenze) und die SEC-Aktienzahl auf derselben Basis (Tiingo-
+  Splits); ohne abgenommene Rohreihe wie bisher. Schalter `lade_firmendaten(rohkurse=True)`; in c3 nutzen ihn alle
+  Werkzeuge des Neulaufs (Scores, Gegenprobe, Nachbau ohne Finanzwerte, Obergrenze c1). Tageslauf und Betrieb unverändert
+  (dort enthält der Kurs keine späteren Splits).
+- **Zusage: Die Korrektur wird unabhängig vom Ergebnis übernommen. Das umfasst ausdrücklich auch ihre Wirkung auf den
+  Index-Nachbau (Gegenprobe gegen den S&P 500 TR) und auf den Benchmark „S&P 500 ohne Finanzwerte“.** Die Kriterien der
+  Gegenprobe bleiben unverändert (Korrelation ≥ 0,99, Jahresabweichung ≤ 1 Pp., annualisiert ≤ 0,5 Pp.); wird eines
+  verfehlt, gilt die Regel aus docs/DATENQUALITAET.md (Ursachen suchen, mit Jakob besprechen, nicht nachjustieren).
+- **Test:** NOW (CIK 1373715) 2020–2022 als Fall: Mit Rohkurs werden die richtigen Streubesitzwerte angenommen, der
+  Rohkurs-Marktwert besteht die Plausibilitätsprüfung.
