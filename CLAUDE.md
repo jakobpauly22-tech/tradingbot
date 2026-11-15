@@ -127,6 +127,13 @@ Parameter in `config/technik.yaml`, Veto in `config/risiko.yaml`. Details in `do
 - **Ergebnis (02.11.2026), Zweig a) des Entscheidungsbaums (`docs/TECHNIK.md`):** Ohne Kosten erreichen weder Crossover noch Momentum den Sharpe von Buy & Hold in beiden Hälften. Die Technik-Engine ist kein Renditebaustein; echtes Geld bleibt im Core, Crossover und Momentum laufen im Paper Trading als Schatten vorwärts mit. RSI(2) und Price Channel sind für den Satellite raus. Ohne Kosten senken Crossover und Momentum den maximalen Drawdown aber deutlich (Crossover −12,4 % gegen −17,1 % bei Buy & Hold); sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten.
 - **Berichte** zusätzlich als Datei unter `docs/berichte/`.
 
+## Makro-/Regime-Engine (Entscheidungen 15.11.2026)
+
+Regeln, Schwellen und Kriterien in `docs/REGIME.md`, vor dem ersten Lauf in Commit b628678 eingefroren. V1: Risiko aus, wenn der Trend von SPYI.DE (10-Monats-Durchschnitt) negativ ist und zugleich Zinskurve, Kreditaufschlag oder Sahm-Regel „aus“ zeigen; monatlich, zwei Monate Haltepflicht, defensive Anlage Kasse zu 0 %. Makrodaten point-in-time über ALFRED.
+
+- **Ergebnis (15.11.2026):** V1 nicht bestanden (Kriterien a–c je Hälfte; Hälfte 1 verfehlt alle, Hälfte 2 verfehlt a). Nicht nachjustieren. Der US-Langtest 1995–2011 ist nur noch Diagnose im Backlog, ohne Wirkung auf das Urteil.
+- **Schattenbuch „regime“:** V1 läuft im Paper Trading vorwärts mit (10.000 €), begründet nie echte Trades.
+
 ## Paper Trading (Phase 2, Entscheidungen 02.11.2026)
 
 Parameter in `config/betrieb.yaml`. Realbuch: Core 500 € in SPYI (ganze Stücke), Strategien nur als Schatten. Skalierungsbücher mit je 10.000 € (Fundamental A und B, Crossover, Momentum) handeln im Paper-Konto, um Signalqualität ohne Kostenverzerrung zu messen; sie begründen nie echte Trades mit kleinerem Kapital. Tageslauf abends, Freigabe 18–24 Uhr, Senden sofort (Limit = Vortagesschluss + 2 %, gültig für den nächsten Handelstag). Senden nur bei Konto „DU…“, Port 4002, `TRADING_MODE=paper` und ohne Datei `STOP`. Betriebsdaten ab 2025 liegen in einem eigenen Bereich, den Backtest- und Auswertungswerkzeuge nicht lesen können. Fremdwährung: Tausch EUR→USD je Buch vor den Käufen, keine Währung darf negativ werden. `Tageslauf_Probe.bat`: Probe-Journal, jederzeit bedienbar, sendet nie; Freigaben im Probe-Modus oder bei ausgeschaltetem Senden zählen nie als Messbeginn (03.11.2026).

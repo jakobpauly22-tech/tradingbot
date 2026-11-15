@@ -4,6 +4,16 @@ Stand 15.11.2026 14:28. Festlegungen eingefroren in Commit `b628678` (docs/REGIM
 
 **Kein Gesamturteil in diesem Bericht.** Der US-Langtest 1995–2011 zählt mit (Kriterium b); das Urteil fällt erst danach (Jakob 15.11.2026). Nach diesem Lauf werden weder Schwellen noch Signale geändert.
 
+## Urteil (Nachtrag, Jakob 15.11.2026 nach dem Lauf)
+
+**V1 hat nicht bestanden.** Die Kriterien a–c müssen in beiden Hälften gelten; Hälfte 1 verfehlt a, b und c, Hälfte 2 verfehlt a.
+Der US-Langtest hätte nur zusätzlich Kriterium b geprüft und kann das nicht ändern; er wird deshalb nicht gerechnet und steht als
+reine Diagnose ohne Wirkung auf das Urteil im Backlog (docs/ROADMAP.md). Signale, Schwellen und Kriterien bleiben unverändert.
+
+Erklärung: In Hälfte 1 zwei Fehlsignale 2015/16 (Verkauf 85,15 €, Kauf 95,40 €, Verkauf 85,13 €, Kauf 88,40 €) mit 816 € Steuer auf den
+2015 realisierten Gewinn; dadurch ist der Drawdown größer als bei Kaufen und Halten. In Hälfte 2 hat V1 den Einbruch 2020 gemieden,
+ist aber erst im September 2020 wieder eingestiegen. Der Satz „Kein Gesamturteil“ unten ist der Stand beim Lauf.
+
 ## Kriterien für V1 je Hälfte
 
 | Hälfte | Sharpe V1 | Sharpe Kaufen und Halten | Sharpe Mischung | Aktienanteil V1 = Mischung | max. Drawdown V1 | max. Drawdown KuH | Grenze c (75 %) | a) | b) | c) |

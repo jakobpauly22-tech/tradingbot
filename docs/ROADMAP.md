@@ -257,7 +257,7 @@ Die Briefing-Aufgaben in Claude und der Bot sehen sich nicht direkt. Die Brücke
 
 ### Anleitung: Tagesbriefing einbinden
 
-Das Tagesbriefing läuft als zwei geplante Aufgaben (seit 12.11.2026 um 07:00, 15:00 und 21:00 Uhr, einen Lauf um 22 Uhr gibt es nicht mehr; zuvor „Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in der Briefing-Seite. Diese Aufgaben lesen keine Projektanweisungen, deshalb entsteht der Anhang in einer eigenen Export-Aufgabe.
+Das Tagesbriefing läuft als zwei geplante Aufgaben (seit 12.11.2026 täglich, auch am Wochenende, um 07:00, 15:00 und 21:00 Uhr, einen Lauf um 22 Uhr gibt es nicht mehr; zuvor „Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in der Briefing-Seite. Diese Aufgaben lesen keine Projektanweisungen, deshalb entsteht der Anhang in einer eigenen Export-Aufgabe.
 
 **Stufe 1: läuft seit 31.10.2026**
 
@@ -457,7 +457,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Briefing-Anhang (JSON) | News | 3 | Mittel | In Arbeit |
 | 13F-Tracking und Konsens-Score | Smart Money | 4 | Mittel | Idee |
 | Insider-Trades | Smart Money | 4 | Mittel | Idee |
-| Regime-Erkennung (Makro-/Regime-Engine) | Scoring | 3 | Hoch | In Arbeit: Schritt 2 der Entwicklungsreihenfolge ab 12.11.2026 (Jakob 15.11.2026); Festlegungen in docs/REGIME.md |
+| Regime-Erkennung (Makro-/Regime-Engine) | Scoring | 3 | Hoch | Backtest 15.11.2026: V1 nicht bestanden (docs/REGIME.md), kein Renditebaustein; läuft als Schattenbuch vorwärts mit. Backlog: US-Langtest 1995–2011 als reine Diagnose |
 | ESG-Score | Weitere | 5 | Niedrig | Idee |
 | Stresstests | Weitere | 5 | Niedrig | Idee |
 | Dashboard und Wochenreport | Weitere | 5 | Niedrig | Idee |
@@ -468,7 +468,7 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 Echtgeld erst später; neue Engines kommen als neue Schattenbücher, bestehende Bücher bleiben unverändert (Jakob, eingetragen am 15.11.2026).
 
 1. **Kapitalmaßnahmen und Benachrichtigungen** – erledigt (A0–A4, B); A5 Vorwarnung ist Pflicht vor Echtgeld.
-2. **Makro-/Regime-Engine:** Plan, vorab festgelegte Kriterien, Backtest, dann als Schattenbuch – in Arbeit (`docs/REGIME.md`).
+2. **Makro-/Regime-Engine:** Plan, vorab festgelegte Kriterien, Backtest, dann als Schattenbuch – Backtest am 15.11.2026: V1 nicht bestanden (`docs/REGIME.md`, Abschnitt 7e), keine Anpassung; Schattenbuch „regime“ in Arbeit. Backlog, reine Diagnose ohne Wirkung auf das Urteil: US-Langtest 1995–2011 (Regeln in `docs/REGIME.md`, Abschnitt 5).
 3. **Briefing-Archiv anbinden:** parallel, reine Datenarbeit (Export täglich 21:41).
 4. **Risiko-Übersicht** über alle Bücher mit Value at Risk und Stresstests.
 5. **Januar 2027:** erster Quartalswechsel der Fundamental-Bücher und automatischer Quartals-Review; Datenkorrekturen (EQ_OFFER, Marktwert) wirksam ab 04.01.2027.

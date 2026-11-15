@@ -64,7 +64,7 @@ Risiko aus, wenn das Signal „aus“ ist, gleiche Haltepflicht. VIX nur als Ang
 - **Nur zum Vergleich:** Crossover-Schatten, Diagnosen D1–D4, Rendite p. a., Zahl der Wechsel.
 - **Vorbehalt:** Der Zeitraum enthält wenige Abschwünge (2018, 2020, 2022); die Beweiskraft ist gering. Deshalb Abschnitt 5.
 
-## 5. US-Langtest 1995–2011 (zählt)
+## 5. US-Langtest 1995–2011 (ursprünglich „zählt“; seit dem Urteil vom 15.11.2026 nur Diagnose im Backlog, siehe 7e)
 
 V1 muss zusätzlich **Kriterium b** im Langtest erfüllen (Jakob 15.11.2026), über den ganzen Zeitraum 01.01.1995–31.12.2011.
 
@@ -183,6 +183,22 @@ Beobachtungen (keine Anpassung): In Hälfte 1 ist V1 2015/2016 zweimal ausgestie
 (Verkauf 85,15 €, Kauf 95,40 €, Verkauf 85,13 €, Kauf 88,40 €); dazu kam die Steuer auf den 2015 realisierten Gewinn
 (816 €). In Hälfte 2 hat V1 den Einbruch 2020 gemieden, den Wiederanstieg aber erst ab September 2020 mitgemacht.
 
+## 7e. Urteil (Jakob 15.11.2026)
+
+**V1 hat nicht bestanden.** Die Kriterien a–c müssen in beiden Hälften gelten; Hälfte 1 verfehlt a, b und c, Hälfte 2
+verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b geprüft und kann das nicht ändern.
+
+- **Erklärung:** Fehlsignale 2015/16 mit Steuer auf den realisierten Gewinn (Hälfte 1), später Wiedereinstieg nach dem
+  Einbruch 2020 (Hälfte 2); Einzelheiten in Abschnitt 7d und im Bericht.
+- **Keine Anpassung:** Signale, Schwellen und Kriterien bleiben, wie sie in b628678 eingefroren wurden. Es wird nicht
+  nachjustiert und neu getestet.
+- **US-Langtest:** wird jetzt nicht gerechnet. Er steht als reine Diagnose im Backlog (`docs/ROADMAP.md`), ausdrücklich
+  ohne Wirkung auf das Urteil. Abschnitt 5 („zählt“) ist damit überholt.
+- **Schattenbuch:** V1 läuft trotzdem als Schattenbuch „regime“ vorwärts mit (10.000 €, Regeln genau aus b628678,
+  Kasse zu 0 % in „Risiko aus“); es begründet keine echten Trades.
+- Hinweis: Weil diese Datei nach dem Lauf ergänzt wurde, verweigert `tools/backtest_regime.py --festlegung b628678` einen
+  weiteren Lauf; das ist gewollt.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |
@@ -190,5 +206,5 @@ Beobachtungen (keine Anpassung): In Hälfte 1 ist V1 2015/2016 zweimal ausgestie
 | 1 | Festlegungen, neue Reihen, ALFRED-Abdeckung, Tresor- und Erstmeldungstests, XEON-Prüfung | 15.11.2026 |
 | 2 | Signale, Monatslogik mit Haltepflicht, Tests | 15.11.2026 |
 | 3 | Backtest des Buchs, Vergleichsportfolios, Bericht (ohne Gesamturteil) | 15.11.2026 |
-| 4 | US-Langtest 1995–2011 | offen |
+| 4 | US-Langtest 1995–2011 | nicht gerechnet; Diagnose im Backlog, ohne Wirkung auf das Urteil (15.11.2026) |
 | 5 | Schattenbuch im Tageslauf | offen |
