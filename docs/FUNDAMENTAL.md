@@ -543,3 +543,29 @@ geändert.** Statt die Treffer einzeln zu prüfen, wird zuerst die größtmögli
 Gesamtrendite über das Zwei-Tage-Fenster −3 % oder schlechter; Index-Nachbau nur Tage −15 % oder schlechter während der
 Mitgliedschaft. Jeder Fall wird am Hauptdokument des 8-K (ohne Anhänge) bzw. an einer Pressemitteilung geprüft; die
 Liste mit Beleg geht an Jakob, bevor etwas korrigiert wird.
+
+## Fünfte Datenkorrektur: vermischte Kursreihe DISCK/WBD (Jakob 15.11.2026, festgehalten vor der Umsetzung)
+
+Festgehalten am 15.11.2026 um 09:55, **vor** der Umsetzung und vor der Suche.
+
+- **Befund** (Nebenbefund der gezielten Prüfung, `docs/berichte/2026-11-15_abspaltungen_gezielt.md`): `lade_firmendaten`
+  führt mehrere Reihen einer Firma mit `combine_first` zusammen, die zuerst geladene hat Vorrang. Die Tiingo-Reihe DISCK
+  (CIK 1437107) läuft nach der Fusion mit WarnerMedia (letzter echter Handelstag 08.04.2022) ab dem 14.04.2022 mit
+  eingefrorenem Kurs 24,42 USD und Lücken bis zum 16.09.2022 weiter; WBD füllt nur die Lücken, der Kurs springt zwischen
+  beiden Reihen.
+- **Korrektur:** Die Reihe DISCK endet am Fusionstag 08.04.2022 (`kursreihe_ende` mit `ticker`, gilt nur für diese
+  Reihe der Firma); danach gilt nur WBD (ab 11.04.2022). **Sie wird unabhängig vom Ergebnis des Neulaufs übernommen.**
+- **Technik:** Einträge in `kursreihe_ende` mit `ticker` kappen nur die Reihe dieses Tickers; ohne `ticker` wie bisher
+  alle Reihen der Firma (E. I. du Pont).
+
+### Eingefrorene Kurse in zusammengeführten Reihen: Suchkriterien (festgelegt vor der Suche)
+
+- **Grundmenge:** alle Firmen (CIK), deren Kursreihe aus mehr als einer gültigen Reihe zusammengeführt wird
+  (Mitgliedschaften 2012–2024), jede Teilreihe einzeln, Kurse wie im Backtest (bis zur Datumsgrenze des Tresors), ohne die
+  Kappungen aus `kursreihe_ende` (bereits gekappte Abschnitte werden als „bereits erfasst“ markiert).
+- **E1 (wie vierte Datenkorrektur, zweite Fassung):** mindestens 3 aufeinanderfolgende Handelstage mit
+  Eröffnung = Hoch = Tief = Schluss und Schluss gleich dem Vortagesschluss.
+- **Gemeldet:** Firma, Teilreihe (Ticker, Quelle), eingefrorener Zeitraum und Kurs, erster echter Kurs danach oder
+  Reihenende, ob der Zeitraum in der Mitgliedschaft dieser Zeile liegt und ob die zusammengeführte Reihe an diesen Tagen
+  den Wert dieser Teilreihe übernimmt.
+- **Ergebnis:** Fundliste an Jakob, **bevor** etwas korrigiert wird.
