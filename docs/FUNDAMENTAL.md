@@ -620,3 +620,41 @@ Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
   als Ladefehler zu zählen.
 - Wirkung nur in der Gegenprobe des Index-Nachbaus (SIVB ist Finanzwert, im Fundamental-Universum und im Nachbau ohne
   Finanzwerte ausgeschlossen; Buch A hielt ihn nie). Gemessen in c3.
+
+### c2 (2): Marktwert aus Rohkursen – Abnahme und Stichprobe (Jakob 15.11.2026, festgehalten 15.11.2026 11:10 vor jedem Lauf)
+
+**Formel:** MW_T = Roh_T · A_d · Π_{d<e≤T} s_e (Roh_T unbereinigter Schluss bis T, A_d SEC-Aktienzahl mit derselben
+Auswahl wie in Teil b, s_e Tiingo-Splitfaktoren der Rohreihe). Plausibilität gegen den Streubesitz wie bisher (dessen
+Fortschreibung nutzt Kursverhältnisse der bereinigten Reihe). Nur über den Schalter `--marktwert-rohkurse` in
+`tools/auswertung_scores.py`; Tageslauf und Betriebsbewertung lesen keine Rohkurse. Der Index-Nachbau braucht keine
+Rohkurse (Gewichte aus dem fortgeschriebenen Streubesitz, nur Kursverhältnisse).
+
+**Abnahme jeder Rohreihe** (`tools/pruefe_rohkurse.py`, Ergebnis `daten/cache/tiingo/roh_bis_tresor/abnahme.csv`):
+
+- Vergleich ausschließlich gegen eine **nur splitbereinigte** Reihe (Yahoo `close` mit auto_adjust=False bzw. Tiingo
+  `close` nach `normalisieren`), nie gegen dividendenbereinigte Kurse (Adj Close, adjClose): Deren Verhältnis zum
+  Rohkurs driftet mit jeder Ausschüttung. Im Code abgesichert (Reihe muss die Spalte `dividende` getrennt führen und
+  darf keine Spalte „adj…“ haben); ein Test zeigt, dass eine dividendenbereinigte Reihe durchfällt.
+- Verhältnis v_t = Roh_t / C_t; erwartet v_t = H · Π_{t<e≤Tresorgrenze} s_e. H = Median von v_t / Π s_e (verdeckter
+  Faktor aus Splits nach der Tresorgrenze, die in C enthalten sind; 1 ohne solche Splits).
+- **Bestanden:** mindestens 250 gemeinsame Handelstage ab 2011 und |v_t / (H · Π s_e) − 1| ≤ 1 % an mindestens 99 % davon.
+  H ≠ 1 und Tiingo-Name ungleich Name im Universum werden gemeldet, sind aber kein Ausschluss.
+- Nicht bestanden oder Rohreihe fehlt: Die Firma nutzt die bisherige Rechnung (Datenkorrektur Marktwert Teil b),
+  markiert und gezählt. Mehr als 5 % solcher Reihen: Fehlerschwelle, laut melden, nicht anpassen.
+- **Sperre c3:** Der gewertete Neulauf mit `--marktwert-rohkurse` startet nur, wenn jede Yahoo-Reihe des Universums eine
+  Rohreihe mit Abnahme hat oder im Nachlader als dauerhaft nicht verfügbar geführt wird; sonst Abbruch mit Liste.
+  `--probe` erlaubt Läufe mit Teilabdeckung, die nie als c3 zählen.
+
+**Unabhängige Stichprobe** (`tools/stichprobe_marktwert_roh.py`, läuft nach dem Nachladen ab 01.12.2026 und vor c3):
+
+- **Unabhängige Quelle:** Streubesitz vom Deckblatt des 10-K (dei:EntityPublicFloat), von der Firma selbst mit eigenem
+  Kurs und eigener Aktienzahl am Messtag (letzter Handelstag des zweiten Quartals) gerechnet. `tools/pruefe_boersenwerte.py`
+  ist nicht unabhängig (gleiche Yahoo-Kurse und SEC-Aktienzahl, ohne Splits nach 2024).
+- **Einheiten:** 20 Firmen-Messtage, Messtag 2016–2024, Firmen des Fundamental-Universums (ohne Finanzwerte), Startwert
+  15112026. Fest dabei: MA, UPS, GOOGL (Alphabet) mit je einem zufälligen Messtag. Dazu mindestens 3 Firmen mit
+  H ≠ 1 (Split nach 2024). Der Rest zufällig; über alle 20 jedes Jahr 2016–2024 mindestens einmal.
+- **Vergleich:** q = Streubesitz / MW_Roh am Messtag (MW_Roh ohne Plausibilitätsfilter), zur Information auch
+  q_bisher = Streubesitz / Marktwert nach Teil b.
+- **Kriterium:** 0,70 ≤ q ≤ 1,05 (Streubesitz ohne verbundene Aktionäre, daher höchstens rund 1; bis 5 % darüber wegen
+  verschiedener Zähltage der Aktien; mehr als 30 % verbundene Aktionäre ist selten). Abweichungen gehen an Jakob, es wird
+  nichts angepasst.
