@@ -136,6 +136,34 @@ Jakob hat die Präzisierungen (erste Bewertung, Sahm-Regel, Stand der Marktreihe
 - Der Bericht von Sitzung 3 enthält **kein Gesamturteil**, nur die Ergebnisse je Hälfte. Das Urteil fällt erst nach dem
   US-Langtest (Sitzung 4), weil er mitzählt.
 
+## 7c. Präzisierungen für den Backtest des Buchs (15.11.2026, vor dem ersten Lauf)
+
+Code: `engines/regime/buch.py`, `tools/backtest_regime.py`. Bisher wurde kein Verlauf und kein Backtest von V1 auf echten
+Daten gerechnet.
+
+1. **Kapital und Ausführung:** 10.000 € je Portfolio, ganze Stücke zu echten Anteilspreisen (Split von SPYI.DE 2026
+   zurückgerechnet), Kosten und Gebührenregel nach `config/backtest.yaml` (Xetra-Plan, Spread, Slippage).
+2. **Steuern:** V1, Kaufen und Halten, Mischung und jede Diagnose bilden je eine eigene Steuergruppe **ohne
+   Pauschbetrag** (Regel der Schattenbücher), sonst heutiges Recht wie im Backtest (Vorabpauschale, Teilfreistellung 30 %).
+3. **Wertreihe der Kriterien:** Depotwert **nach laufend gezahlten Steuern** (`wert_nach_steuern`). Die latente Steuer auf
+   nicht realisierte Gewinne ist darin nicht abgezogen; der Wert nach fiktivem Verkauf am Ende steht nur zur Einordnung im
+   Bericht.
+4. **Beginn:** erste Bewertung am 31.10.2012 mit dem Startkapital in Kasse, Orders am 01.11.2012. Kaufen und Halten und
+   die Mischung kaufen am selben Tag. Liefert die Rechnung eine andere erste Bewertung, bricht das Werkzeug laut ab.
+5. **Kennzahlen je Hälfte:** Wertreihe der Hälfte mit dem letzten Wert davor als Basis; Sharpe wie
+   `kennzahlen/performance.kennzahlen` mit dem EZB-Einlagesatz als risikofreiem Zins; Vergleiche mit Rundungstoleranz
+   1e-9. Ist ein Sharpe nicht bestimmbar (keine Schwankung), gilt das betroffene Kriterium als nicht erfüllt.
+6. **Durchschnitts-Aktienanteil:** Anteil der Handelstage der Hälfte, an denen V1 nach seinem Zustand Aktien halten soll
+   (Zustand des letzten Monatsendes vor dem Tag). Die Mischung bekommt das Gewicht der zweiten Hälfte mit Signal am
+   letzten Handelstag der ersten Hälfte und wird sonst am ersten Handelstag jedes Quartals zurückgestellt.
+7. **Gescheiterte Orders** (kein Handel am Ausführungstag) werden am nächsten Tag wiederholt.
+8. **Crossover-Schatten:** wird nicht neu gerechnet (anderes Universum und Kapital); Vergleich über die Diagnose D1.
+9. **Datenhinweise SPYI.DE (15.11.2026):** bis 2016 dünn gehandelt (Tage mit Eröffnung = Hoch = Tief = Schluss: 2012 176,
+   2013 147, 2014 120, 2015 101, 2016 86; insgesamt 498 Tage ohne Umsatz), ein Befund am 13.06.2012 (Hoch unter Tief, vor
+   dem gewerteten Zeitraum). Die Reihe wird unverändert genutzt; beides steht im Bericht.
+10. **Festlegungs-Commit:** Das Werkzeug verlangt den Commit und bricht ab, wenn diese Datei oder der Code unter
+    `src/tradingbot/engines/regime` seitdem geändert wurde.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |
