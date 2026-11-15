@@ -89,3 +89,5 @@ delisting:
 # Ticker): Reihe nach `letzter_tag` gekappt, danach gilt die Delisting-Regel (docs/FUNDAMENTAL.md, dritte Datenkorrektur).
 kursreihe_ende:
   - {cik: 30554, ticker: DD, letzter_tag: 2017-08-31, quelle: "E. I. du Pont: Umtausch in DowDuPont zum 01.09.2017 (8-K12B vom 01.09.2017); Tiingo „DD“ läuft als DowDuPont weiter. Jakob 13.11.2026"}
+  # Mit `ticker_einzeln: true`: nur die Teilreihe dieses Tickers wird gekappt, andere Reihen derselben Firma bleiben.
+  - {cik: 1437107, ticker: DISCK, ticker_einzeln: true, letzter_tag: 2022-04-08, quelle: "Discovery Serie C: letzter echter Handelstag vor der Fusion mit WarnerMedia (08.04.2022), danach eingefroren 24,42 USD bis 16.09.2022; ab 11.04.2022 nur WBD. Fünfte Datenkorrektur, Jakob 15.11.2026"}

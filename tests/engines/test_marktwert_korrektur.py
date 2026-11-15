@@ -206,3 +206,30 @@ def test_dd_kappung_und_delisting_nach_cik():
     assert grund == "uebernahme" and "8-K12B" in beleg
     assert delisting_grund_mit_korrektur("DD", leer, "2024-06-28", None, korrekturen, cik=1666700)[0] == "unbekannt"
     assert delisting_grund_mit_korrektur("TFCF", leer, "2019-03-19", None, korrekturen, cik=1308161)[0] == "uebernahme"
+
+
+# --- Fünfte Datenkorrektur: Teilreihe DISCK am Fusionstag gekappt (Jakob 15.11.2026) ---------------------------------------
+def test_disck_kappung_nur_fuer_diese_teilreihe():
+    from tradingbot.daten.sp500_nachbau import kappe_reihe, kursreihen_ende, kursreihen_ende_je_ticker
+
+    kappung, je_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
+    assert 1437107 not in kappung                                       # nicht die ganze Firma
+    assert je_ticker[(1437107, "DISCK")] == pd.Timestamp("2022-04-08")
+    tage = pd.bdate_range("2022-04-06", "2022-04-20")
+    reihe = pd.DataFrame({"close": range(len(tage))}, index=tage, dtype=float)
+    assert kappe_reihe(reihe, 1437107, "DISCK", kappung, je_ticker).index.max() == pd.Timestamp("2022-04-08")
+    assert kappe_reihe(reihe, 1437107, "WBD", kappung, je_ticker).index.max() == tage[-1]
+    dd = pd.DataFrame({"close": 1.0}, index=pd.bdate_range("2017-08-28", "2017-09-05"))
+    assert kappe_reihe(dd, 30554, "DD", kappung, je_ticker).index.max() == pd.Timestamp("2017-08-31")
+
+
+def test_zusammengefuehrte_reihe_ohne_vermischung():
+    """combine_first nach der Kappung: nach dem Fusionstag nur noch Werte der WBD-Reihe."""
+    from tradingbot.daten.sp500_nachbau import kappe_reihe, kursreihen_ende, kursreihen_ende_je_ticker
+
+    tage = pd.bdate_range("2022-04-06", "2022-04-20")
+    disck = pd.DataFrame({"close": 24.42}, index=tage[[0, 1, 2, 6, 8]])          # eingefroren, mit Lücken
+    wbd = pd.DataFrame({"close": 24.0 - 0.1 * pd.Series(range(len(tage))).to_numpy()}, index=tage)
+    k = kappe_reihe(disck, 1437107, "DISCK", kursreihen_ende(), kursreihen_ende_je_ticker())
+    zusammen = k.combine_first(wbd)
+    assert (zusammen.loc["2022-04-11":, "close"] == wbd.loc["2022-04-11":, "close"]).all()

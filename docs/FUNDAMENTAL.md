@@ -546,7 +546,7 @@ Liste mit Beleg geht an Jakob, bevor etwas korrigiert wird.
 
 ## Fünfte Datenkorrektur: vermischte Kursreihe DISCK/WBD (Jakob 15.11.2026, festgehalten vor der Umsetzung)
 
-Festgehalten am 15.11.2026 um 09:55, **vor** der Umsetzung und vor der Suche.
+Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
 
 - **Befund** (Nebenbefund der gezielten Prüfung, `docs/berichte/2026-11-15_abspaltungen_gezielt.md`): `lade_firmendaten`
   führt mehrere Reihen einer Firma mit `combine_first` zusammen, die zuerst geladene hat Vorrang. Die Tiingo-Reihe DISCK
@@ -569,3 +569,19 @@ Festgehalten am 15.11.2026 um 09:55, **vor** der Umsetzung und vor der Suche.
   Reihenende, ob der Zeitraum in der Mitgliedschaft dieser Zeile liegt und ob die zusammengeführte Reihe an diesen Tagen
   den Wert dieser Teilreihe übernimmt.
 - **Ergebnis:** Fundliste an Jakob, **bevor** etwas korrigiert wird.
+
+### Teil c1: Ergebnis und Abschluss (Jakob 15.11.2026)
+
+- **a) Obergrenze verfehlt** (Backtest A +1,71 Pp. p. a., Index-Nachbau +0,33 Pp. p. a.,
+  `docs/berichte/2026-11-15_abspaltungen_obergrenze.md`), deshalb b).
+- **b) Gezielte Prüfung** von 128 Fällen am Hauptdokument der 8-K und an Pressemitteilungen, Schlussprüfung der drei
+  Einzelbewegungen ohne 8-K (PBCT, DISH, CTLT) am nächsten 10-Q (`docs/berichte/2026-11-15_abspaltungen_gezielt.md`):
+  keine Abspaltung belegt.
+- **Ergebnis: Außer CSC 30.11.2015 keine Abspaltung mit fehlendem Wert gefunden. c1 ist damit geschlossen**, offen bleibt
+  nur die Korrektur CSC. CSC fehlt in b), weil die Mitgliedschaft am 01.12.2015 endet und damit vor beiden
+  Messzeiträumen liegt (Nachbau ab 04.01.2016, Backtest A ab 03.10.2016); auf die gewerteten Ergebnisse wirkt CSC nicht.
+- **CSC, Stand:** Der erste Schlusskurs von CSRA liegt nicht vor (Tiingo „CSRA“ ist ein anderes Unternehmen ab 2026,
+  Yahoo führt CSRA nicht). Nach der Regel vom 13.11.2026 wird der Fall gemeldet, nicht geschätzt. Belegt sind: Verhältnis
+  1 CSRA je CSC-Aktie, volumengewichteter Durchschnittskurs von CSRA am 30.11.2015 30,95 USD (10-Q von CSRA, eingereicht
+  04.12.2015), Sonderdividende 10,50 USD (bei Tiingo als Dividende gebucht), Yahoo-Faktor der Kursreihe DXC 1,7412
+  (`config/kapitalmassnahmen_historie.yaml`). Entscheidung über die Quelle: Jakob.

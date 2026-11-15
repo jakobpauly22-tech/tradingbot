@@ -141,3 +141,26 @@ def test_gezielt_faelle_aus_obergrenze():
     f = w.faelle_aus_obergrenze(obergrenze, lies_ereignisse(lauf3))
     assert list(zip(f["ticker"], f["A"], f["Index"])) == [("MRO", True, True), ("RTN", False, True)]
     assert f.iloc[0]["bis"] == pd.Timestamp("2020-03-23")
+
+
+# --- tools/pruefe_eingefrorene_zusammengefuehrt.py und pruefe_abspaltungen_schluss.py (Jakob 15.11.2026) --------------------
+def test_zusammengefuehrt_uebernommene_tage():
+    import pandas as pd
+
+    w = _werkzeug("pruefe_eingefrorene_zusammengefuehrt")
+    tage = pd.bdate_range("2022-04-11", periods=5)
+    erste = pd.DataFrame({"close": 1.0}, index=tage[[0, 2]])
+    zweite = pd.DataFrame({"close": 2.0}, index=tage)
+    assert w.uebernommen([("A", erste), ("B", zweite)], 1, tage) == 3       # nur die Lücken der ersten Reihe
+    assert w.uebernommen([("A", erste), ("B", zweite)], 0, tage) == 2
+
+
+def test_schluss_naechster_bericht():
+    import pandas as pd
+
+    w = _werkzeug("pruefe_abspaltungen_schluss")
+    subs = {"filings": {"recent": {"form": ["8-K", "10-Q", "10-Q/A", "10-K"], "filingDate": ["2023-06-20", "2023-08-08", "2023-08-01", "2024-02-29"],
+                                   "accessionNumber": ["a", "b", "c", "d"], "primaryDocument": ["x", "y", "z", "w"],
+                                   "reportDate": ["", "2023-06-30", "2023-06-30", "2023-12-31"]}}}
+    assert w.naechster_bericht(subs, pd.Timestamp("2023-06-15"))["accessionNumber"] == "b"
+    assert w.naechster_bericht(subs, pd.Timestamp("2024-03-01")) is None

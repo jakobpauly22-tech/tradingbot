@@ -50,11 +50,32 @@ class Firmendaten:
     sic: dict = field(default_factory=dict)
 
 
-def kursreihen_ende() -> dict:
-    """Gekappte Kursreihen je CIK (config/universum_korrekturen.yaml, `kursreihe_ende`): letzter gültiger Tag."""
+def _kappungs_eintraege() -> list:
     from tradingbot.konfiguration import lade_konfiguration
 
-    return {int(e["cik"]): pd.Timestamp(str(e["letzter_tag"])) for e in lade_konfiguration("universum_korrekturen").get("kursreihe_ende", []) or []}
+    return lade_konfiguration("universum_korrekturen").get("kursreihe_ende", []) or []
+
+
+def kursreihen_ende() -> dict:
+    """Gekappte Kursreihen je CIK (config/universum_korrekturen.yaml, `kursreihe_ende`, Einträge ohne `ticker`): letzter
+    gültiger Tag für alle Reihen der Firma (dritte Datenkorrektur, E. I. du Pont)."""
+    return {int(e["cik"]): pd.Timestamp(str(e["letzter_tag"])) for e in _kappungs_eintraege() if not e.get("ticker_einzeln")}
+
+
+def kursreihen_ende_je_ticker() -> dict:
+    """Gekappte Teilreihen (Einträge mit `ticker_einzeln: true`): (CIK, Ticker) → letzter gültiger Tag; gilt nur für die
+    Reihe dieses Tickers, andere Reihen derselben Firma bleiben (fünfte Datenkorrektur DISCK/WBD, Jakob 15.11.2026)."""
+    return {(int(e["cik"]), str(e["ticker"]).upper()): pd.Timestamp(str(e["letzter_tag"])) for e in _kappungs_eintraege() if e.get("ticker_einzeln")}
+
+
+def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_ticker: dict) -> pd.DataFrame:
+    """Wendet beide Kappungen auf eine Teilreihe an."""
+    if firma in kappung:                                       # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
+        k = k.loc[:kappung[firma]]
+    schluessel = (firma, str(ticker).upper())
+    if schluessel in kappung_ticker:                           # fünfte Datenkorrektur: nur diese Teilreihe
+        k = k.loc[:kappung_ticker[schluessel]]
+    return k
 
 
 def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historien: dict, *, von=VORLAUF, bis=ENDE,
@@ -67,7 +88,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     mitglied_ab, bis = pd.Timestamp(mitglied_ab), pd.Timestamp(bis)
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
-    kappung = kursreihen_ende()
+    kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -83,8 +104,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             if k is None or k.empty:
                 raise LookupError("Kurse nicht im Cache")
             k = k.sort_index().loc[pd.Timestamp(von):bis]
-            if firma in kappung:                               # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
-                k = k.loc[:kappung[firma]]
+            k = kappe_reihe(k, firma, z["ticker"], kappung, kappung_ticker)
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{z['ticker']}: {type(f).__name__}"

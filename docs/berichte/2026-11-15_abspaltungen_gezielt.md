@@ -27,9 +27,9 @@ haben gar kein 8-K im Fenster. Sie fallen in zwei Gruppen:
   CTLT 2022/23). Bei einer echten, unbereinigten Abspaltung stünde im 8-K oder in der Pressemitteilung zum Ex-Tag
   „spin-off“ oder „distribution of all“. Das ist bei allen Teil-a-Fällen und bei CSC 2015 so.
 
-**Grenze der Prüfung:** Für die 13 Fälle ohne 8-K im Fenster gibt es keinen SEC-Beleg in die eine oder andere Richtung.
-Zehn davon fallen in Marktwellen (Ölpreis 2016 und 2018, Corona 2020), drei sind Einzelbewegungen ohne 8-K (PBCT März/April 2020, DISH Juni 2023, CTLT Oktober/November 2023) und bleiben zur Prüfung an einer Pressemitteilung offen; eine Abspaltung
-ohne jedes 8-K im Fenster −30 … +5 Tage wäre ungewöhnlich (Form 10 und 8-K zur Ausschüttung sind üblich).
+**Grenze der Prüfung und Schlussprüfung (Jakob 15.11.2026):** 13 Fälle haben kein 8-K im Fenster; zehn fallen in Marktwellen (Ölpreis 2016 und 2018, Corona 2020). Die drei Einzelbewegungen PBCT, DISH und CTLT sind am Hauptdokument des nächsten 10-Q geprüft (Abschnitt „Schlussprüfung“): PBCT und CTLT erwähnen keine Abspaltung; bei DISH beziehen sich alle 19 Fundstellen auf die als „Spin-off“ definierte Abspaltung von EchoStar am 01.01.2008, nicht auf 2023.
+
+**Ergebnis c1: Außer CSC 30.11.2015 keine Abspaltung mit fehlendem Wert gefunden.** CSC liegt vor beiden Messzeiträumen (Mitgliedschaft bis 01.12.2015; Nachbau ab 04.01.2016, Backtest A ab 03.10.2016) und erscheint deshalb in b) nicht; die Korrektur folgt gesondert.
 
 ## Nebenbefund: vermischte Kursreihe DISCK/WBD (CIK 1437107)
 
@@ -42,6 +42,19 @@ mit getrennten Reihen (DISCK bis 08.04.2022, danach WBD) hat dieselbe CAGR bis z
 Reihen (GOOG/GOOGL, NWSA/NWS, FOX/FOXA, TFCF/TFCFA) sind Aktiengattungen mit vollständiger erster Reihe. Ihre
 Abweichungen sind die Gattungsprämie, Lücken werden dort nicht gefüllt. Ohne Jakobs Entscheidung wird nichts korrigiert.
 Im Neulauf von Teil c kann Buch A CIK 1437107 in diesem Zeitraum wählen; dann wirkt der Fehler.
+
+## Schlussprüfung am nächsten 10-Q/10-K (Fälle ohne 8-K im Fenster)
+
+Erstellt 15.11.2026 09:50 mit `tools/pruefe_abspaltungen_schluss.py`: Hauptdokument des ersten 10-Q/10-K nach dem Ereignis, Suchwörter wie im dritten Lauf.
+
+- **PBCT 2020-03-19 bis 2020-04-03:** 10-Q für 2020-03-31, eingereicht 2020-05-11 (0001628280-20-007419, pbct-20200331.htm, 374,724 Zeichen): **keine Erwähnung** einer Abspaltung.
+- **DISH 2023-06-08 bis 2023-06-15:** 10-Q für 2023-06-30, eingereicht 2023-08-08 (0001558370-23-013759, dish-20230630x10q.htm, 396,930 Zeichen): 19 Fundstelle(n):
+  - „… on our noncontrolling investments in the Northstar Entities and the SNR Entities. Contingencies Separation Agreement On January 1, 2008, we completed the distribution of our technology and set-top box business and certain infrastructure assets (the Spin-off ) into a separate publicly-traded company, EchoStar. In connection with the Spin-off, we entered into a separation agreement with EchoStar that provides, among other things, for the division of certain liabilities, including liabilities resulting fr…“
+  - „…ntingencies Separation Agreement On January 1, 2008, we completed the distribution of our technology and set-top box business and certain infrastructure assets (the Spin-off ) into a separate publicly-traded company, EchoStar. In connection with the Spin-off, we entered into a separation agreement with EchoStar that provides, among other things, for the division of certain liabilities, including liabilities resulting from litigation. Under the terms of the separation agreement, EchoStar has assumed cert…“
+  - „…uding liabilities resulting from litigation. Under the terms of the separation agreement, EchoStar has assumed certain liabilities that relate to its business, including certain designated liabilities for acts or omissions that occurred prior to the Spin-off. Certain specific provisions govern intellectual property related claims under which, generally, EchoStar will only be liable for its acts or omissions following the Spin-off and we will indemnify EchoStar for any liabilities or damages resulting fr…“
+  - „…in designated liabilities for acts or omissions that occurred prior to the Spin-off. Certain specific provisions govern intellectual property related claims under which, generally, EchoStar will only be liable for its acts or omissions following the Spin-off and we will indemnify EchoStar for any liabilities or damages resulting from intellectual property claims relating to the period prior to the Spin-off, as well as our acts or omissions following the Spin-off. On February 28, 2017, we and EchoStar an…“
+  - „…laims under which, generally, EchoStar will only be liable for its acts or omissions following the Spin-off and we will indemnify EchoStar for any liabilities or damages resulting from intellectual property claims relating to the period prior to the Spin-off, as well as our acts or omissions following the Spin-off. On February 28, 2017, we and EchoStar and certain of our respective subsidiaries completed the transactions contemplated by the Share Exchange Agreement (the Share Exchange Agreement ) that w…“
+- **CTLT 2023-10-31 bis 2023-11-02:** 10-Q für 2023-09-30, eingereicht 2023-12-08 (0001596783-23-000186, ctlt-20230930.htm, 151,648 Zeichen): **keine Erwähnung** einer Abspaltung.
 
 ## Übersicht
 
