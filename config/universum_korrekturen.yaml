@@ -97,3 +97,8 @@ kursreihe_ende:
 # Ausschüttung am Ex-Tag D = Vortagesschluss · (1 − 1/kursfaktor); Schlusskurse und Marktwert unverändert (Jakob 15.11.2026).
 abspaltungen_tiingo:
   - {cik: 23082, ticker: CSC, datum: 2015-11-30, tochter: CSRA, verhaeltnis: 1, kursfaktor: 1.7412, quelle: "Yahoo-Faktor der Kursreihe DXC (config/kapitalmassnahmen_historie.yaml, geprüft Jakob 13.11.2026); Abspaltung CSRA 1:1 laut 8-K von CSC 04.11.2015 (0000023082-15-000060); Sonderdividende 10,50 USD bucht Tiingo bereits als Dividende; erster Schlusskurs von CSRA nicht verfügbar (VWAP 30,95 USD laut 10-Q von CSRA vom 04.12.2015 nur zum Vergleich). Liegt vor beiden Messzeiträumen (Mitgliedschaft bis 01.12.2015; Index-Nachbau ab 04.01.2016, Backtest A ab 03.10.2016), ohne Wirkung auf gewertete Ergebnisse. Jakob 15.11.2026"}
+
+# Eingefrorene Kurse nach einem Handelsstopp bei Insolvenz (vierte Datenkorrektur, docs/FUNDAMENTAL.md): Eröffnung, Hoch,
+# Tief und Schluss von erster_tag bis letzter_tag werden durch den ersten echten Kurs danach ersetzt. Nur gelistete Fälle.
+eingefrorene_kurse:
+  - {cik: 719739, ticker: SIVB, erster_tag: 2023-03-10, letzter_tag: 2023-03-27, erster_echter_tag: 2023-03-28, ersatzkurs: 0.40, quelle: "Tiingo SIVBQ eingefroren bei 106,04 USD während des Handelsstopps; erster echter Kurs 0,40 USD am 28.03.2023 (OTC SIVBQ). Bericht docs/berichte/2026-11-13_eingefrorene_kurse_2.md. Vierte Datenkorrektur, Jakob 13.11.2026; umgesetzt 15.11.2026"}

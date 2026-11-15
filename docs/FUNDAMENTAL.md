@@ -608,3 +608,15 @@ Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
 - **c3 – Neulauf** nach dem Nachladen der restlichen Rohkurse ab 01.12.2026: Scores mit allen Datenkorrekturen,
   Gegenprobe Index-Nachbau mit unveränderten Kriterien, Backtest A (B nur Signale), dazu die Zusatzregel aus c1
   (Obergrenze der Scheinverluste am Bestand des Neulaufs).
+
+### c2 (1): vierte Datenkorrektur umgesetzt (15.11.2026)
+
+- `config/universum_korrekturen.yaml`, Abschnitt `eingefrorene_kurse`: SIVB (CIK 719739) vom 10.03. bis 27.03.2023 mit
+  dem ersten echten Kurs 0,40 USD (28.03.2023) statt eingefrorener 106,04 USD; Verlust damit am 10.03.2023 in der
+  Mitgliedschaft (Abgang 15.03.2023). Angewendet in `sp500_nachbau.lade_firmendaten` (`ersetze_eingefrorene`), wirkt in
+  Index-Nachbau und Backtests.
+- Nur gelistete Fälle, keine automatische Ersetzung. Schutz: Passt die Reihe nicht mehr (erster echter Kurs anders oder
+  Zeitraum nicht eingefroren), bricht das Laden mit `DatenkorrekturPasstNicht` ab, statt still zu ersetzen oder den Fall
+  als Ladefehler zu zählen.
+- Wirkung nur in der Gegenprobe des Index-Nachbaus (SIVB ist Finanzwert, im Fundamental-Universum und im Nachbau ohne
+  Finanzwerte ausgeschlossen; Buch A hielt ihn nie). Gemessen in c3.

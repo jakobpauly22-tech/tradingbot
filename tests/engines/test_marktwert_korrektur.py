@@ -258,3 +258,40 @@ def test_bms_kappung_vor_der_uebernahme():
     reihe = pd.DataFrame({"close": 57.25}, index=pd.bdate_range("2019-06-05", "2019-06-28"))
     k = kappe_reihe(reihe, 11199, "BMS", kursreihen_ende(), kursreihen_ende_je_ticker())
     assert k.index.max() == pd.Timestamp("2019-06-10")
+
+
+# --- Vierte Datenkorrektur: eingefrorene Kurse SIVB (Jakob 13.11.2026, umgesetzt 15.11.2026) ---------------------------
+def _sivb_reihe(echt=0.40, eingefroren=True):
+    tage = pd.bdate_range("2023-03-08", "2023-03-29")
+    close = pd.Series(106.04, index=tage)
+    close.loc["2023-03-08"] = 267.83
+    if not eingefroren:
+        close.loc["2023-03-15"] = 100.0
+    close.loc["2023-03-28"], close.loc["2023-03-29"] = echt, 0.97
+    return pd.DataFrame({"open": close, "high": close, "low": close, "close": close, "dividende": 0.0}, index=tage)
+
+
+def test_sivb_eingefrorene_kurse_ersetzt():
+    from tradingbot.daten.sp500_nachbau import eingefrorene_kurse, ersetze_eingefrorene
+    from tradingbot.kennzahlen.rendite import simple_return
+
+    eintraege = eingefrorene_kurse()[(719739, "SIVB")]
+    k = ersetze_eingefrorene(_sivb_reihe(), eintraege)
+    lauf = k.loc["2023-03-10":"2023-03-27"]
+    assert (lauf[["open", "high", "low", "close"]] == 0.40).all().all()
+    assert k.loc["2023-03-09", "close"] == 106.04 and k.loc["2023-03-29", "close"] == 0.97
+    r = simple_return(k["close"].shift(1), k["close"], k["dividende"])
+    assert r.loc["2023-03-10"] == pytest.approx(0.40 / 106.04 - 1)          # Verlust am ersten Tag des Stopps
+    assert r.loc["2023-03-13":"2023-03-28"].abs().max() == 0
+
+
+def test_sivb_korrektur_bricht_bei_abweichenden_daten_ab():
+    from tradingbot.daten.sp500_nachbau import DatenkorrekturPasstNicht, eingefrorene_kurse, ersetze_eingefrorene
+
+    eintraege = eingefrorene_kurse()[(719739, "SIVB")]
+    with pytest.raises(DatenkorrekturPasstNicht, match="erster echter Kurs"):
+        ersetze_eingefrorene(_sivb_reihe(echt=0.55), eintraege)
+    with pytest.raises(DatenkorrekturPasstNicht, match="nicht eingefroren"):
+        ersetze_eingefrorene(_sivb_reihe(eingefroren=False), eintraege)
+    vorher = _sivb_reihe().loc[:"2023-03-09"]                                # z. B. Tresor-Grenze davor: unverändert
+    assert ersetze_eingefrorene(vorher, eintraege).equals(vorher)

@@ -99,6 +99,49 @@ def buche_abspaltungen(k: pd.DataFrame, eintraege: list) -> pd.DataFrame:
     return k
 
 
+class DatenkorrekturPasstNicht(RuntimeError):
+    """Eine konfigurierte Datenkorrektur passt nicht (mehr) zu den Daten; wird nie still übergangen."""
+
+
+def eingefrorene_kurse() -> dict:
+    """Eingefrorene Kurse nach einem Handelsstopp bei Insolvenz (config/universum_korrekturen.yaml, `eingefrorene_kurse`,
+    vierte Datenkorrektur): (CIK, Ticker) → Liste der Einträge."""
+    from tradingbot.konfiguration import lade_konfiguration
+
+    aus: dict = {}
+    for e in lade_konfiguration("universum_korrekturen").get("eingefrorene_kurse", []) or []:
+        aus.setdefault((int(e["cik"]), str(e["ticker"]).upper()), []).append(e)
+    return aus
+
+
+def ersetze_eingefrorene(k: pd.DataFrame, eintraege: list) -> pd.DataFrame:
+    """Vierte Datenkorrektur (Jakob 13.11.2026, docs/FUNDAMENTAL.md): Eröffnung, Hoch, Tief und Schluss der eingefrorenen
+    Tage [erster_tag, letzter_tag] werden durch den ersten echten Kurs nach dem Stopp ersetzt (Dividende 0); der Verlust
+    fällt damit auf den ersten Tag des Stopps.
+
+    Schutz: Die Reihe muss an `erster_echter_tag` den `ersatzkurs` zeigen und an den Tagen des Laufs eingefroren sein
+    (Schluss gleich dem Vortag ab dem zweiten Tag); sonst DatenkorrekturPasstNicht. Liegt der Zeitraum außerhalb der
+    geladenen Reihe (z. B. Tresor-Grenze), bleibt die Reihe unverändert.
+    """
+    for e in eintraege:
+        erster, letzter, echt = (pd.Timestamp(str(e[x])) for x in ("erster_tag", "letzter_tag", "erster_echter_tag"))
+        ersatz = float(e["ersatzkurs"])
+        if erster not in k.index:
+            continue
+        lauf = k.loc[erster:letzter]
+        if echt not in k.index or abs(float(k.loc[echt, "close"]) - ersatz) > 1e-6 * max(1.0, ersatz):
+            raise DatenkorrekturPasstNicht(f"{e['ticker']}: erster echter Kurs am {echt.date()} ist nicht {ersatz}")
+        if len(lauf) < 2 or (lauf["close"].diff().iloc[1:].abs() > 1e-9).any():
+            raise DatenkorrekturPasstNicht(f"{e['ticker']}: Reihe zwischen {erster.date()} und {letzter.date()} nicht eingefroren")
+        k = k.copy()
+        for spalte in ("open", "high", "low", "close"):
+            if spalte in k.columns:
+                k.loc[lauf.index, spalte] = ersatz
+        if "dividende" in k.columns:
+            k.loc[lauf.index, "dividende"] = 0.0
+    return k
+
+
 def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_ticker: dict) -> pd.DataFrame:
     """Wendet beide Kappungen auf eine Teilreihe an."""
     if firma in kappung:                                       # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
@@ -121,6 +164,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()
+    eingefroren = eingefrorene_kurse()
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -138,7 +182,10 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             k = k.sort_index().loc[pd.Timestamp(von):bis]
             k = kappe_reihe(k, firma, z["ticker"], kappung, kappung_ticker)
             k = buche_abspaltungen(k, abspaltungen.get((firma, str(z["ticker"]).upper()), []))
+            k = ersetze_eingefrorene(k, eingefroren.get((firma, str(z["ticker"]).upper()), []))
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
+        except DatenkorrekturPasstNicht:
+            raise                                             # nie still als Ladefehler zählen
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{z['ticker']}: {type(f).__name__}"
         schwelle.zaehle(fehler)
