@@ -284,7 +284,7 @@ und hat ausdrücklich keine Wirkung auf das Urteil „V1 nicht bestanden“ (Abs
   Historie ist keine Lücke.
 - **Code:** eigene Funktion `sahm_wert_bei_datenluecke` in `engines/regime/signale.py`. `sahm_wert` ist unverändert;
   `arbeitsmarkt_aus` nutzt die neue Funktion nur, wenn `sahm_wert` nicht bestimmbar ist. So bleibt sichtbar, was sich
-  gegenüber b628678 geändert hat. Die Prüfsumme im Test zeigt auf den neuen Stand (Commit COMMIT_LUECKE).
+  gegenüber b628678 geändert hat. Die Prüfsumme im Test zeigt auf den neuen Stand (Commit 65060e3).
 - **Identität auf lückenlosen Daten:**
   - Test: Auf lückenlosen Reihen liefert die Lückenregel exakt den Wert von `sahm_wert`, und alle Verläufe (V1, D1–D4)
     sind gleich wie mit dem Code aus b628678.
@@ -292,3 +292,10 @@ und hat ausdrücklich keine Wirkung auf das Urteil „V1 nicht bestanden“ (Abs
     `docs/berichte/2026-11-15_regime_datenluecke.md`): 156 Monatsenden 2012–2024, Signale, Rohzustand und Zustand für
     V1 und D1–D4 identisch, Sahm-Wert an allen 156 Monatsenden gleich. Das war kein Backtest und zählt nicht als Lauf.
 - **Anzeige:** Buchkarte und Monatsmeldung weisen aus, wenn der Arbeitsmarkt mit dieser Regel gerechnet wurde.
+- **Zweiter Probelauf (15.11.2026, Kopie des echten Journals, nichts gesendet):** Das Buch hat einen Zustand.
+  - Start mit Vorgeschichte Oktober 2012 bis Oktober 2026 (169 Monate). Die Wechsel bis Ende 2023 stimmen mit dem
+    Backtest überein; danach: März 2025 auf „Risiko aus“, Juli 2025 zurück auf „Risiko an“.
+  - Bewertung vom 30.10.2026: Risiko an. Trend an (11,63 gegen 10,95), Zinskurve an (0,91 Pp.), Kreditaufschlag an
+    (1,46 gegen 1,62 Pp.), Arbeitsmarkt an (Sahm-Wert 0,00 Pp., mit der Betriebsregel für Datenlücken gerechnet).
+  - Vorschlag: Kauf 838 × SPYI.DE, Limit 11,92 € (Kurs 11,69 €), vom Risk-Manager frei; das Buch ist zum Senden
+    gesperrt. Nächste Bewertung 30.11.2026.

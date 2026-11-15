@@ -328,7 +328,7 @@ def test_datenbefund_sperrt_das_regime_buch(umgebung):
 # --- Festlegung und Trennung ------------------------------------------------------------------------------------------------
 def test_signale_pruefsumme_festlegung_b628678_mit_betriebsregel_fuer_datenluecken():
     """Git-Blob-Prüfsumme von engines/regime/signale.py (Zeilenenden normalisiert). Stand: Festlegungs-Commit b628678
-    (Blob 3d23e5e1…) plus die Betriebsregel für Datenlücken vom 15.11.2026 (`sahm_wert_bei_datenluecke`, Commit COMMIT_LUECKE;
+    (Blob 3d23e5e1…) plus die Betriebsregel für Datenlücken vom 15.11.2026 (`sahm_wert_bei_datenluecke`, Commit 65060e3;
     docs/REGIME.md, Abschnitt 9b). Wer die Regeln ändert, ändert das Schattenbuch – das darf nicht still geschehen."""
     inhalt = (PROJEKT_WURZEL / "src/tradingbot/engines/regime/signale.py").read_bytes().replace(b"\r\n", b"\n")
     blob = hashlib.sha1(b"blob %d\x00" % len(inhalt) + inhalt).hexdigest()
