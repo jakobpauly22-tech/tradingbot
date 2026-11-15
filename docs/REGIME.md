@@ -90,6 +90,10 @@ durch drei Tage: 16.03.2020 +0,53 %, 17.03.2020 −0,47 %, 21.04.2020 −0,31 %.
 0 %** (Jakob 15.11.2026: „sonst Kasse zu 0 %“). Die Kriterien werden nicht angepasst. Folge für Kriterium b: Die statische
 Mischung hält ihren defensiven Teil ebenfalls als Kasse zu 0 %.
 
+**Bekannte Verzerrung (Jakob 15.11.2026, gehört in jeden Bericht):** In den Negativzins-Jahren 2015–2022 ist Kasse zu 0 %
+in „Risiko aus“-Phasen günstiger als die Realität (Geldmarkt rund −0,4 % p. a.). Das begünstigt V1 gegenüber Kaufen und
+Halten leicht; gegenüber der statischen Mischung wirkt es auf beide Seiten.
+
 ## 6a. Ergebnis der Abdeckungsprüfung (15.11.2026)
 
 UNRATE: erster ALFRED-Stand 15.03.1960. T10Y3M ab 1982, BAA10Y ab 1986, DGS3MO ab 1981 (Marktreihen, nicht revidiert).
@@ -103,12 +107,32 @@ kein Backtest einen solchen Stichtag.
 Jeder Lauf kommt in `daten/regime/varianten.csv` (V1, D1–D4, Langtest), auch Diagnosen und Wiederholungen nach
 Datenkorrekturen. Nach einem Lauf werden weder Signale noch Schwellen noch Kriterien geändert.
 
+## 7a. Bestätigung und Präzisierungen vor Sitzung 2 (15.11.2026)
+
+Jakob hat am 15.11.2026 bestätigt: Schwellen für Kreditaufschlag und Zinskurve (Abschnitt 2), Zeitraum und Hälftengrenze,
+statische Mischung je Hälfte (Abschnitt 4), Regeln des Langtests (Abschnitt 5), Kasse zu 0 % auch in der Mischung.
+
+Präzisierungen der Rechnung (vor jedem Lauf, Code in `engines/regime/signale.py`):
+
+- **Monatsende:** letzter Handelstag des Instruments in einem Kalendermonat; gewertet werden nur abgeschlossene Monate.
+- **Marktreihen am Bewertungstag t:** Tageswerte bis t − 1 (Wert des Tages d gilt ab d + 1). „Laufender Monat“ sind die
+  bis dahin bekannten Tageswerte des Monats von t; frühere Monate zählen ganz.
+- **Sahm-Regel:** alle Monatswerte aus dem ALFRED-Stand von t − 1 Tag (auch die zurückliegenden, wie sie damals bekannt
+  waren). 3-Monats-Mittel des jüngsten bekannten Monats minus Minimum der 3-Monats-Mittel der 12 Monate davor (ohne den
+  jüngsten); „aus“ bei ≥ 0,50 Pp.
+- **Fehlende Historie:** Hat ein Signal am Bewertungstag zu wenig Historie, gibt es für diesen Monat keinen Zustand (kein
+  stilles „an“).
+- **Erste Bewertung:** setzt den Zustand frei und zählt als Wechsel für die Haltepflicht (nächster Wechsel frühestens
+  zwei Monatsenden später).
+- **Sitzung 2 rechnet keinen Verlauf von V1 über den gewerteten Zeitraum aus.** Tests an echten Daten prüfen nur einzelne
+  bekannte Ankerpunkte der Einzelsignale (z. B. Sahm-Regel im April 2020).
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |
 | --- | --- | --- |
 | 1 | Festlegungen, neue Reihen, ALFRED-Abdeckung, Tresor- und Erstmeldungstests, XEON-Prüfung | 15.11.2026 |
-| 2 | Signale, Monatslogik mit Haltepflicht, Tests | offen |
+| 2 | Signale, Monatslogik mit Haltepflicht, Tests | 15.11.2026 |
 | 3 | Backtest des Buchs, Vergleichsportfolios, Bericht | offen |
 | 4 | US-Langtest 1995–2011 | offen |
 | 5 | Schattenbuch im Tageslauf | offen |

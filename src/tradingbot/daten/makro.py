@@ -207,17 +207,21 @@ def lade_makro_tabelle(
     return tabelle
 
 
-def makro_am_stichtag(serie: str, stichtag, **kwargs) -> pd.Series:
-    """Für Backtests: die Serie mit dem Wissensstand des Stichtags (kein Look-ahead)."""
+def stand_mit_tresor(tabelle: pd.DataFrame, stichtag) -> pd.Series:
+    """`stand_am` mit Tresor: Beobachtungen nur bis zur Datumsgrenze UND Wissensstand höchstens der Grenze. Sonst kämen
+    Werte aus 2024 mit ihrem 2025 gemeldeten oder revidierten Stand durch (docs/REGIME.md, Abschnitt 3)."""
     from tradingbot.backtest.tresor import begrenze, datengrenze
 
-    # Tresor: Beobachtungen nur bis zur Datumsgrenze UND Wissensstand höchstens der Grenze. Sonst kämen Werte aus 2024
-    # mit ihrem 2025 gemeldeten oder revidierten Stand durch (docs/REGIME.md, Abschnitt 3).
     grenze = datengrenze()
     tag = pd.Timestamp(stichtag).normalize()
     if grenze is not None:
         tag = min(tag, grenze)
-    werte = begrenze(stand_am(lade_makro_tabelle(serie, **kwargs), tag))
+    return begrenze(stand_am(tabelle, tag))
+
+
+def makro_am_stichtag(serie: str, stichtag, **kwargs) -> pd.Series:
+    """Für Backtests: die Serie mit dem Wissensstand des Stichtags (kein Look-ahead)."""
+    werte = stand_mit_tresor(lade_makro_tabelle(serie, **kwargs), stichtag)
     werte.name = serie
     return werte
 

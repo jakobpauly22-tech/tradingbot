@@ -463,6 +463,20 @@ Vorschlag: zuerst Datenbasis, Backtest und Fundamental-Engine, danach Risiko, Ne
 | Dashboard und Wochenreport | Weitere | 5 | Niedrig | Idee |
 | Kerzencharts im Dashboard (Lightweight Charts) | Weitere | 5 | Niedrig | Idee |
 
+## Entwicklungsreihenfolge ab 12.11.2026
+
+Echtgeld erst später; neue Engines kommen als neue Schattenbücher, bestehende Bücher bleiben unverändert (Jakob, eingetragen am 15.11.2026).
+
+1. **Kapitalmaßnahmen und Benachrichtigungen** – erledigt (A0–A4, B); A5 Vorwarnung ist Pflicht vor Echtgeld.
+2. **Makro-/Regime-Engine:** Plan, vorab festgelegte Kriterien, Backtest, dann als Schattenbuch – in Arbeit (`docs/REGIME.md`).
+3. **Briefing-Archiv anbinden:** parallel, reine Datenarbeit (Export täglich 21:41).
+4. **Risiko-Übersicht** über alle Bücher mit Value at Risk und Stresstests.
+5. **Januar 2027:** erster Quartalswechsel der Fundamental-Bücher und automatischer Quartals-Review; Datenkorrekturen (EQ_OFFER, Marktwert) wirksam ab 04.01.2027.
+6. **News-Engine,** sobald das Briefing-Archiv etwa drei bis sechs Monate Historie hat.
+7. **Gesamt-Score,** wenn mindestens zwei Signale einzeln geprüft sind.
+8. **Europa/DAX-Fundamentaldaten** (ESEF, kurze Historie ab etwa 2021), DCF als Analysewerkzeug, Weboberfläche nur zur Anzeige, Stimmungsdaten.
+9. **Vor echtem Geld:** Steuerbericht für die Anlagen KAP und KAP-INV mit Pauschbetrag-Cockpit und FIFO-Auswertung (§ 20 Abs. 4 Satz 7 EStG), A5 Vorwarnung, Ausstiege für nicht betroffene Titel im gestoppten Buch, Kontotyp Cash prüfen, Live-Freischaltung (Port 4001) als eigener bewusster Schritt.
+
 ## Umsetzung mit Claude Code
 
 Der Bot entsteht Modul für Modul. Eine Phase gilt erst als fertig, wenn ihr Backtest sauber gegen die Benchmark läuft.
