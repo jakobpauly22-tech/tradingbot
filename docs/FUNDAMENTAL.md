@@ -598,3 +598,13 @@ Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
   `kursreihe_ende` mit `ticker_einzeln`), danach Delisting-Regel (Übernahme, 8-K Item 2.01 vom 11.06.2019). Datenkorrektur
   unter der Zusage der fünften Datenkorrektur. Verschiebt nur den Zeitpunkt des Delistings (Fund der Suche
   `docs/berichte/2026-11-15_eingefrorene_zusammengefuehrt.md`), praktisch ohne Wirkung.
+
+## Teil c: Gliederung bis zum Neulauf (Jakob 15.11.2026, festgehalten 15.11.2026 10:42)
+
+- **c1 – Abspaltungen in Tiingo-Reihen:** abgeschlossen (siehe oben; CSC korrigiert, DISCK und BMS gekappt).
+- **c2 – Vorbereitung des Neulaufs:** (1) vierte Datenkorrektur SIVB umsetzen (eingefrorene Kurse nach Handelsstopp bei
+  Insolvenz), (2) Marktwert aus unbereinigten Tiingo-Rohkursen (Weg A: Rohkurs × SEC-Aktienzahl × Splits zwischen Meldung
+  und Stichtag; Ablage `daten/cache/tiingo/roh_bis_tresor/`).
+- **c3 – Neulauf** nach dem Nachladen der restlichen Rohkurse ab 01.12.2026: Scores mit allen Datenkorrekturen,
+  Gegenprobe Index-Nachbau mit unveränderten Kriterien, Backtest A (B nur Signale), dazu die Zusatzregel aus c1
+  (Obergrenze der Scheinverluste am Bestand des Neulaufs).
