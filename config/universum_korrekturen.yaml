@@ -91,3 +91,9 @@ kursreihe_ende:
   - {cik: 30554, ticker: DD, letzter_tag: 2017-08-31, quelle: "E. I. du Pont: Umtausch in DowDuPont zum 01.09.2017 (8-K12B vom 01.09.2017); Tiingo „DD“ läuft als DowDuPont weiter. Jakob 13.11.2026"}
   # Mit `ticker_einzeln: true`: nur die Teilreihe dieses Tickers wird gekappt, andere Reihen derselben Firma bleiben.
   - {cik: 1437107, ticker: DISCK, ticker_einzeln: true, letzter_tag: 2022-04-08, quelle: "Discovery Serie C: letzter echter Handelstag vor der Fusion mit WarnerMedia (08.04.2022), danach eingefroren 24,42 USD bis 16.09.2022; ab 11.04.2022 nur WBD. Fünfte Datenkorrektur, Jakob 15.11.2026"}
+  - {cik: 11199, ticker: BMS, ticker_einzeln: true, letzter_tag: 2019-06-10, quelle: "Bemis: letzter echter Handelstag vor der Übernahme durch Amcor (8-K Item 2.01 vom 11.06.2019), danach eingefroren 57,25 USD bis 28.06.2019; danach Delisting-Regel (Übernahme). Verschiebt nur den Zeitpunkt des Delistings, praktisch ohne Wirkung. Unter der Zusage der fünften Datenkorrektur, Jakob 15.11.2026"}
+
+# Bestätigte Abspaltungen, die eine Tiingo-Reihe nicht enthält (Teil c1, docs/FUNDAMENTAL.md). Gebucht als zusätzliche
+# Ausschüttung am Ex-Tag D = Vortagesschluss · (1 − 1/kursfaktor); Schlusskurse und Marktwert unverändert (Jakob 15.11.2026).
+abspaltungen_tiingo:
+  - {cik: 23082, ticker: CSC, datum: 2015-11-30, tochter: CSRA, verhaeltnis: 1, kursfaktor: 1.7412, quelle: "Yahoo-Faktor der Kursreihe DXC (config/kapitalmassnahmen_historie.yaml, geprüft Jakob 13.11.2026); Abspaltung CSRA 1:1 laut 8-K von CSC 04.11.2015 (0000023082-15-000060); Sonderdividende 10,50 USD bucht Tiingo bereits als Dividende; erster Schlusskurs von CSRA nicht verfügbar (VWAP 30,95 USD laut 10-Q von CSRA vom 04.12.2015 nur zum Vergleich). Liegt vor beiden Messzeiträumen (Mitgliedschaft bis 01.12.2015; Index-Nachbau ab 04.01.2016, Backtest A ab 03.10.2016), ohne Wirkung auf gewertete Ergebnisse. Jakob 15.11.2026"}

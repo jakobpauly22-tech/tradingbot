@@ -585,3 +585,16 @@ Festgehalten am 15.11.2026 um 09:46, **vor** der Umsetzung und vor der Suche.
   1 CSRA je CSC-Aktie, volumengewichteter Durchschnittskurs von CSRA am 30.11.2015 30,95 USD (10-Q von CSRA, eingereicht
   04.12.2015), Sonderdividende 10,50 USD (bei Tiingo als Dividende gebucht), Yahoo-Faktor der Kursreihe DXC 1,7412
   (`config/kapitalmassnahmen_historie.yaml`). Entscheidung über die Quelle: Jakob.
+
+### Teil c1: Korrektur CSC und Kappung BMS (Jakob 15.11.2026)
+
+- **CSC 30.11.2015 (Abspaltung CSRA):** Quelle Yahoo-Faktor 1,7412 (Entscheidung Jakob). Eintrag `abspaltungen_tiingo`
+  in `config/universum_korrekturen.yaml`; gebucht als zusätzliche Ausschüttung am Ex-Tag
+  D = Vortagesschluss · (1 − 1/1,7412) ≈ 29,21 USD neben der Sonderdividende 10,50 USD (Gesamtrendite am Ex-Tag rund
+  +3,5 % statt −39 %). Schlusskurse und Marktwert bleiben unverändert (`sp500_nachbau.buche_abspaltungen`, angewendet in
+  `lade_firmendaten`). Der Fall liegt vor beiden Messzeiträumen (Mitgliedschaft bis 01.12.2015; Index-Nachbau ab
+  04.01.2016, Backtest A ab 03.10.2016) und wirkt nicht auf gewertete Ergebnisse.
+- **BMS (Bemis, CIK 11199):** Reihe am letzten echten Handelstag vor der Übernahme durch Amcor gekappt (10.06.2019,
+  `kursreihe_ende` mit `ticker_einzeln`), danach Delisting-Regel (Übernahme, 8-K Item 2.01 vom 11.06.2019). Datenkorrektur
+  unter der Zusage der fünften Datenkorrektur. Verschiebt nur den Zeitpunkt des Delistings (Fund der Suche
+  `docs/berichte/2026-11-15_eingefrorene_zusammengefuehrt.md`), praktisch ohne Wirkung.

@@ -233,3 +233,28 @@ def test_zusammengefuehrte_reihe_ohne_vermischung():
     k = kappe_reihe(disck, 1437107, "DISCK", kursreihen_ende(), kursreihen_ende_je_ticker())
     zusammen = k.combine_first(wbd)
     assert (zusammen.loc["2022-04-11":, "close"] == wbd.loc["2022-04-11":, "close"]).all()
+
+
+# --- Teil c1: CSC/CSRA als zusätzliche Ausschüttung, BMS gekappt (Jakob 15.11.2026) --------------------------------------
+def test_csc_abspaltung_als_ausschuettung():
+    from tradingbot.daten.sp500_nachbau import abspaltungen_tiingo, buche_abspaltungen
+    from tradingbot.kennzahlen.rendite import simple_return
+
+    eintraege = abspaltungen_tiingo()[(23082, "CSC")]
+    assert len(eintraege) == 1 and float(eintraege[0]["kursfaktor"]) == 1.7412
+    tage = pd.DatetimeIndex(["2015-11-27", "2015-11-30", "2015-12-01"])
+    k = pd.DataFrame({"close": [68.62, 31.33, 31.33], "dividende": [0.0, 10.5, 0.0]}, index=tage)   # Tiingo-Werte
+    neu = buche_abspaltungen(k, eintraege)
+    assert list(neu["close"]) == list(k["close"])                                                   # Kurse unverändert
+    assert neu.loc["2015-11-30", "dividende"] == pytest.approx(10.5 + 68.62 * (1 - 1 / 1.7412))   # + Wert CSRA ≈ 29,21
+    r = simple_return(neu["close"].shift(1), neu["close"], neu["dividende"])
+    assert r.loc["2015-11-30"] == pytest.approx(0.035, abs=0.001)                                  # statt −39 %
+    assert buche_abspaltungen(k.loc[["2015-11-30"]], eintraege).loc["2015-11-30", "dividende"] == 10.5   # ohne Vortag: nichts
+
+
+def test_bms_kappung_vor_der_uebernahme():
+    from tradingbot.daten.sp500_nachbau import kappe_reihe, kursreihen_ende, kursreihen_ende_je_ticker
+
+    reihe = pd.DataFrame({"close": 57.25}, index=pd.bdate_range("2019-06-05", "2019-06-28"))
+    k = kappe_reihe(reihe, 11199, "BMS", kursreihen_ende(), kursreihen_ende_je_ticker())
+    assert k.index.max() == pd.Timestamp("2019-06-10")

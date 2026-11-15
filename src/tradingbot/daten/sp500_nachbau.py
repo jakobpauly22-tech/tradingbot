@@ -68,6 +68,37 @@ def kursreihen_ende_je_ticker() -> dict:
     return {(int(e["cik"]), str(e["ticker"]).upper()): pd.Timestamp(str(e["letzter_tag"])) for e in _kappungs_eintraege() if e.get("ticker_einzeln")}
 
 
+def abspaltungen_tiingo() -> dict:
+    """Bestätigte Abspaltungen, die eine Tiingo-Reihe nicht enthält (config/universum_korrekturen.yaml,
+    `abspaltungen_tiingo`, Teil c1): (CIK, Ticker) → Liste der Einträge (datum, kursfaktor, …)."""
+    from tradingbot.konfiguration import lade_konfiguration
+
+    aus: dict = {}
+    for e in lade_konfiguration("universum_korrekturen").get("abspaltungen_tiingo", []) or []:
+        aus.setdefault((int(e["cik"]), str(e["ticker"]).upper()), []).append(e)
+    return aus
+
+
+def buche_abspaltungen(k: pd.DataFrame, eintraege: list) -> pd.DataFrame:
+    """Bucht den fehlenden Wert der Tochter als zusätzliche Ausschüttung am Ex-Tag (Jakob 15.11.2026).
+
+    Formel: D_T = P_{t−1} · (1 − 1 / f), f = Kursfaktor nach Yahoo-Art = P_{t−1} / (P_{t−1} − Verhältnis · P_Tochter).
+    Damit ist die Gesamtrendite am Ex-Tag (P_t + D_t + D_T − P_{t−1}) / P_{t−1} wie bei einer um f bereinigten Reihe;
+    Schlusskurse und Marktwerte bleiben unverändert. Quelle: kennzahlen.rendite.simple_return (wissen/02, Abschnitt 2);
+    Kriterien docs/FUNDAMENTAL.md, Teil c1.
+    """
+    k = k.copy()
+    if "dividende" not in k.columns:
+        k["dividende"] = 0.0
+    for e in eintraege:
+        tag = pd.Timestamp(str(e["datum"]))
+        if tag not in k.index or k.index.get_loc(tag) == 0:
+            continue
+        vortag = k["close"].iloc[k.index.get_loc(tag) - 1]
+        k.loc[tag, "dividende"] = float(k.loc[tag, "dividende"] or 0.0) + vortag * (1 - 1 / float(e["kursfaktor"]))
+    return k
+
+
 def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_ticker: dict) -> pd.DataFrame:
     """Wendet beide Kappungen auf eine Teilreihe an."""
     if firma in kappung:                                       # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
@@ -89,6 +120,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
+    abspaltungen = abspaltungen_tiingo()
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -105,6 +137,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
                 raise LookupError("Kurse nicht im Cache")
             k = k.sort_index().loc[pd.Timestamp(von):bis]
             k = kappe_reihe(k, firma, z["ticker"], kappung, kappung_ticker)
+            k = buche_abspaltungen(k, abspaltungen.get((firma, str(z["ticker"]).upper()), []))
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{z['ticker']}: {type(f).__name__}"
