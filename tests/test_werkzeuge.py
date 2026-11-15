@@ -110,3 +110,34 @@ def test_abspaltung_volltext_nutzt_wiederholung_und_meldet_fehler(tmp_path, monk
     assert w.ABRUFFEHLER == ["8-K 0000000001-17-000002: SEC HTTP 404"]
     with pytest.raises(VoruebergehenderFehler):
         w.volltext(_Client(VoruebergehenderFehler("nach 7 Versuchen")), 1, "0000000001-17-000003")
+
+
+# --- tools/pruefe_abspaltungen_gezielt.py (Teil c1 b), Jakob 15.11.2026) ------------------------------------------------
+def test_gezielt_nur_hauptdokument_und_pressemitteilung():
+    w = _werkzeug("pruefe_abspaltungen_gezielt")
+    roh = ("<SEC-DOCUMENT><DOCUMENT><TYPE>8-K<TEXT><p>Item 8.01 The Board approved the spin-off of NewCo.</p></TEXT></DOCUMENT>"
+           "<DOCUMENT><TYPE>EX-4.1<TEXT>Indenture: Spin-Off shall have the meaning in Section 13.04</TEXT></DOCUMENT>"
+           "<DOCUMENT><TYPE>EX-99.1<TEXT>Press release: distribution of all of the outstanding shares</TEXT></DOCUMENT></SEC-DOCUMENT>")
+    doks = w.haupt_und_pressemitteilungen(roh)
+    assert [d["typ"] for d in doks] == ["8-K", "EX-99.1"]
+    funde = w.fundstellen(doks)
+    assert [(f["typ"], f["wort"].lower()) for f in funde] == [("8-K", "spin-off"), ("EX-99.1", "distribution of all")]
+    assert all("Indenture" not in f["ausschnitt"] for f in funde)
+
+
+def test_gezielt_faelle_aus_obergrenze():
+    import pandas as pd
+
+    from tradingbot.backtest.obergrenze_scheinverluste import lies_ereignisse
+
+    w = _werkzeug("pruefe_abspaltungen_gezielt")
+    lauf3 = ("## Treffer\n| RTN (1047122) | Raytheon | 2020-03-05 bis 2020-03-23 | -16.8% | 8-K |\n"
+             "## Unklar (≤ −15 % ohne SEC-Beleg)\n| MRO (101778) | Marathon Oil | 2020-03-03 bis 2020-03-23 | -46.9% |\n")
+    obergrenze = ("## Backtest A: Kandidatentage mit Bestand (2)\n| Ticker | Tag | x | y | z |\n| MRO | 2020-03-09 | -46.85% | 2.49% | +1.165 Pp. |\n"
+                  "| MRO | 2020-03-16 | -11.70% | 1.93% | +0.226 Pp. |\n"
+                  "## Index-Nachbau: Ereignisse ≤ −15 % während der Mitgliedschaft (2)\n"
+                  "| RTN (1047122) | 2020-03-05 bis 2020-03-23 | -16.8% | treffer | 2020-03-05 |\n"
+                  "| MRO (101778) | 2020-03-03 bis 2020-03-23 | -46.9% | unklar | 2020-03-09 |\n## Ereignisse ohne Kursreihe\n")
+    f = w.faelle_aus_obergrenze(obergrenze, lies_ereignisse(lauf3))
+    assert list(zip(f["ticker"], f["A"], f["Index"])) == [("MRO", True, True), ("RTN", False, True)]
+    assert f.iloc[0]["bis"] == pd.Timestamp("2020-03-23")
