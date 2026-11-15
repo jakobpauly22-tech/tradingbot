@@ -5,6 +5,10 @@ Jedes Signal liefert True („aus“), False („an“) oder None (zu wenig Hist
 
     V1: Risiko aus  ⇔  Trend aus  UND  (Zinskurve aus ODER Kreditaufschlag aus ODER Arbeitsmarkt aus)
 
+Stand des Codes: Festlegungs-Commit b628678, seit dem 15.11.2026 ergänzt um die Betriebsregel für Datenlücken
+(`sahm_wert_bei_datenluecke`, in `arbeitsmarkt_aus` nur wirksam, wenn `sahm_wert` nicht bestimmbar ist). Auf lückenlosen
+Daten sind alle Signale und Zustände unverändert (tools/pruefe_regime_datenluecke.py, Test).
+
 Point-in-time: Marktreihen (Wert des Tages d gilt ab d + 1) mit dem Stand des Bewertungstags t; revidierte Reihen mit dem
 ALFRED-Stand von t − 1 Tag (ein Wert zählt ab dem Handelstag nach der Veröffentlichung).
 """
@@ -87,9 +91,46 @@ def sahm_wert(monatswerte: pd.Series) -> float | None:
     return float(mittel.iloc[-1] - mittel.iloc[:-1].min())
 
 
+DATENLUECKE_MAX_MONATE = 1   # Betriebsregel für Datenlücken (15.11.2026): höchstens ein fehlender Monat im Fenster
+
+
+def sahm_wert_bei_datenluecke(monatswerte: pd.Series) -> float | None:
+    """Betriebsregel für Datenlücken, festgelegt am 15.11.2026 (Jakob), NICHT Teil der Festlegung b628678 und ohne
+    Wirkung auf das Urteil „V1 nicht bestanden“ (docs/REGIME.md, Abschnitt 9b). Anlass: Die US-Arbeitslosenquote für
+    Oktober 2025 wurde wegen des Shutdowns nie erhoben.
+
+    Die Sahm-Regel rechnet über die vorhandenen Monate und überspringt die Lücke; kein Wert wird geschätzt:
+    - Fenster wie in `sahm_wert`: die 15 Kalendermonate bis zum jüngsten veröffentlichten Monat m.
+    - Ū3 eines vorhandenen Monats = Mittel der letzten drei veröffentlichten Werte im Fenster bis zu diesem Monat
+      (über die Lücke hinweg, also aus höchstens vier Kalendermonaten).
+    - S = Ū3_m − min(Ū3 der vorhandenen Monate unter m−12 … m−1).
+    Gilt nur, wenn die Reihe vor dem Fenster beginnt (zu kurze Historie ist keine Lücke) und im Fenster höchstens ein
+    Monat fehlt; sonst None (kein Zustand, Meldung). Ohne fehlenden Monat ergibt sich exakt `sahm_wert`."""
+    u = monatswerte.dropna().sort_index()
+    if u.empty:
+        return None
+    u = pd.Series(u.to_numpy(), index=u.index.to_period("M"))
+    letzter = u.index[-1]
+    fenster = pd.period_range(letzter - (SAHM_FENSTER + 2), letzter, freq="M")
+    if u.index[0] > fenster[0]:
+        return None
+    u = u[u.index >= fenster[0]]
+    if len(fenster) - len(u) > DATENLUECKE_MAX_MONATE:
+        return None
+    ordnung = pd.Series([m.ordinal for m in u.index], index=u.index)
+    mittel = u.rolling(3).mean()[(ordnung - ordnung.shift(2)) <= 3]      # drei Werte aus höchstens vier Kalendermonaten
+    davor = mittel[(mittel.index >= letzter - SAHM_FENSTER) & (mittel.index < letzter)]
+    if letzter not in mittel.index or len(davor) < SAHM_FENSTER - DATENLUECKE_MAX_MONATE:
+        return None
+    return float(mittel.loc[letzter] - davor.min())
+
+
 def arbeitsmarkt_aus(monatswerte: pd.Series) -> bool | None:
-    """Arbeitsmarkt „aus“: Sahm-Wert ≥ 0,50 Prozentpunkte (siehe `sahm_wert`)."""
+    """Arbeitsmarkt „aus“: Sahm-Wert ≥ 0,50 Prozentpunkte (siehe `sahm_wert`). Ist `sahm_wert` wegen einer Datenlücke
+    nicht bestimmbar, gilt die Betriebsregel `sahm_wert_bei_datenluecke` (15.11.2026, nicht Teil von b628678)."""
     s = sahm_wert(monatswerte)
+    if s is None:
+        s = sahm_wert_bei_datenluecke(monatswerte)
     return None if s is None else bool(s >= SAHM_SCHWELLE - 1e-9)
 
 

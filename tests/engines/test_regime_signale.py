@@ -232,3 +232,81 @@ def test_echte_daten_zinskurve_juni_2019_invertiert_2017_nicht():
 def test_echte_daten_kreditaufschlag_maerz_2020_weitet_sich():
     makro = _echter_stand()
     assert rs.kredit_aus(makro("BAA10Y", pd.Timestamp("2020-03-31")), "2020-03-31") is True
+
+
+# --- Betriebsregel für Datenlücken (15.11.2026, nicht Teil von b628678; docs/REGIME.md, Abschnitt 9b) ---
+
+def test_lueckenregel_ist_auf_lueckenlosen_daten_exakt_die_alte_formel():
+    rng = np.random.default_rng(7)
+    u = _monate(np.round(4.0 + np.cumsum(rng.normal(0, 0.15, 240)), 1))
+    for ende in range(15, len(u) + 1):
+        teil = u.iloc[:ende]
+        alt, neu = rs.sahm_wert(teil), rs.sahm_wert_bei_datenluecke(teil)
+        assert alt is not None and neu == pytest.approx(alt, abs=1e-12)
+        assert rs.arbeitsmarkt_aus(teil) is bool(alt >= rs.SAHM_SCHWELLE - 1e-9)
+
+
+def test_lueckenregel_zu_kurze_historie_ist_keine_luecke():
+    assert rs.sahm_wert_bei_datenluecke(_monate([4.0] * 14)) is None and rs.arbeitsmarkt_aus(_monate([4.0] * 14)) is None
+    assert rs.sahm_wert_bei_datenluecke(pd.Series(dtype=float)) is None
+
+
+def test_lueckenregel_ueberspringt_einen_fehlenden_monat_ohne_zu_schaetzen():
+    # Wie im Dezember 2025: Der Vormonat des jüngsten Monats fehlt (Oktober nie erhoben). Ū3_m = Mittel aus August, September,
+    # November; das Tief über die vorhandenen Monate m−12 … m−1 (der fehlende Monat hat kein Mittel).
+    u = _monate([4.0] * 13 + [4.1, 4.2, 4.3, 4.4, 9.9, 4.6], ende="2025-11")       # 9,9 steht für Oktober und wird entfernt
+    luecke = u.drop(pd.Timestamp("2025-10-01"))
+    assert rs.sahm_wert(luecke) is None
+    assert rs.sahm_wert_bei_datenluecke(luecke) == pytest.approx((4.3 + 4.4 + 4.6) / 3 - 4.0)
+    assert rs.arbeitsmarkt_aus(luecke) is False                                       # 0,43 < 0,50
+    hoch = _monate([4.0] * 13 + [4.1, 4.2, 4.3, 4.5, 9.9, 4.8], ende="2025-11").drop(pd.Timestamp("2025-10-01"))
+    assert rs.sahm_wert_bei_datenluecke(hoch) == pytest.approx((4.3 + 4.5 + 4.8) / 3 - 4.0) and rs.arbeitsmarkt_aus(hoch) is True
+    # Lücke mitten im Fenster: Mittel über die Lücke hinweg aus drei veröffentlichten Werten; jüngstes Mittel unberührt
+    mitte = _monate([4.0] * 10 + [3.4, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.3, 4.6], ende="2026-06").drop(pd.Timestamp("2025-09-01"))
+    assert rs.sahm_wert_bei_datenluecke(mitte) == pytest.approx(4.3 - 3.8)            # Tief: (3,4 + 4,0 + 4,0) / 3 = 3,8
+    # Lücke am Anfang des Fensters (m − 14), Reihe beginnt davor: zählt als Lücke
+    anfang = _monate([4.0] * 20 + [4.5, 5.0], ende="2026-06")
+    assert rs.sahm_wert_bei_datenluecke(anfang.drop(anfang.index[-15])) == pytest.approx(0.5)
+
+
+def test_lueckenregel_mehr_als_ein_fehlender_monat_kein_wert():
+    u = _monate([4.0] * 30, ende="2026-06")
+    assert rs.sahm_wert_bei_datenluecke(u.drop([u.index[-2], u.index[-5]])) is None
+    assert rs.arbeitsmarkt_aus(u.drop([u.index[-2], u.index[-5]])) is None
+    assert rs.sahm_wert_bei_datenluecke(u.drop([u.index[-3], u.index[-4]])) is None    # zwei Monate in Folge
+    assert rs.arbeitsmarkt_aus(u.drop(u.index[-2])) is False                           # genau einer: Regel greift
+
+
+def test_lueckenregel_laesst_alle_verlaeufe_gegenueber_b628678_unveraendert():
+    """Signale, Rohzustand und Zustand mit Haltepflicht für V1 und D1–D4: heutiger Code gegen den Stand im Festlegungs-Commit
+    auf lückenlosen Daten (künstlich). Der Lauf über den echten Backtest-Zeitraum: tools/pruefe_regime_datenluecke.py."""
+    import importlib.util
+    import subprocess
+    from pathlib import Path
+
+    wurzel = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location("pruefe_regime_datenluecke", wurzel / "tools" / "pruefe_regime_datenluecke.py")
+    werkzeug = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(werkzeug)
+    try:
+        alt = werkzeug.signale_aus_commit("b628678", wurzel)
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("Git oder Commit b628678 nicht verfügbar")
+    assert not hasattr(alt, "sahm_wert_bei_datenluecke")
+    rng = np.random.default_rng(11)
+    tage = pd.bdate_range("2012-01-02", "2024-12-31")
+    kurse = pd.Series(100 * np.cumprod(1 + rng.normal(0.0002, 0.012, len(tage))), index=tage)
+    reihen = {"T10Y3M": pd.Series(np.cumsum(rng.normal(0, 0.05, len(tage))) + 0.5, index=tage),
+              "BAA10Y": pd.Series(np.abs(np.cumsum(rng.normal(0, 0.03, len(tage))) + 2.0), index=tage)}
+    monate = pd.date_range("2010-01-01", "2024-12-01", freq="MS")
+    reihen["UNRATE"] = pd.Series(np.round(5.0 + np.cumsum(rng.normal(0, 0.2, len(monate))), 1), index=monate)
+
+    def makro(reihe, stichtag):
+        r = reihen[reihe]
+        return r[r.index < pd.Timestamp(stichtag) - pd.Timedelta(days=35 if reihe == "UNRATE" else 0)]
+
+    erg = werkzeug.vergleiche(alt, rs, kurse, makro)
+    assert erg["abweichungen"] == [] and all(erg["varianten"].values()) and set(erg["varianten"]) == set(rs.VARIANTEN)
+    assert erg["sahm_gleich"] == erg["monate"] == 156
+    v1 = rs.regime_verlauf(kurse, makro)
+    assert v1["arbeit_aus"].dropna().nunique() == 2 and v1["risiko_aus"].dropna().nunique() == 2   # der Vergleich ist nicht leer

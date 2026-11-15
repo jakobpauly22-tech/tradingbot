@@ -215,8 +215,9 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
 Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit) und drei Entscheidungen. Code:
 `betrieb/regimebuch.py`, Einbindung in `betrieb/tageslauf.py`, Konfiguration `config/betrieb.yaml` (`buecher.regime`).
 
-- **Regeln:** V1 genau aus dem Festlegungs-Commit b628678. Das Buch nutzt `engines/regime/signale.py` unverändert; ein
-  Test prüft die Git-Prüfsumme der Datei gegen b628678. In der Konfiguration stehen keine Signal-Parameter.
+- **Regeln:** V1 genau aus dem Festlegungs-Commit b628678, seit dem 15.11.2026 ergänzt um die Betriebsregel für
+  Datenlücken (Abschnitt 9b). Ein Test prüft die Git-Prüfsumme von `engines/regime/signale.py`. In der Konfiguration
+  stehen keine Signal-Parameter.
 - **Buch:** 10.000 €, Art Skalierung, Rolle Core, Sammelfreigabe, höchstens 2 Orders je Tag, 100 % SPYI.DE oder Kasse zu
   0 %. Das Senden ist zum Start gesperrt; Jakob schaltet nach Probelauf und erstem echten Vorschlag frei.
 - **Bewertung:** am letzten Xetra-Handelstag des Monats nach Börsenschluss; die Order gilt für den nächsten Handelstag.
@@ -260,8 +261,34 @@ Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit
   also voraussichtlich erste Bewertung am 26.02.2027.
 - **Einordnung:** Trend, Zinskurve und Kreditaufschlag waren von Dezember 2025 bis Oktober 2026 bestimmbar; der Trend
   war durchgehend „an“. Im Backtest-Zeitraum bis 2024 gab es keine solche Lücke.
-- **Nichts geändert:** `engines/regime/signale.py` bleibt wie in b628678. Wie das Buch mit der Lücke umgeht, entscheidet
-  Jakob; bis dahin meldet jeder Lauf „Monatsbewertung nicht möglich“ mit Signal und Beginn.
+- **Entscheidung:** Jakob hat am 15.11.2026 die Betriebsregel für Datenlücken festgelegt (Abschnitt 9b).
 - **Anzeige und Benachrichtigung:** Buchkarte mit Zustand, letzter und nächster Bewertung, Haltepflicht und den vier
   Signalen mit Wert und Schwelle; Zeile in der Kurzfassung am Bewertungstag, beim Start und bei einem Problem;
   Sofortmeldung bei Wechsel, Ausfall und Abweichung vom Protokoll.
+
+
+## 9b. Betriebsregel für Datenlücken (festgelegt am 15.11.2026, nicht Teil von b628678)
+
+Von Jakob am 15.11.2026 festgelegt, nach dem Probelauf (Abschnitt 9a). Die Regel gehört nicht zur Festlegung b628678
+und hat ausdrücklich keine Wirkung auf das Urteil „V1 nicht bestanden“ (Abschnitt 7e).
+
+- **Ursache der Lücke:** US-Shutdown im Herbst 2025. Die Arbeitslosenquote für Oktober 2025 wurde nie erhoben; ALFRED
+  führt den Monat ohne Wert.
+- **Regel:** Die Sahm-Regel rechnet über die vorhandenen Monate und überspringt die Lücke. Kein Wert wird geschätzt.
+  - Fenster wie bisher: die 15 Kalendermonate bis zum jüngsten veröffentlichten Monat m.
+  - Ū3 eines vorhandenen Monats = Mittel der letzten drei veröffentlichten Werte im Fenster bis zu diesem Monat (über
+    die Lücke hinweg, also aus höchstens vier Kalendermonaten).
+  - S = Ū3_m − min(Ū3 der vorhandenen Monate unter m−12 … m−1). Der fehlende Monat hat kein Mittel.
+  - Schwelle unverändert: „aus“ ab 0,50 Prozentpunkten.
+- **Grenzen:** Fehlt im Fenster mehr als ein Monat, gibt es keinen Zustand und die Meldung wie bisher. Eine zu kurze
+  Historie ist keine Lücke.
+- **Code:** eigene Funktion `sahm_wert_bei_datenluecke` in `engines/regime/signale.py`. `sahm_wert` ist unverändert;
+  `arbeitsmarkt_aus` nutzt die neue Funktion nur, wenn `sahm_wert` nicht bestimmbar ist. So bleibt sichtbar, was sich
+  gegenüber b628678 geändert hat. Die Prüfsumme im Test zeigt auf den neuen Stand (Commit COMMIT_LUECKE).
+- **Identität auf lückenlosen Daten:**
+  - Test: Auf lückenlosen Reihen liefert die Lückenregel exakt den Wert von `sahm_wert`, und alle Verläufe (V1, D1–D4)
+    sind gleich wie mit dem Code aus b628678.
+  - Lauf über den gesamten Backtest-Zeitraum (`tools/pruefe_regime_datenluecke.py`, Bericht
+    `docs/berichte/2026-11-15_regime_datenluecke.md`): 156 Monatsenden 2012–2024, Signale, Rohzustand und Zustand für
+    V1 und D1–D4 identisch, Sahm-Wert an allen 156 Monatsenden gleich. Das war kein Backtest und zählt nicht als Lauf.
+- **Anzeige:** Buchkarte und Monatsmeldung weisen aus, wenn der Arbeitsmarkt mit dieser Regel gerechnet wurde.

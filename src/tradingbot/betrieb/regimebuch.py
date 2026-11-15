@@ -32,7 +32,7 @@ from tradingbot.risiko.manager import OrderVorschlag
 
 BUCH = "regime"
 VARIANTE = "V1"
-FESTLEGUNG = "b628678"
+FESTLEGUNG = "b628678"            # dazu seit 15.11.2026 die Betriebsregel für Datenlücken (signale.sahm_wert_bei_datenluecke)
 KURSE_AB = "2012-01-01"          # wie im Backtest (Yahoo-Kurse von SPYI.DE davor fehlerhaft)
 FELDER = signale.SIGNALE + ("roh_aus",)
 SIGNALNAMEN = {"trend_aus": "Trend", "kurve_aus": "Zinskurve", "kredit_aus": "Kreditaufschlag", "arbeit_aus": "Arbeitsmarkt"}
@@ -82,6 +82,10 @@ def faellige_monate(schlusskurse: pd.Series, tag, protokoll: dict) -> list[str]:
     return [m for m in monate if not protokoll or m > max(protokoll)]
 
 
+def _luecke_text(eintrag: dict) -> str:
+    return "; Arbeitsmarkt mit der Betriebsregel für Datenlücken gerechnet" if (eintrag.get("werte") or {}).get("sahm_datenluecke") else ""
+
+
 def signale_text(eintrag: dict) -> str:
     return ", ".join(f"{SIGNALNAMEN[s]} {'aus' if eintrag.get(s) else 'an'}" for s in signale.SIGNALE)
 
@@ -97,13 +101,17 @@ def signalwerte(monatsende, schlusskurse: pd.Series, makro) -> dict:
     kurve = signale._monatsmittel(makro(signale.REIHEN["kurve"], tag))
     kredit = signale._monatsmittel(makro(signale.REIHEN["kredit"], tag))
     fenster = kredit.reindex(pd.period_range(periode - (signale.KREDIT_MONATE - 1), periode, freq="M"))
-    sahm = signale.sahm_wert(makro(signale.REIHEN["arbeit"], tag - pd.Timedelta(days=1)))
+    quote = makro(signale.REIHEN["arbeit"], tag - pd.Timedelta(days=1))
+    sahm, luecke = signale.sahm_wert(quote), False
+    if sahm is None:                                         # Betriebsregel für Datenlücken (docs/REGIME.md, Abschnitt 9b)
+        sahm = signale.sahm_wert_bei_datenluecke(quote)
+        luecke = sahm is not None
 
     def zahl(x):
         return None if x is None or pd.isna(x) else round(float(x), 4)
 
     return {"schluss": zahl(monat.iloc[-1]), "schluss_mittel": zahl(monat.iloc[-signale.TREND_MONATE:].mean()),
-            "kurve": zahl(kurve.get(periode)), "kredit": zahl(fenster.iloc[-1]), "kredit_mittel": zahl(fenster.mean()), "sahm": zahl(sahm)}
+            "kurve": zahl(kurve.get(periode)), "kredit": zahl(fenster.iloc[-1]), "kredit_mittel": zahl(fenster.mean()), "sahm": zahl(sahm), "sahm_datenluecke": luecke}
 
 
 def haltepflicht_bis(protokoll: dict) -> str | None:
@@ -146,7 +154,8 @@ def signalzeilen(eintrag: dict) -> list[str]:
     return [f"Trend {lage('trend_aus')}: Monatsschluss {_de(w.get('schluss'))} gegen 10-Monats-Durchschnitt {_de(w.get('schluss_mittel'))} (aus, wenn darunter)",
             f"Zinskurve {lage('kurve_aus')}: 10 Jahre − 3 Monate im Monatsdurchschnitt {_de(w.get('kurve'))} Pp. (aus, wenn unter 0)",
             f"Kreditaufschlag {lage('kredit_aus')}: Baa − 10 Jahre {_de(w.get('kredit'))} Pp. gegen 10-Monats-Durchschnitt {_de(w.get('kredit_mittel'))} (aus, wenn darüber)",
-            f"Arbeitsmarkt {lage('arbeit_aus')}: Sahm-Wert {_de(w.get('sahm'))} Pp. (aus ab 0,50)"]
+            f"Arbeitsmarkt {lage('arbeit_aus')}: Sahm-Wert {_de(w.get('sahm'))} Pp. (aus ab 0,50)"
+            + (" – mit der Betriebsregel für Datenlücken gerechnet (ein Monat fehlt, nichts geschätzt)" if w.get("sahm_datenluecke") else "")]
 
 
 def karte(zustand: dict, tag) -> list[tuple[str, str]]:
@@ -253,12 +262,12 @@ def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[
         stand.risiko_aus = bool(stand.eintrag["risiko_aus"])
     if stand.start and protokoll:
         stand.meldungen.append(f"regime: Start – Vorgeschichte {min(protokoll)} bis {max(protokoll)} protokolliert ({len(protokoll)} Monate); "
-                               f"aktueller Zustand {zustand_text(stand.risiko_aus)} ({signale_text(stand.eintrag)})")
+                               f"aktueller Zustand {zustand_text(stand.risiko_aus)} ({signale_text(stand.eintrag)}){_luecke_text(stand.eintrag)}")
     for monat in stand.neu:
         e = protokoll[monat]
         nach = "" if e["art"] == "bewertung" else f", nachgeholt am {tag:%d.%m.%Y} mit dem Wissensstand vom {pd.Timestamp(e['monatsende']):%d.%m.%Y}"
         stand.meldungen.append(f"regime: Monatsbewertung {monat}{nach}: {zustand_text(e['risiko_aus'])} ({signale_text(e)}; "
-                               f"Rohzustand {'aus' if e['roh_aus'] else 'an'})")
+                               f"Rohzustand {'aus' if e['roh_aus'] else 'an'}){_luecke_text(e)}")
     if stand.wechsel:
         stand.laut.append(f"regime: Wechsel auf {zustand_text(stand.risiko_aus)} ({signale_text(stand.eintrag)}) – Vorschlag im Tageslauf. {HINWEIS}")
     neu = {**zustand, "protokoll": protokoll, "variante": VARIANTE, "festlegung": FESTLEGUNG, "abweichungen_gemeldet": gemeldet}

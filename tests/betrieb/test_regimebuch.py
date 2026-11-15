@@ -326,12 +326,14 @@ def test_datenbefund_sperrt_das_regime_buch(umgebung):
 
 
 # --- Festlegung und Trennung ------------------------------------------------------------------------------------------------
-def test_signale_sind_unveraendert_wie_im_festlegungs_commit_b628678():
-    """Git-Blob-Prüfsumme von engines/regime/signale.py im Commit b628678 (Zeilenenden normalisiert). Wer die eingefrorenen
-    Regeln ändert, ändert das Schattenbuch – das darf nicht still geschehen."""
+def test_signale_pruefsumme_festlegung_b628678_mit_betriebsregel_fuer_datenluecken():
+    """Git-Blob-Prüfsumme von engines/regime/signale.py (Zeilenenden normalisiert). Stand: Festlegungs-Commit b628678
+    (Blob 3d23e5e1…) plus die Betriebsregel für Datenlücken vom 15.11.2026 (`sahm_wert_bei_datenluecke`, Commit COMMIT_LUECKE;
+    docs/REGIME.md, Abschnitt 9b). Wer die Regeln ändert, ändert das Schattenbuch – das darf nicht still geschehen."""
     inhalt = (PROJEKT_WURZEL / "src/tradingbot/engines/regime/signale.py").read_bytes().replace(b"\r\n", b"\n")
     blob = hashlib.sha1(b"blob %d\x00" % len(inhalt) + inhalt).hexdigest()
-    assert blob == "3d23e5e152ecc1244b2492367db869cee06c85a3"
+    assert blob == "729b88a46a86d05e124d3c0ef3c804037e670661"
+    assert signale.DATENLUECKE_MAX_MONATE == 1
     assert regimebuch.FESTLEGUNG == "b628678" and regimebuch.VARIANTE == "V1"
     assert (signale.TREND_MONATE, signale.KREDIT_MONATE, signale.SAHM_SCHWELLE, signale.HALTEPFLICHT_MONATE) == (10, 10, 0.50, 2)
 
@@ -429,16 +431,31 @@ def test_buchkarte_zeigt_zustand_signale_und_fehler(umgebung):
     assert zusatz[0][0] == "Achtung" and "nicht möglich" in zusatz[0][1] and zusatz[1][1].startswith("Risiko an")
 
 
-def test_fehlender_monat_der_arbeitslosenquote_wird_benannt():
-    """Probelauf 15.11.2026: Die Arbeitslosenquote für Oktober 2025 wurde nie veröffentlicht. Die eingefrorene Sahm-Regel
-    verlangt lückenlose Monate; ohne sie gibt es keinen Zustand. Die Meldung nennt Signal und Beginn, nichts wird geschätzt."""
+def test_zwei_fehlende_monate_der_arbeitslosenquote_kein_zustand_und_meldung():
+    """Mehr als ein fehlender Monat im Fenster: auch mit der Betriebsregel für Datenlücken kein Zustand. Die Meldung nennt
+    Signal und Beginn, nichts wird geschätzt."""
     m = Makro()
     original = m.stand
 
     def mit_luecke(reihe, stichtag):
         w = original(reihe, stichtag)
-        return w.drop(pd.Timestamp("2025-10-01"), errors="ignore") if reihe == "UNRATE" else w
+        return w.drop([pd.Timestamp("2025-10-01"), pd.Timestamp("2025-11-01")], errors="ignore") if reihe == "UNRATE" else w
 
     m.stand = mit_luecke
-    with pytest.raises(ValueError, match="nicht bestimmbar seit 31.12.2025: Arbeitsmarkt.*weiter nicht bestimmbar: Arbeitsmarkt"):
+    with pytest.raises(ValueError, match="nicht bestimmbar seit 30.01.2026: Arbeitsmarkt.*weiter nicht bestimmbar: Arbeitsmarkt"):
         regimebuch.bewerten("2026-11-16", kursreihe("2026-11-16"), m.laden, {})
+
+
+def test_ein_fehlender_monat_betriebsregel_fuer_datenluecken_gibt_einen_zustand():
+    """Probelauf 15.11.2026: Die Arbeitslosenquote für Oktober 2025 wurde nie erhoben. Mit der Betriebsregel (ein fehlender
+    Monat wird übersprungen) hat das Buch einen Zustand; Anzeige und Meldung weisen die Regel aus."""
+    m = Makro()
+    original = m.stand
+    m.stand = lambda reihe, stichtag: (original(reihe, stichtag).drop(pd.Timestamp("2025-10-01"), errors="ignore") if reihe == "UNRATE"
+                                       else original(reihe, stichtag))
+    z, s = regimebuch.bewerten("2026-11-16", kursreihe("2026-11-16"), m.laden, {})
+    assert s.risiko_aus is False and max(z["protokoll"]) == "2026-10" and not s.laut
+    e = z["protokoll"]["2026-10"]
+    assert e["arbeit_aus"] is False and e["werte"]["sahm"] == 0.0 and e["werte"]["sahm_datenluecke"] is True
+    assert any("Betriebsregel für Datenlücken" in x for x in s.meldungen)
+    assert any("Betriebsregel für Datenlücken" in t for n, t in regimebuch.karte(z, "2026-11-16") if n == "Signal")
