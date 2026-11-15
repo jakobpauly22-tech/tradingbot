@@ -127,6 +127,15 @@ Präzisierungen der Rechnung (vor jedem Lauf, Code in `engines/regime/signale.py
 - **Sitzung 2 rechnet keinen Verlauf von V1 über den gewerteten Zeitraum aus.** Tests an echten Daten prüfen nur einzelne
   bekannte Ankerpunkte der Einzelsignale (z. B. Sahm-Regel im April 2020).
 
+Jakob hat die Präzisierungen (erste Bewertung, Sahm-Regel, Stand der Marktreihen) am 15.11.2026 bestätigt.
+
+## 7b. Regeln für die gewerteten Läufe (Jakob 15.11.2026)
+
+- Vor dem ersten gewerteten Lauf werden alle Festlegungen dieser Datei in einem eigenen Commit eingefroren; der Bericht
+  nennt den Commit-Hash. Nach dem Lauf werden weder Schwellen noch Signale geändert.
+- Der Bericht von Sitzung 3 enthält **kein Gesamturteil**, nur die Ergebnisse je Hälfte. Das Urteil fällt erst nach dem
+  US-Langtest (Sitzung 4), weil er mitzählt.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |

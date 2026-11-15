@@ -252,7 +252,7 @@ Die Briefing-Aufgaben in Claude und der Bot sehen sich nicht direkt. Die Brücke
 - **Zwei Teile:** Das Briefing bleibt Lesetext für dich; eine Export-Aufgabe erzeugt daraus täglich einen maschinenlesbaren Anhang im JSON-Format.
 - **Felder pro Nachricht:** Datum, betroffene Anlage oder Region, Ereignistyp, Richtung (positiv, negativ, neutral), Stärke 1 bis 3, erwartete Wirkungsdauer, Quelle.
 - **Makro-Kalender:** wichtige Termine der nächsten Tage mit erwarteter Bedeutung.
-- **Übergabe:** Die geplante Aufgabe „Briefing-Export Bot-Anhang“ legt den Anhang täglich um 22:40 als JJJJ-MM-TT.json in Google Drive unter TradingBot/Briefing-Archiv ab. Sobald das Repository steht, liest der Bot von dort.
+- **Übergabe:** Die geplante Aufgabe „Briefing-Export Bot-Anhang“ legt den Anhang täglich um 21:41 (seit 12.11.2026, zuvor 22:40) als JJJJ-MM-TT.json in Google Drive unter TradingBot/Briefing-Archiv ab. Sobald das Repository steht, liest der Bot von dort.
 - **Was du tust:** im Alltag nichts. Beim Aufbau des Repositorys den Zugriff auf das Archiv bestätigen.
 
 ### Anleitung: Tagesbriefing einbinden
@@ -261,7 +261,7 @@ Das Tagesbriefing läuft als zwei geplante Aufgaben („Newsletter-Briefing“ M
 
 **Stufe 1: läuft seit 31.10.2026**
 
-1. **Export-Aufgabe:** „Briefing-Export Bot-Anhang“ startet täglich um 22:40, liest die Briefing-Blöcke des Tages und speichert den Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv`. Verpasste Tage holt sie bis zu 3 Tage rückwirkend nach.
+1. **Export-Aufgabe:** „Briefing-Export Bot-Anhang“ startet täglich um 21:41 (seit 12.11.2026, zuvor 22:40), liest die Briefing-Blöcke des Tages und speichert den Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv`. Verpasste Tage holt sie bis zu 3 Tage rückwirkend nach.
 2. **Prüfen:** Gelegentlich eine Datei öffnen und mit dem Briefing vergleichen. Fehler fließen als Korrektur in den Prompt der Export-Aufgabe.
 3. **Archiv wächst:** Bis zum Start des Bots entsteht so die Testgrundlage für die News-Engine.
 
@@ -525,7 +525,7 @@ Neue Ideen landen zuerst hier und wandern bei Bedarf in die Priorisierungstabell
 - [ ] Entwicklungsumgebung: Python, Git, privates GitHub-Repository und Claude Code einrichten (Setup vor Phase 1)
 - [ ] IBKR für den Bot vorbereiten (vor Phase 2): IB Gateway installieren, API für das Paper-Konto freischalten (Port 4002, anfangs Read-Only, nur 127.0.0.1), Marktdaten-Freigabe fürs Paper-Konto prüfen
 - [x] Kostenlosen FRED-API-Schlüssel anlegen
-- [x] Briefing-Anhang (JSON) bestätigen: Export-Aufgabe läuft täglich um 22:40, Archiv in Google Drive (TradingBot/Briefing-Archiv)
+- [x] Briefing-Anhang (JSON) bestätigen: Export-Aufgabe läuft täglich um 21:41 (seit 12.11.2026, zuvor 22:40), Archiv in Google Drive (TradingBot/Briefing-Archiv)
 - [ ] Briefing-Archiv ans Repository anbinden (Stufe 2, beim Aufbau des Repositorys)
 - [ ] Mischbenchmark für Multi-Asset festlegen, passend zur tatsächlichen Aufteilung
 - [x] Vorlesungsunterlagen eingepflegt (Grundlagenwissen, 10 Dateien); Übungen mit Musterlösung als 641 automatische Tests erfasst, davon 264 aus Accounting 1 (11 Testkatalog)

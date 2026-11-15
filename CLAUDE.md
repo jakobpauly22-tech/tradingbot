@@ -136,7 +136,7 @@ Parameter in `config/betrieb.yaml`. Realbuch: Core 500 € in SPYI (ganze Stück
 
 ## Briefing-Archiv (Eingang der News-Engine)
 
-Eine geplante Aufgabe in Claude speichert täglich um 22:40 den Bot-Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv` (Schema 1.1, siehe `docs/BOT_ANHANG.md`, Prüfung mit `tools/pruefe_bot_anhang.py`). Lokal gehören die Dateien nach `daten/briefings/`. Nachrichten erst ab `erstellt_um` verwenden. Bekannte Einschränkung: In den Dateien vom 28. bis 30.10.2026 ist `quelle` bei Einträgen aus Sammelmeldungen (item_key mit `-b`) teils falsch; ab 31.10.2026 korrigiert.
+Eine geplante Aufgabe in Claude speichert täglich um 21:41 (seit 12.11.2026, zuvor 22:40) den Bot-Anhang als `JJJJ-MM-TT.json` in Google Drive unter `TradingBot/Briefing-Archiv` (Schema 1.1, siehe `docs/BOT_ANHANG.md`, Prüfung mit `tools/pruefe_bot_anhang.py`). Lokal gehören die Dateien nach `daten/briefings/`. Nachrichten erst ab `erstellt_um` verwenden. Bekannte Einschränkung: In den Dateien vom 28. bis 30.10.2026 ist `quelle` bei Einträgen aus Sammelmeldungen (item_key mit `-b`) teils falsch; ab 31.10.2026 korrigiert.
 
 ## Offene Punkte
 

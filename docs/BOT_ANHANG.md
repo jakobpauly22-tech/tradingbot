@@ -1,6 +1,6 @@
 # Bot-Anhang: Schnittstelle zum Tagesbriefing
 
-Das Tagesbriefing läuft als zwei geplante Aufgaben in Claude („Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in Jakobs Briefing-Seite. Die geplante Aufgabe „Briefing-Export Bot-Anhang“ fasst die Blöcke eines Tages täglich um 22:40 zu einer Datei zusammen.
+Das Tagesbriefing läuft als zwei geplante Aufgaben in Claude („Newsletter-Briefing“ Mo–Fr um 7, 12, 19 und 22 Uhr, „Briefing Wochenende“ um 12 und 22 Uhr) und speichert jeden Lauf als Block in Jakobs Briefing-Seite. Die geplante Aufgabe „Briefing-Export Bot-Anhang“ fasst die Blöcke eines Tages täglich um 21:41 (seit 12.11.2026, zuvor 22:40) zu einer Datei zusammen.
 
 - **Ablage:** Google Drive, `TradingBot/Briefing-Archiv/JJJJ-MM-TT.json`; lokal `daten/briefings/` (nicht in Git).
 - **Nachholen:** Verpasste Tage holt die Aufgabe bis zu 3 Tage rückwirkend nach. Bestehende Dateien werden nie überschrieben.
