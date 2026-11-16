@@ -89,7 +89,8 @@ def main() -> int:
             if z.quelle == "yfinance":                    # Befund 10: zweites Kriterium „Splitspalte“
                 sa = splitabgleich(roh["split"], b["split"] if "split" in b.columns else pd.Series(0.0, index=b.index),
                                    liste_der_reihe(ciks.get((z.quelle, z.symbol), set()), ereignisse))
-                e["split_abgleich"] = "bestanden" if sa["bestanden"] else sa["grund"]
+                e["split_abgleich"] = ("bestanden" + (f"; Hinweis: {sa['hinweis']}" if sa["hinweis"] else "")
+                                       if sa["bestanden"] else sa["grund"])
                 if not sa["bestanden"]:
                     e["grund"] = "; ".join(x for x in (e["grund"], f"Splitspalte: {sa['grund']}") if x)
                     e["bestanden"] = False
@@ -114,14 +115,19 @@ def main() -> int:
             f"Erstellt {datetime.now():%d.%m.%Y %H:%M} mit `tools/pruefe_rohkurse.py`. Kriterien vor dem Lauf festgehalten (docs/FUNDAMENTAL.md, "
             "„c2 (2): Marktwert aus Rohkursen – Abnahme und Stichprobe“): Vergleich nur gegen splitbereinigte Reihen, ≥ 250 Tage, "
             "|v/(H·Πf) − 1| ≤ 1 % an ≥ 99 % der Tage; Yahoo-Reihen zusätzlich Kriterium „Splitspalte“ (Befund 10, festgehalten "
-            "16.11.2026 11:21: Tiingo-Splitfaktoren gegen Yahoo-Ereignisse und Kapitalmaßnahmen-Liste, ±1 Handelstag, ±1 %). "
-            "Nichts wurde angepasst.", "",
+            "16.11.2026 11:21: Tiingo-Splitfaktoren gegen Yahoo-Ereignisse und Kapitalmaßnahmen-Liste, ±1 Handelstag, ±1 %; "
+            "geändert nach dem ersten Lauf, festgehalten 12:45: Tiingo-Faktor genau am Datum einer Abspaltung der Liste gilt "
+            "als bestanden). Nichts wurde angepasst.", "",
             f"Gültige Reihen: {len(gueltig)}. Mit Rohreihe: {len(t)}, davon bestanden {int(t['bestanden'].sum())}, nicht bestanden {len(nicht)}. "
             f"Ohne Rohreihe: {len(ohne_roh)}. Für c3 noch offen (ohne Abnahme, nicht dauerhaft unverfügbar): {len(fehlend)}.", "",
             f"Davon nur am Kriterium „Splitspalte“ gescheitert: {len(nur_split)}. "
             f"Fehlerschwelle (Befund 14, sperrt c3): {schwelle_der_abnahme(t) or 'nicht überschritten'}.", "",
             f"## Nicht bestanden ({len(nicht)})", "", "| Symbol (Quelle) | Tage | Anteil ≤ 1 % | größte Abweichung | H | Grund |", "| --- | --- | --- | --- | --- | --- |"]
     text += [f"| {r.symbol} ({r.quelle}) | {r.tage} | {r.anteil_ok:.1%} | {r.max_abw:.1%} | {r.H:.4g} | {r.grund} |" for r in nicht.itertuples()]
+    mit_hinweis = t[t["split_abgleich"].fillna("").str.contains("Hinweis:")]
+    text += ["", f"## Bestanden mit Tiingo-Faktor an einer Abspaltung der Liste (über K behandelt) ({len(mit_hinweis)})", "",
+             "| Symbol (Quelle) | Hinweis |", "| --- | --- |"]
+    text += [f"| {r.symbol} ({r.quelle}) | {r.split_abgleich.split('Hinweis: ', 1)[1]} |" for r in mit_hinweis.itertuples()]
     text += ["", f"## Verdeckter Faktor H ≠ 1 (Split nach der Tresorgrenze; Rohkurs nötig) ({len(verdeckt)})", "",
              "| Symbol (Quelle) | H |", "| --- | --- |"] + [f"| {r.symbol} ({r.quelle}) | {r.H:.4f} |" for r in verdeckt.itertuples()]
     text += ["", f"## Name bei Tiingo passt nicht zum Universum ({len(namen)}, nur Meldung)", "",
@@ -129,6 +135,8 @@ def main() -> int:
     text += [f"| {r.symbol} | {r.name_tiingo} | {r.name_universum} | {'bestanden' if r.bestanden else 'nicht bestanden'} |" for r in namen.itertuples()]
     text += ["", f"## Für c3 noch offen ({len(fehlend)})", "", ", ".join(fehlend) or "keine"]
     bericht = PROJEKT_WURZEL / "docs" / "berichte" / f"{datetime.now():%Y-%m-%d}_rohkurse_abnahme.md"
+    if bericht.exists():                              # früheren Lauf desselben Tages nie überschreiben
+        bericht = bericht.with_name(f"{datetime.now():%Y-%m-%d_%H%M}_rohkurse_abnahme.md")
     bericht.write_text("\n".join(text) + "\n", encoding="utf-8")
     print("\n".join(text[:8]))
     try:

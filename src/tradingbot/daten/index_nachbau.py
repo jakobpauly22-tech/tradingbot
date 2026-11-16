@@ -31,7 +31,8 @@ STREUBESITZ_VERAENDERUNG_FAKTOR = 3.0  # ohne Aktienzahl: Veränderung zum Vorja
 AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag entfernt
 
 
-def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
+def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Series,
+                        korrektur_aktien=None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Prüft die Streubesitzwerte einer Firma gegen den Börsenwert am Messtag e.
 
     Mit Aktienzahl:  0,30 ≤ F_e / (C_e · A_e) ≤ 1,30   (A_e: Aktienzahl nahe e, splitbereinigt wie die Kurse)
@@ -40,6 +41,9 @@ def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Seri
     für diesen Wert als „ohne Aktienzahl“ (z.B. nur eine Aktiengattung gemeldet, Mantelgesellschaft, falsche Einheit).
     Der erste Wert ohne Aktienzahl und ohne Vorgänger bleibt ungeprüft gültig (kein Vergleich möglich).
     Gibt (gültige Werte, verworfene Werte mit Spalte `grund`) zurück; verworfene Werte gelten als fehlend.
+    `korrektur_aktien(d, e)` (Befund 12, Jakob 16.11.2026, nur c3): Faktor, der die auf die Kursbasis gebrachte Aktienzahl
+    vom Messtag d auf die Kursbasis des Messtags e bringt (K aus der Kapitalmaßnahmen-Liste: eine Abspaltung zwischen d
+    und e ändert die Aktienzahl nicht); None = bisherige Rechnung (alle Faktoren der Kursreihe).
     """
     from tradingbot.daten.abdeckung import STREUBESITZ_MAX, STREUBESITZ_MIN
 
@@ -61,7 +65,8 @@ def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Seri
             if len(aktien):
                 abstand = pd.Series(abs((aktien.index - e).days), index=aktien.index)
                 if abstand.min() <= AKTIEN_ABSTAND_TAGE:
-                    wert = c_e * float(aktien.loc[abstand.idxmin()])
+                    d = abstand.idxmin()
+                    wert = c_e * float(aktien.loc[d]) * (float(korrektur_aktien(d, e)) if korrektur_aktien else 1.0)
                     boersenwert = wert if STREUBESITZ_MIN <= wert <= STREUBESITZ_MAX else None
             if boersenwert is not None:
                 anteil = f / boersenwert

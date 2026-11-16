@@ -784,6 +784,25 @@ Rohreihe und Vergleichsreihe aus derselben Quelle, das Kriterium entfällt dort)
 nicht bestanden haben (dieselbe Schwelle wie die Fehlerschwelle der Abnahme). Damit starten die c3-Werkzeuge nach einer
 überschrittenen Schwelle auch technisch nicht; `--probe` bleibt möglich und zählt nie als c3.
 
+**Änderung des Kriteriums „Splitspalte“ nach dem ersten Lauf (Jakob 16.11.2026, festgehalten 16.11.2026 12:45 vor dem
+zweiten Lauf).** Erster Lauf: 44 von 563 Reihen nicht bestanden (7,8 %), davon 26 nur, weil Tiingo eine Abspaltung der
+Liste als Split führt (`docs/berichte/2026-11-16_rohkurse_abnahme.md`, Ursachen).
+
+- **Neu:** Ein Tiingo-Faktor **genau am Datum** (gleicher Tag, nicht ±1 Handelstag) eines Ereignisses mit Art
+  `abspaltung` in `config/kapitalmassnahmen_historie.yaml` gilt als bestanden; er wird im Bericht als Hinweis aufgeführt.
+- **Begründung (Jakob):** Ein Tiingo-Faktor genau am Datum einer per SEC belegten Abspaltung ist kein Datenfehler. Die
+  Marktwert-Formel behandelt ihn über K (s_e = 1), die Prüfung der Streubesitzwerte nach Befund 12 ebenfalls.
+- Unverändert: ±1 Handelstag bei der Paarung, ±1 % beim Faktor, alle übrigen Regeln (auch `nicht_zugehoerig` mit
+  Tiingo-Faktor bleibt nicht bestanden, weil K das Ereignis dort als ungeklärt führt) und das Zeitfenster ab 01.01.2011.
+- **Nicht gewählt:** Ereignisse erst ab 2012 (Beginn der Liste) zu zählen. Für die Schwelle ist das nicht nötig.
+- Die übrigen Reihen, die nicht bestehen, stehen vollständig mit Ursache je Reihe im Bericht des zweiten Laufs.
+
+**Befund 12: Prüfung der Streubesitzwerte mit K (Plan freigegeben von Jakob 16.11.2026).** `streubesitz_pruefen` rechnet
+die Aktienzahl vom Messtag d auf die Kursbasis des Streubesitz-Messtags e mit demselben Faktor wie die Marktwert-Formel:
+A_d · Π_{x>d} f_x · K(d, e) für d < e und A_d · Π_{x>d} f_x / K(e, d) für d > e (f = Faktoren der Prüfreihe, Tiingo
+bei Rohreihen, sonst Yahoo; K aus der Liste, Abspaltung s = 1). Das gilt für Roh- und Yahoo-Reihen. Wie c2 (3) nur mit
+`lade_firmendaten(rohkurse=True)`, also in c3; ohne Schalter rechnen die Werkzeuge wie bisher.
+
 **Umsetzung (16.11.2026):**
 
 - `daten/rohkurse_marktwert.py`: `splitabgleich` (Befund 10), `schwelle_der_abnahme` und `sperre_c3`/`sperrtext`

@@ -161,6 +161,21 @@ def pruefbasis(kurse: pd.DataFrame | None, rohreihe: pd.DataFrame | None) -> tup
     return rohreihe["close"] / faktor_nach(rohreihe["split"]), rohreihe["split"]
 
 
+def aktienkorrektur(splits: pd.Series, ereignisse: pd.DataFrame | None):
+    """Befund 12 (Jakob 16.11.2026): Faktor für streubesitz_pruefen, der eine mit allen Faktoren nach d bereinigte
+    Aktienzahl auf die Kursbasis des Messtags e bringt: K(d, e) für d < e, 1 / K(e, d) für d > e (K =
+    Π s_x / f_x aus der Kapitalmaßnahmen-Liste, Abspaltung s = 1; ungeklärte Ereignisse s = f wie bisher)."""
+    from tradingbot.daten.kapitalmassnahmen_historie import korrektur
+
+    def faktor(d, e) -> float:
+        d, e = pd.Timestamp(d), pd.Timestamp(e)
+        if d == e:
+            return 1.0
+        return korrektur(splits, ereignisse, d, e)[0] if d < e else 1.0 / korrektur(splits, ereignisse, e, d)[0]
+
+    return faktor
+
+
 def kappe_reihe(k: pd.DataFrame, firma, ticker: str, kappung: dict, kappung_ticker: dict) -> pd.DataFrame:
     """Wendet beide Kappungen auf eine Teilreihe an."""
     if firma in kappung:                                       # dritte Datenkorrektur: Reihe gehört danach einer anderen Firma
@@ -186,12 +201,15 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()
     eingefroren = eingefrorene_kurse()
-    roh_kurse, roh_status, roh_ok, roh_unsicher, unsicher = {}, {}, set(), {}, {}
+    roh_kurse, roh_status, roh_ok, roh_unsicher, unsicher, ereignisse = {}, {}, set(), {}, {}, None
     if rohkurse:
         from tradingbot.daten.rohkurse_marktwert import abgenommen, lade_abnahme, rohreihe, unsichere_reihen
 
         abn = lade_abnahme()
         roh_ok, unsicher = abgenommen(abn), unsichere_reihen(abn)
+        from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
+
+        ereignisse = lade_ereignisse()                     # Befund 12: K in der Prüfung der Streubesitzwerte (c3)
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -253,7 +271,9 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
         reihe = pd.concat(reihen).sort_index()
         roh[firma] = reihe[~reihe.index.duplicated(keep="first")]
         if kurse[firma] is not None:
-            g, v = streubesitz_pruefen(roh[firma], schluss_pruef, pd.concat(aktien) if aktien else pd.Series(dtype=float))
+            k_aktien = (aktienkorrektur(split_pruef, ereignisse.get(firma)) if ereignisse is not None and split_pruef is not None
+                        else None)
+            g, v = streubesitz_pruefen(roh[firma], schluss_pruef, pd.concat(aktien) if aktien else pd.Series(dtype=float), k_aktien)
             gueltig[firma] = g
             verworfen += [{"cik": firma, "ende": e.date(), "wert_mrd": r.wert / 1e9, "grund": r.grund} for e, r in v.iterrows()]
     return Firmendaten(kurse, roh, gueltig, pd.DataFrame(verworfen, columns=["cik", "ende", "wert_mrd", "grund"]), relevant, sic,

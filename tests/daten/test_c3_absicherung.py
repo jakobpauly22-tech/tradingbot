@@ -61,14 +61,30 @@ def test_faktor_plus_minus_ein_prozent():
     assert not e["bestanden"] and "Tiingo 4.05 statt 4" in e["grund"]
 
 
-def test_abspaltung_ohne_tiingo_partner_besteht_mit_partner_nicht():
-    """Yahoo führt die Abspaltung als Split, Tiingo nicht: richtig. Tiingo mit Faktor (MRK/Organon 1,048): nicht bestanden."""
+def test_abspaltung_ohne_und_mit_tiingo_faktor_genau_am_listendatum():
+    """Yahoo führt die Abspaltung als Split, Tiingo nicht: bestanden. Tiingo mit Faktor genau am Datum der Liste
+    (MRK/Organon 1,048): bestanden mit Hinweis (Änderung nach dem ersten Lauf, Jakob 16.11.2026; K behandelt ihn)."""
     y = _split(d2021_06_03=1.048)
     liste = _liste(("2021-06-03", "abspaltung", 1.0))
-    assert splitabgleich(_split(), y, liste)["bestanden"]
-    e = splitabgleich(_split(d2021_06_03=1.048), y, liste)
-    assert not e["bestanden"] and "abspaltung" in e["grund"]
+    ohne = splitabgleich(_split(), y, liste)
+    assert ohne["bestanden"] and ohne["hinweis"] == ""
+    mit = splitabgleich(_split(d2021_06_03=1.048), y, liste)
+    assert mit["bestanden"] and "über K behandelt" in mit["hinweis"]
     assert not splitabgleich(_split(), y, None)["bestanden"]              # ohne Einordnung: fehlt bei Tiingo
+
+
+def test_abspaltung_mit_tiingo_faktor_einen_tag_daneben_faellt_durch():
+    """K greift nur bei gleichem Datum: Tiingo einen Handelstag neben der Liste (oder Liste neben Yahoo) bleibt verfehlt."""
+    y = _split(d2021_06_03=1.048)
+    e = splitabgleich(_split(d2021_06_04=1.048), y, _liste(("2021-06-03", "abspaltung", 1.0)))
+    assert not e["bestanden"] and "Datum weicht ab" in e["grund"]
+    e = splitabgleich(_split(d2021_06_03=1.048), y, _liste(("2021-06-04", "abspaltung", 1.0)))
+    assert not e["bestanden"]
+
+
+def test_nicht_zugehoerig_mit_tiingo_faktor_bleibt_verfehlt():
+    y = _split(d2019_04_02=1.487)
+    assert not splitabgleich(_split(d2019_04_02=1.487), y, _liste(("2019-04-02", "nicht_zugehoerig", None)))["bestanden"]
 
 
 def test_nicht_zugehoerig_wie_abspaltung():
@@ -188,3 +204,60 @@ def test_rueckfall_gewichte_im_nachbau():
     assert list(rf["firma"]) == [1, 3]
     assert rf.iloc[0]["gewicht_mittel"] == pytest.approx(0.02) and rf.iloc[0]["H"] == 0.8 and rf.iloc[0]["tage"] == 4
     assert rf.iloc[1]["tage"] == 0
+
+
+# --- Befund 12: Prüfung der Streubesitzwerte mit K ----------------------------------------------------------------
+def _abspaltung_2020():
+    """Rohreihe: Kurs 100, Abspaltung am 03.08.2020 (Kurs fällt auf 50); Tiingo führt sie als Split 2,0."""
+    tage = pd.bdate_range("2020-01-01", "2021-06-30")
+    roh = pd.DataFrame({"close": 100.0, "split": 0.0}, index=tage)
+    roh.loc["2020-08-03":, "close"] = 50.0
+    roh.loc["2020-08-03", "split"] = 2.0
+    liste = pd.DataFrame({"art": ["abspaltung"], "split_faktor": [1.0], "geprueft": [True]}, index=pd.DatetimeIndex(["2020-08-03"]))
+    return roh, liste
+
+
+def _pruefe(roh, liste, aktien, streubesitz, mit_k):
+    from tradingbot.daten.index_nachbau import aktien_splitbereinigt, streubesitz_pruefen
+    from tradingbot.daten.sp500_nachbau import aktienkorrektur, pruefbasis
+
+    c, s = pruefbasis(None, roh)
+    return streubesitz_pruefen(streubesitz, c, aktien_splitbereinigt(aktien, s), aktienkorrektur(s, liste) if mit_k else None)
+
+
+def test_streubesitz_mit_abspaltung_zwischen_aktienzahl_und_messtag():
+    """Aktienzahl 30.04.2020, Streubesitz 31.12.2020 nach der Abspaltung: Börsenwert 50 · 1 Mrd. = 50 Mrd.; Streubesitz
+    20 Mrd. (40 %). Ohne K wird die Aktienzahl mit dem Abspaltungsfaktor 2 verdoppelt (20 %, verworfen)."""
+    roh, liste = _abspaltung_2020()
+    aktien = pd.Series([1e9], index=[pd.Timestamp("2020-04-30")])
+    f = pd.DataFrame({"wert": [20e9], "filed": [pd.Timestamp("2021-02-15")]}, index=[pd.Timestamp("2020-12-31")])
+    g_alt, v_alt = _pruefe(roh, liste, aktien, f, mit_k=False)
+    g_neu, v_neu = _pruefe(roh, liste, aktien, f, mit_k=True)
+    assert len(g_alt) == 0 and "20%" in v_alt["grund"].iloc[0]
+    assert len(g_neu) == 1 and v_neu.empty
+
+
+def test_streubesitz_mit_aktienzahl_nach_der_abspaltung():
+    """Aktienzahl 31.01.2021 (nach der Abspaltung), Streubesitz 30.06.2020 davor: Börsenwert 100 · 1 Mrd. = 100 Mrd.,
+    Streubesitz 110 Mrd. (110 %, angenommen). Ohne K wird der Kurs des Messtags durch 2 geteilt, die Aktienzahl aber
+    nicht: Börsenwert 50 Mrd., Anteil 220 %, verworfen."""
+    from tradingbot.daten.sp500_nachbau import aktienkorrektur
+
+    roh, liste = _abspaltung_2020()
+    aktien = pd.Series([1e9], index=[pd.Timestamp("2021-01-31")])
+    f = pd.DataFrame({"wert": [110e9], "filed": [pd.Timestamp("2020-09-15")]}, index=[pd.Timestamp("2020-06-30")])
+    assert aktienkorrektur(roh["split"], liste)(pd.Timestamp("2021-01-31"), pd.Timestamp("2020-06-30")) == pytest.approx(2.0)
+    g_alt, v_alt = _pruefe(roh, liste, aktien, f, mit_k=False)
+    g_neu, v_neu = _pruefe(roh, liste, aktien, f, mit_k=True)
+    assert len(g_alt) == 0 and "220%" in v_alt["grund"].iloc[0]
+    assert len(g_neu) == 1 and v_neu.empty
+
+
+def test_aktienkorrektur_echter_split_und_gleicher_tag():
+    from tradingbot.daten.sp500_nachbau import aktienkorrektur
+
+    roh, _ = _abspaltung_2020()
+    liste = pd.DataFrame({"art": ["split"], "split_faktor": [2.0], "geprueft": [True]}, index=pd.DatetimeIndex(["2020-08-03"]))
+    k = aktienkorrektur(roh["split"], liste)
+    assert k(pd.Timestamp("2020-04-30"), pd.Timestamp("2020-12-31")) == pytest.approx(1.0)     # echter Split: K = 1
+    assert k(pd.Timestamp("2020-12-31"), pd.Timestamp("2020-12-31")) == 1.0
