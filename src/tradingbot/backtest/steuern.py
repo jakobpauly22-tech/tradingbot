@@ -50,6 +50,7 @@ import pandas as pd
 
 STEUERARTEN = ("aktie", "aktienfonds", "mischfonds", "sonstiger_fonds", "etc")
 FONDS = ("aktienfonds", "mischfonds", "sonstiger_fonds")   # nur Investmentfonds haben eine Vorabpauschale
+ZAHLUNGSARTEN = ("jahresende_aus_kasse", "jahresende_nur_wertreihe")
 ERTRAGSARTEN = ("veraeusserung", "dividende", "ausschuettung", "vorabpauschale")
 
 
@@ -62,6 +63,13 @@ class Steuerregeln:
     quellensteuer: dict = field(default_factory=lambda: {"USD": 0.15})
     basiszins: dict = field(default_factory=dict)   # Jahr -> Dezimalzahl
     aktiv: bool = True
+    # Abfluss der Jahressteuer (backtest/simulation.py): aus der Kasse (gewertet, Korrektur 16.11.2026) oder nur aus der
+    # Wertreihe (Rechenweg bis 15.11.2026, nur noch Vergleichsmodus)
+    zahlung: str = "jahresende_aus_kasse"
+
+    def __post_init__(self):
+        if self.zahlung not in ZAHLUNGSARTEN:
+            raise ValueError(f"steuern.zahlung {self.zahlung!r} unbekannt, erlaubt: {ZAHLUNGSARTEN}")
 
     @classmethod
     def aus_konfig(cls, konfig: dict | None = None) -> "Steuerregeln":
@@ -79,6 +87,7 @@ class Steuerregeln:
             teilfreistellung={k: float(v) for k, v in s["teilfreistellung"].items()},
             quellensteuer={k: float(v) for k, v in s["quellensteuer"].items()},
             basiszins={int(j): float(v) / 100 for j, v in s["basiszins_prozent"].items()},
+            zahlung=str(s.get("zahlung", "jahresende_aus_kasse")),
         )
 
     @classmethod

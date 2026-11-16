@@ -17,6 +17,13 @@ Regeln der Ausführung (config/backtest.yaml):
   Kosten `Kostenmodell.tauschkosten_eur`) und beim fiktiven Verkauf am Ende (Auszahlung). Die Tauschkosten mindern
   vereinfachend nicht den Veräußerungsgewinn (vorsichtig); Kursgewinne der Fremdwährungskasse sind steuerlich nicht
   abgebildet (offener Punkt, § 23 EStG, backtest/steuern.py).
+- Steuern (Korrektur 16.11.2026, Befund 3 der unabhängigen Prüfung): Die Jahressteuer fließt am letzten Handelstag des
+  Jahres aus der Kasse ab, ohne Zwangsverkauf. Reicht die EUR-Kasse nicht, wird vorhandene Fremdwährungskasse
+  zurückgetauscht (Auszahlung); der Rest ist eine zinslose Steuerschuld. Zuflüsse (Verkaufserlöse, Dividenden,
+  Einzahlungen) tilgen sie zuerst. Verkäufe rechnen gegen den Depotwert ohne Abzug der Schuld (sie löst nie einen Verkauf
+  aus), Käufe gegen den Depotwert minus Schuld (anteilig kleiner). Für die Schuld getauscht wird nur am Zahltag und an
+  Ausführungstagen, nicht je Dividende. Vergleichsmodus `steuern.zahlung: jahresende_nur_wertreihe` = Rechenweg bis
+  15.11.2026 (Steuer mindert nur die Wertreihe, die Kasse bleibt unberührt); nie gewertet.
 - Käufe und Aufstockungen nur, wenn Gebühr plus Währungstausch höchstens `max_gebuehr_anteil` (1 %) des
   Orderwerts sind; sonst wird die Order verworfen und protokolliert. Verkäufe (Ausstiege, Stops, Zeit-Stops,
   gebrochene These, Reduzierungen) sind immer erlaubt (Jakob, 01.11.2026).
@@ -90,7 +97,9 @@ class TeilportfolioDefinition:
 class Ergebnis:
     name: str
     strategie: str
-    werte: pd.DataFrame          # je Tag: wert, cash, steuern_kumuliert, wert_nach_steuern
+    # je Tag: wert (vor Steuern = wert_nach_steuern + steuern_kumuliert), cash, einzahlung, steuer (am Tag festgesetzt),
+    # steuern_kumuliert (festgesetzt), steuerschuld (festgesetzt, noch nicht aus der Kasse gezahlt), wert_nach_steuern
+    werte: pd.DataFrame
     bestaende: pd.DataFrame      # je Tag: Stück je Ticker
     trades: pd.DataFrame
     verworfen: pd.DataFrame
@@ -103,8 +112,17 @@ class Ergebnis:
 
     @property
     def wert(self) -> pd.Series:
-        """Depotwert vor Steuern (Steuern fließen als eigener Abfluss ab, siehe wert_nach_steuern)."""
+        """Wert vor Steuern = Wert nach Steuern + festgesetzte Steuern (kein eigener steuerfreier Lauf: Der Pfad hält wegen
+        der gezahlten Steuer etwas weniger Positionen als ein Lauf ganz ohne Steuern; Jakob 16.11.2026)."""
         return self.werte["wert"]
+
+    @property
+    def twr_vor_steuern(self) -> pd.Series:
+        """Zeitgewichtete Rendite vor Steuern als Index: Steuern zählen als Auszahlung am Tagesende, Einzahlungen als
+        Zufluss am Tagesbeginn (kennzahlen.performance.zeitgewichtete_rendite)."""
+        from tradingbot.kennzahlen.performance import zeitgewichtete_rendite
+
+        return zeitgewichtete_rendite(self.werte["wert_nach_steuern"], self.werte["einzahlung"], self.werte["steuer"])
 
     @property
     def wert_nach_steuern(self) -> pd.Series:
@@ -147,6 +165,11 @@ class _Lauf:
         self.vetos: list[dict] = []
         self.risk_geprueft = 0
         self.orders_je_tag: dict = {}
+        # Steuer aus der Kasse (16.11.2026): festgesetzt = kumulierte Jahressteuern; Schuld = davon noch nicht gezahlt
+        self.aus_kasse = steuerregeln.zahlung == "jahresende_aus_kasse"
+        self.steuerschuld = 0.0
+        self.steuern_festgesetzt = 0.0
+        self.steuerzahlungen: list[dict] = []
 
     def _ereignis(self, datum, ticker, art, betrag, quellensteuer=0.0):
         self.steuerereignisse.append(Steuerereignis(pd.Timestamp(datum), self.d.name, ticker, art, self.steuerarten[ticker], betrag, quellensteuer))
@@ -211,6 +234,35 @@ class _Lauf:
             if betrag > TOLERANZ:
                 kosten = self._tauschen(tag, w, "EUR", betrag, None)
                 f_eur -= betrag - kosten
+
+    def steuer_festsetzen(self, tag, steuer: float):
+        """Jahressteuer am Zahltag: erhöht die Steuerschuld und wird sofort aus der Kasse getilgt, soweit sie reicht."""
+        self.steuern_festgesetzt += steuer
+        self.steuerschuld += steuer
+        self.steuerschuld_tilgen(tag, tauschen=True)
+
+    def steuerschuld_tilgen(self, tag, *, tauschen: bool = False):
+        """Zahlt die offene Steuerschuld aus der EUR-Kasse. Mit `tauschen` (Zahltag, Ausführungstag) wird für einen
+        Fehlbetrag Fremdwährungskasse zurückgetauscht, mit Tauschkosten. Nie ein Verkauf; im Vergleichsmodus nichts."""
+        if not self.aus_kasse or self.steuerschuld <= TOLERANZ:
+            return
+        fehl = self.steuerschuld - max(self.portfolio.cash, 0.0)
+        if tauschen and fehl > TOLERANZ:
+            for w in list(self.portfolio.fremdkasse):
+                if fehl <= TOLERANZ:
+                    break
+                kurs = self.m.eur_kurs(w, tag)
+                frei = self.portfolio.verfuegbar_eur(w, kurs)
+                betrag = min(fehl + self.kosten.tauschkosten_eur(w, fehl * kurs, kurs), frei)
+                kosten = self.kosten.tauschkosten_eur(w, betrag * kurs, kurs)
+                if betrag - kosten > TOLERANZ:
+                    self._tauschen(tag, w, "EUR", betrag, kosten)
+                    fehl -= betrag - kosten
+        zahlung = min(self.steuerschuld, max(self.portfolio.cash, 0.0))
+        if zahlung > TOLERANZ:
+            self.portfolio.cash -= zahlung
+            self.steuerschuld -= zahlung
+            self.steuerzahlungen.append({"datum": tag, "betrag": zahlung})
 
     def _verwerfen(self, tag, ticker, richtung, stueck, grund):
         self.verworfen.append({"datum": tag, "ticker": ticker, "richtung": richtung, "stueck": stueck, "grund": grund})
@@ -324,6 +376,9 @@ class _Lauf:
                 kerze = self.m.kerze(t, tag)
                 gehalten_wert += s_h * (float(kerze["open"]) if kerze is not None and kerze["open"] > 0 else float(schluss_vortag.get(t, 0.0)))
         gesamtwert = self.portfolio.kasse_eur(self.eur_kurse(tag)) + sum(s * bewertung[t] for t, s in bestand.items()) + gehalten_wert
+        # Offene Steuerschuld: Verkäufe gegen den Wert ohne Abzug (kein Zwangsverkauf), Käufe gegen Wert minus Schuld
+        schuld = self.steuerschuld if self.aus_kasse else 0.0
+        wert_fuer_kaeufe = max(gesamtwert - schuld, 0.0)
 
         plan = {}
         for ticker in betroffen:
@@ -332,8 +387,10 @@ class _Lauf:
                 if abs(zielwert - bestand.get(ticker, 0.0) * bewertung.get(ticker, 0.0)) > 0.005 * gesamtwert:
                     self._verwerfen(tag, ticker, 0, 0, "kein Handel an diesem Tag")
                 continue
-            ziel_stueck = zielwert / eroeffnung[ticker]
-            plan[ticker] = ziel_stueck - bestand.get(ticker, 0.0)
+            delta = zielwert / eroeffnung[ticker] - bestand.get(ticker, 0.0)
+            if delta > TOLERANZ and schuld > TOLERANZ:
+                delta = max(float(ziel.get(ticker, 0.0)) * wert_fuer_kaeufe / eroeffnung[ticker] - bestand.get(ticker, 0.0), 0.0)
+            plan[ticker] = delta
 
         # Verkäufe zuerst, damit Cash für Käufe frei wird
         for ticker, delta in sorted(plan.items(), key=lambda x: x[1]):
@@ -345,6 +402,7 @@ class _Lauf:
             if stueck > TOLERANZ:
                 self._verkaufen(tag, ticker, min(stueck, vorhanden), eroeffnung[ticker], schluss_vortag.get(ticker))
 
+        self.steuerschuld_tilgen(tag, tauschen=True)   # Verkaufserlöse tilgen zuerst die Steuerschuld
         # Käufe, größte Lücke zuerst
         kaeufe = sorted(((t, d) for t, d in plan.items() if d > TOLERANZ), key=lambda x: -x[1] * eroeffnung[x[0]])
         self.tausch_fuer_kaeufe(tag, [(t, d, eroeffnung[t]) for t, d in kaeufe])
@@ -450,8 +508,10 @@ def simuliere(
 
     Steuern: Teilportfolios derselben Steuergruppe teilen Pauschbetrag und Verlusttöpfe (ein Depot). Die
     Jahressteuer fließt am letzten Handelstag des Jahres als eigener Abfluss ab, ohne Zwangsverkauf
-    (Entscheidung 01.11.2026); sie wird den Teilportfolios nach ihrem positiven steuerpflichtigen Beitrag
-    zugeordnet. `meta` enthält zusätzlich den Wert nach fiktivem Verkauf am Ende und dessen Steuer.
+    (Entscheidung 01.11.2026), und zwar aus der Kasse (Korrektur 16.11.2026, siehe Modulkopf und
+    docs/berichte/2026-11-16_steuer_aus_kasse.md); sie wird den Teilportfolios nach ihrem positiven
+    steuerpflichtigen Beitrag zugeordnet. Deshalb läuft die Tagesschleife über alle Teilportfolios gemeinsam.
+    `meta` enthält zusätzlich den Wert nach fiktivem Verkauf am Ende und dessen Steuer.
     """
     from tradingbot.backtest.tresor import pruefe_kein_betriebsmodus
 
@@ -469,60 +529,83 @@ def simuliere(
     if len(tage) == 0:
         raise ValueError(f"Keine Handelstage zwischen {start} und {ende}")
 
-    laeufe, roh = {}, {}
-    for definition in definitionen:
-        lauf = _Lauf(definition, marktdaten, kosten, regeln, steuern)
-        offen: pd.Series | None = None
-        werte, bestaende = [], []
-        vorher = None
-        einzahlungen = definition.einzahlungen if definition.einzahlungen is not None else pd.Series(dtype=float)
-        for tag in tage:
+    jahre = sorted({t.year for t in tage})
+    zahltag = {j: tage[tage.year == j][-1] for j in jahre}   # letzter simulierter Handelstag je Jahr
+    gruppen = {g: [d.name for d in definitionen if d.steuergruppe == g] for g in sorted({d.steuergruppe for d in definitionen})}
+    pausch = {g: steuern.sparer_pauschbetrag * float(pauschbetrag_anteil.get(g, 1.0)) for g in gruppen}
+    laeufe = {d.name: _Lauf(d, marktdaten, kosten, regeln, steuern) for d in definitionen}
+    offen: dict[str, pd.Series | None] = {d.name: None for d in definitionen}
+    zeilen = {d.name: ([], []) for d in definitionen}
+    zuordnung: dict[str, dict[int, float]] = {n: {} for n in laeufe}
+
+    def gruppen_ereignisse(gruppe, bis):
+        return [e for n in gruppen[gruppe] for e in laeufe[n].steuerereignisse if e.datum <= bis]
+
+    vorher = None
+    for tag in tage:
+        einzahlung_heute = {}
+        for definition in definitionen:
+            lauf = laeufe[definition.name]
             if vorher is not None and tag.year != vorher.year:
                 lauf.jahresende(vorher.year)
-            einzahlung = float(einzahlungen.get(tag, 0.0)) if len(einzahlungen) else 0.0
+            einzahlungen = definition.einzahlungen
+            einzahlung = float(einzahlungen.get(tag, 0.0)) if einzahlungen is not None and len(einzahlungen) else 0.0
+            einzahlung_heute[definition.name] = einzahlung
             if einzahlung:
                 lauf.portfolio.cash += einzahlung                 # Einzahlung am Tagesbeginn (externer Zufluss, kein Ertrag)
             lauf.dividenden_gutschreiben(tag)
             if marktdaten.delistings:
                 lauf.delistings_schliessen(tag)
-            if offen is not None:
-                lauf.ausfuehren(tag, offen)
-                offen = None
-            schluss = marktdaten.schluss.loc[tag]
+            lauf.steuerschuld_tilgen(tag)                         # Zuflüsse tilgen zuerst die Steuerschuld
+            if offen[definition.name] is not None:
+                lauf.ausfuehren(tag, offen[definition.name])
+                offen[definition.name] = None
+
+        # Jahressteuer je Steuergruppe am letzten Handelstag des Jahres, nach dem Handel und vor der Bewertung
+        steuer_heute = {n: 0.0 for n in laeufe}
+        if tag == zahltag[tag.year]:
+            for gruppe, namen in gruppen.items():
+                tabelle = berechne_jahressteuer(gruppen_ereignisse(gruppe, tag), steuern, pauschbetrag=pausch[gruppe],
+                                                jahre=[j for j in jahre if j <= tag.year])
+                steuer = float(tabelle.loc[tag.year, "steuer"])
+                beitraege = {n: max(sum(steuerpflichtiger_beitrag(e, steuern) for e in laeufe[n].steuerereignisse
+                                        if e.datum.year == tag.year and e.datum <= tag), 0.0) for n in namen}
+                gesamt = sum(beitraege.values())
+                for n in namen:
+                    zuordnung[n][tag.year] = steuer_heute[n] = steuer * beitraege[n] / gesamt if gesamt > 0 else 0.0
+                    if steuer_heute[n] > 0:
+                        laeufe[n].steuer_festsetzen(tag, steuer_heute[n])
+
+        schluss = marktdaten.schluss.loc[tag]
+        for definition in definitionen:
+            lauf = laeufe[definition.name]
             kurse_fx = lauf.eur_kurse(tag)
             kasse = lauf.portfolio.kasse_eur(kurse_fx)
-            werte.append({"datum": tag, "wert": lauf.portfolio.wert(schluss, kurse_fx), "cash": kasse, "einzahlung": einzahlung})
-            bestaende.append({"datum": tag, **lauf.portfolio.bestand()})
+            depot = lauf.portfolio.wert(schluss, kurse_fx)
+            zeilen[definition.name][0].append({
+                "datum": tag, "wert": depot - lauf.steuerschuld + lauf.steuern_festgesetzt, "cash": kasse,
+                "einzahlung": einzahlung_heute[definition.name], "steuer": steuer_heute[definition.name],
+                "steuern_kumuliert": lauf.steuern_festgesetzt, "steuerschuld": lauf.steuerschuld,
+                "wert_nach_steuern": depot - lauf.steuerschuld})
+            zeilen[definition.name][1].append({"datum": tag, **lauf.portfolio.bestand()})
             ziel = definition.strategie.zielgewichte(tag, Sicht(marktdaten, tag, lauf.portfolio.bestand(), kasse))
             if ziel is not None:
-                offen = pd.Series(ziel, dtype=float)
-            vorher = tag
-        laeufe[definition.name] = lauf
-        roh[definition.name] = (pd.DataFrame(werte).set_index("datum"), pd.DataFrame(bestaende).set_index("datum").fillna(0.0))
+                offen[definition.name] = pd.Series(ziel, dtype=float)
+        vorher = tag
+    roh = {n: (pd.DataFrame(w).set_index("datum"), pd.DataFrame(b).set_index("datum").fillna(0.0)) for n, (w, b) in zeilen.items()}
 
-    # --- Steuern je Steuergruppe -----------------------------------------------------------------
-    jahre = sorted({t.year for t in tage})
-    zahltag = {j: tage[tage.year == j][-1] for j in jahre}   # letzter simulierter Handelstag je Jahr
-    zuordnung: dict[str, dict[int, float]] = {n: {} for n in laeufe}
+    # --- Steuertabellen je Steuergruppe und fiktiver Verkauf am Ende ----------------------------------
     liquidation: dict[str, dict] = {}
     gruppen_tabellen: dict[str, pd.DataFrame] = {}
-    for gruppe in sorted({d.steuergruppe for d in definitionen}):
-        namen = [d.name for d in definitionen if d.steuergruppe == gruppe]
-        pausch = steuern.sparer_pauschbetrag * float(pauschbetrag_anteil.get(gruppe, 1.0))
-        ereignisse = [e for n in namen for e in laeufe[n].steuerereignisse if e.datum <= tage[-1]]
-        tabelle = berechne_jahressteuer(ereignisse, steuern, pauschbetrag=pausch, jahre=jahre)
+    for gruppe, namen in gruppen.items():
+        ereignisse = gruppen_ereignisse(gruppe, tage[-1])
+        tabelle = berechne_jahressteuer(ereignisse, steuern, pauschbetrag=pausch[gruppe], jahre=jahre)
         gruppen_tabellen[gruppe] = tabelle
-        for jahr, steuer in tabelle["steuer"].items():
-            beitraege = {n: max(sum(steuerpflichtiger_beitrag(e, steuern) for e in laeufe[n].steuerereignisse
-                                    if e.datum.year == jahr and e.datum <= tage[-1]), 0.0) for n in namen}
-            gesamt = sum(beitraege.values())
-            for n in namen:
-                zuordnung[n][jahr] = steuer * beitraege[n] / gesamt if gesamt > 0 else 0.0
 
         # Fiktiver Verkauf am Ende: Mehrsteuer des letzten Jahres durch die Liquidationsgewinne
         liq = {n: laeufe[n].liquidation(tage[-1]) for n in namen}
         liq_ereignisse = [e for n in namen for e in liq[n][1]]
-        mit_liq = berechne_jahressteuer(ereignisse + liq_ereignisse, steuern, pauschbetrag=pausch, jahre=jahre)
+        mit_liq = berechne_jahressteuer(ereignisse + liq_ereignisse, steuern, pauschbetrag=pausch[gruppe], jahre=jahre)
         mehrsteuer = float(mit_liq["steuer"].iloc[-1] - tabelle["steuer"].iloc[-1])
         liq_beitraege = {n: max(sum(steuerpflichtiger_beitrag(e, steuern) for e in liq[n][1]), 0.0) for n in namen}
         liq_gesamt = sum(liq_beitraege.values())
@@ -535,10 +618,7 @@ def simuliere(
         n = definition.name
         lauf = laeufe[n]
         werte, bestaende = roh[n]
-        zahlungen = pd.Series({zahltag[j]: s for j, s in zuordnung[n].items() if j in zahltag}, dtype=float)
-        werte["steuern_kumuliert"] = zahlungen.reindex(werte.index).fillna(0.0).cumsum()
-        werte["wert_nach_steuern"] = werte["wert"] - werte["steuern_kumuliert"]
-        steuern_gezahlt = float(werte["steuern_kumuliert"].iloc[-1])
+        steuern_gezahlt = float(lauf.steuern_festgesetzt)   # festgesetzte Jahressteuern (inklusive offener Steuerschuld)
         ergebnisse[n] = Ergebnis(
             name=n,
             strategie=definition.strategie.name,
@@ -558,9 +638,10 @@ def simuliere(
                   "vetos": pd.DataFrame(lauf.vetos, columns=["datum", "ticker", "richtung", "stueck", "gruende"]),
                   "risk_geprueft": lauf.risk_geprueft,
                   "art": definition.art, "steuergruppe": definition.steuergruppe, "rolle": definition.rolle, "kosten": kosten, "regeln": regeln,
-                  "steuern_gezahlt": steuern_gezahlt,
+                  "steuern_gezahlt": steuern_gezahlt, "steuerschuld_ende": float(lauf.steuerschuld), "steuerzahlung": steuern.zahlung,
+                  "steuerzahlungen": pd.DataFrame(lauf.steuerzahlungen, columns=["datum", "betrag"]),
                   "liquidationswert": liquidation[n]["liquidationswert"],
                   "liquidationssteuer": liquidation[n]["liquidationssteuer"],
-                  "wert_nach_liquidation_und_steuern": liquidation[n]["liquidationswert"] - steuern_gezahlt - liquidation[n]["liquidationssteuer"]},
+                  "wert_nach_liquidation_und_steuern": liquidation[n]["liquidationswert"] - float(lauf.steuerschuld) - liquidation[n]["liquidationssteuer"]},
         )
     return ergebnisse

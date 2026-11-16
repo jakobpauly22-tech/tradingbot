@@ -291,9 +291,17 @@ def bericht_markdown(lauf: Lauf) -> str:
                 f"{g} ({c})" for g, c in e.verworfen.grund.str.replace(r"[\d.,]+ €", "x €", regex=True).value_counts().items())]
         z.append("")
 
+    zahlungen = {e.meta.get("steuerzahlung") for e in lauf.ergebnisse.values()}
+    if zahlungen == {"jahresende_nur_wertreihe"}:
+        abfluss = ("**Vergleichsmodus, nicht gewertet:** Steuer mindert nur die Wertreihe, die Kasse bleibt unberührt "
+                   "(Rechenweg bis 15.11.2026, `steuern.zahlung: jahresende_nur_wertreihe`).")
+    else:
+        abfluss = ("Abfluss am letzten Handelstag des Jahres aus der Kasse, ohne Zwangsverkauf; reicht die Kasse nicht, bleibt eine "
+                   "zinslose Steuerschuld, und spätere Käufe werden kleiner (Korrektur 16.11.2026). „Vor Steuern“ = Wert nach Steuern "
+                   "plus festgesetzte Steuern.")
     z += ["## Annahmen", "",
           "- Signal zum Schlusskurs, Ausführung zur Eröffnung des nächsten Handelstags; ganze Stücke; Kosten laut `config/backtest.yaml`.",
-          "- Steuern nach heutigem Recht für alle Jahre (siehe `src/tradingbot/backtest/steuern.py`), Abfluss am Jahresende ohne Zwangsverkauf.",
+          "- Steuern nach heutigem Recht für alle Jahre (siehe `src/tradingbot/backtest/steuern.py`). " + abfluss,
           "- Benchmark-Zwilling: Buy & Hold des Hauptbenchmarks mit gleichem Kapital, gleichen Kosten und Steuerregeln.",
           "- Datenstand je Ticker und vollständige Konfiguration liegen in `meta.json` und `config/` neben diesem Bericht.", ""]
     return "\n".join(z)

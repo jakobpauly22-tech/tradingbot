@@ -36,7 +36,11 @@ steuern:
   sparer_pauschbetrag: 1000.0 # steht vollständig dem Bot zu
   teilfreistellung: {aktienfonds: 0.30, mischfonds: 0.15, sonstiger_fonds: 0.0}
   quellensteuer: {USD: 0.15}  # US-Dividenden mit W-8BEN
-  zahlung: jahresende_abfluss # Steuer als eigener Abfluss am Jahresende, kein Zwangsverkauf
+  # Steuer als eigener Abfluss am letzten Handelstag des Jahres, kein Zwangsverkauf (01.11.2026). Korrektur 16.11.2026
+  # (docs/berichte/2026-11-16_steuer_aus_kasse.md): Der Abfluss kommt aus der Kasse; reicht sie nicht, bleibt eine
+  # Steuerschuld, und spätere Käufe werden kleiner. `jahresende_nur_wertreihe` ist der Rechenweg bis 15.11.2026 und
+  # nur noch Vergleichsmodus, nie gewertet.
+  zahlung: jahresende_aus_kasse
   # Steuergruppen teilen Pauschbetrag und Verlusttöpfe. Das echte Depot (Core plus ggf. echter Satellite) ist
   # eine Gruppe und bekommt den vollen Pauschbetrag (Jakob hat keine anderen nennenswerten Kapitalerträge).
   # Der Schatten-Satellite bekommt keinen Pauschbetrag (den nutzt im echten Depot der Core), damit er nicht

@@ -96,7 +96,8 @@ def main() -> int:
     zeilen, twr = [], {}
     for name, x, e in (("Realbuch", r, e_r), ("Zwilling", z, e_z)):
         for ebene, w in ebenen(x).items():
-            t = zeitgewichtete_rendite(w, e)
+            # vor Steuern: Steuerzahlungen zählen als Auszahlung (Jakob 16.11.2026); sonst mindert die Steuer die Rendite
+            t = x.twr_vor_steuern if ebene == "vor Steuern" else zeitgewichtete_rendite(w, e)
             twr[(name, ebene)] = t
             k = kennzahlen(t, None, rf)
             zahl = pd.concat([pd.Series({start: -float(p["start_eur"])}), -e[e > 0], pd.Series({w.index[-1]: float(w.iloc[-1])})])

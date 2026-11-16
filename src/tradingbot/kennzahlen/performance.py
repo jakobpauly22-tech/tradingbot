@@ -248,16 +248,19 @@ def kennzahlen(werte: pd.Series, benchmark: pd.Series | None = None, rf_tag: pd.
     return ergebnis
 
 
-def zeitgewichtete_rendite(werte: pd.Series, einzahlungen: pd.Series | None = None) -> pd.Series:
-    """Zeitgewichtete Rendite (TWR) als Index (Start 1,0): Einzahlungen verzerren die Rendite nicht.
+def zeitgewichtete_rendite(werte: pd.Series, einzahlungen: pd.Series | None = None,
+                           auszahlungen: pd.Series | None = None) -> pd.Series:
+    """Zeitgewichtete Rendite (TWR) als Index (Start 1,0): Ein- und Auszahlungen verzerren die Rendite nicht.
 
-    Formel: r_t = (V_t − E_t) / V_{t−1} − 1,  TWR-Index_t = Π_{s ≤ t} (1 + r_s)
-    V_t = Depotwert am Ende von Tag t, E_t = Einzahlung am Tagesbeginn von Tag t (externer Zufluss).
+    Formel: r_t = (V_t + A_t − E_t) / V_{t−1} − 1,  TWR-Index_t = Π_{s ≤ t} (1 + r_s)
+    V_t = Depotwert am Ende von Tag t, E_t = Einzahlung am Tagesbeginn von Tag t (externer Zufluss),
+    A_t = Auszahlung am Ende von Tag t, in V_t schon abgezogen (z.B. Steuerabfluss; TWR vor Steuern, Jakob 16.11.2026).
     Quelle: Performance-Messung mit Ein- und Auszahlungen bei täglicher Bewertung, vgl. wissen/02 (Rendite und Risiko);
     Gegenstück zur geldgewichteten Rendite (`xirr`).
     """
     e = (einzahlungen if einzahlungen is not None else pd.Series(0.0, index=werte.index)).reindex(werte.index).fillna(0.0)
-    r = (werte - e) / werte.shift(1) - 1
+    a = (auszahlungen if auszahlungen is not None else pd.Series(0.0, index=werte.index)).reindex(werte.index).fillna(0.0)
+    r = (werte + a - e) / werte.shift(1) - 1
     return (1 + r.fillna(0.0)).cumprod()
 
 
