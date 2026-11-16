@@ -735,6 +735,55 @@ mit bereinigten Kursen den verdeckten Faktor H; sie wird deshalb ebenfalls auf R
   `marktwert_korrektur=True` auf; mit `--c3` ist die Korrektur aus Teil b im Index-Nachbau eingeschaltet.
 - Kappungen DD/DISCK/BMS, SIVB und CSC wirken in `lade_firmendaten` immer (ohne Schalter).
 
+### c3-Absicherung nach der unabhängigen Prüfung: Befunde 10, 11, 14 (Jakob 16.11.2026, festgehalten 16.11.2026 11:21 vor Umsetzung und Lauf)
+
+Anlass: `docs/berichte/2026-11-16_unabhaengige_pruefung.md`, Befunde 10, 11 und 14. Freigegeben von Jakob am 16.11.2026
+(Befund 10 mit ±1 Handelstag und ±1 %, Befund 11 Variante B, Befund 14 harte Sperre). Festgehalten, bevor eine Abnahme mit
+dem neuen Kriterium gelaufen ist; das Kriterium wird danach nicht geändert.
+
+**Befund 10: zweites Abnahmekriterium „Splitspalte“** (nur Yahoo-Reihen mit Tiingo-Rohreihe; bei Tiingo-Reihen stammen
+Rohreihe und Vergleichsreihe aus derselben Quelle, das Kriterium entfällt dort).
+
+- Grund: Die erste Abnahme vergleicht den Rohkurs mit der Yahoo-Reihe und deren Faktoren. Gerechnet wird danach mit den
+  **Tiingo-Splitfaktoren** (Marktwert und Prüfung der Streubesitzwerte). Fehlt bei Tiingo ein Split oder steht er an
+  einem anderen Tag, ist die Aktienzahl um den Faktor falsch; die erste Abnahme sieht das nicht.
+- Ereignisse: Split-Einträge (Faktor ≠ 1) beider Reihen ab 01.01.2011 bis zur Tresorgrenze. Paarung eines Yahoo-Ereignisses
+  mit einem Tiingo-Ereignis, wenn das Tiingo-Datum höchstens **1 Handelstag** (der Yahoo-Reihe) vom Yahoo-Datum abweicht;
+  jedes Ereignis höchstens einmal gepaart. Einordnung aus `config/kapitalmassnahmen_historie.yaml` über die CIKs der
+  Universumszeilen, die die Reihe nutzen, am Datum des Yahoo-Ereignisses (±1 Handelstag).
+- Je Yahoo-Ereignis, nach der Art in der Liste:
+
+  | Art in der Liste | Erwartung an Tiingo | sonst |
+  | --- | --- | --- |
+  | split | Partner mit Faktor innerhalb **±1 %** des Yahoo-Faktors | nicht bestanden |
+  | kombiniert | Partner mit Faktor innerhalb ±1 % des geprüften `split_faktor` | nicht bestanden |
+  | abspaltung, nicht_zugehoerig | kein Partner (Aktienzahl ändert sich nicht) | nicht bestanden |
+  | unklar | – | immer nicht bestanden (nicht eingeordnet) |
+  | nicht in der Liste | Partner mit Faktor innerhalb ±1 % des Yahoo-Faktors (beide Quellen führen denselben Split) | nicht bestanden |
+
+- Jedes Tiingo-Ereignis ohne Yahoo-Partner: nicht bestanden.
+- Warum auch ein Tiingo-Faktor an einem Abspaltungstag scheitert, obwohl die Marktwert-Formel ihn über K(d, T) mit s_e = 1
+  neutralisiert: Die Prüfung der Streubesitzwerte rechnet ohne K (Befund 12), und K greift nur bei gleichem Datum. Eine
+  strenge Regel ist einfacher zu prüfen; der Rückfall auf Teil b ist für Firmen ohne verdeckten Faktor unschädlich.
+- Gesamturteil der Reihe: bestanden nur, wenn erstes Kriterium (Rohkurs gegen Yahoo, unverändert) **und** Splitspalte
+  bestanden sind. Gründe stehen getrennt in `abnahme.csv` (Spalte `split_abgleich`) und im Abnahmebericht. Nicht bestanden
+  heißt wie bisher: Rückfall auf Teil b, gemeldet und gezählt; die Fehlerschwelle (5 %) zählt beide Kriterien zusammen.
+
+**Befund 11: Rückfall auf Teil b sichtbar machen, Variante B.**
+
+- Firmen, deren Reihe die Abnahme nicht besteht **und** deren H-Schätzung um mehr als 0,5 % von 1 abweicht (|H − 1| > 0,005),
+  bekommen **keinen Marktwert** (Teil b enthielte den verdeckten Faktor, der Wert kann um den Faktor falsch sein; ein
+  fehlender Wert ist besser als ein falscher). Sie fallen bei den Multiples heraus und werden gezählt, Grund
+  „Abnahme nicht bestanden, H ≠ 1“. Ohne H-Schätzung (keine gemeinsamen Tage, Rohreihe fehlt) bleibt Teil b.
+- Im Index-Nachbau (Gewichte, Prüfung der Streubesitzwerte) bleibt für diese Firmen Teil b, mit Meldung.
+- Bericht (Scores, Gegenprobe, Backtest A): Liste der Firmen mit Rückfall auf Teil b mit Reihe, Grund, H-Schätzung, Zahl der
+  Firmen-Stichtage und Gewicht (Scores: Firmen-Stichtage und betroffene Marktwerte; Gegenprobe: mittleres Gewicht im
+  Nachbau; Backtest A: Zahl der Haltetage im Buch).
+
+**Befund 14: harte Sperre.** `sperre_c3()` sperrt zusätzlich, wenn in `abnahme.csv` mehr als 5 % der Reihen mit Rohreihe
+nicht bestanden haben (dieselbe Schwelle wie die Fehlerschwelle der Abnahme). Damit starten die c3-Werkzeuge nach einer
+überschrittenen Schwelle auch technisch nicht; `--probe` bleibt möglich und zählt nie als c3.
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt
