@@ -816,6 +816,13 @@ bei Rohreihen, sonst Yahoo; K aus der Liste, Abspaltung s = 1). Das gilt für Ro
   (Grund „Abnahme nicht bestanden, H ≠ 1“). Rückfall-Listen: Scores-Bericht, Gegenprobe mit `--c3` (Gewicht im Nachbau,
   `sp500_nachbau.rueckfall_gewichte`), Backtest-Bericht (Stichtage und Haltetage im Buch).
 - Tests: `tests/daten/test_c3_absicherung.py`.
+- Befund 12: `sp500_nachbau.aktienkorrektur` und `streubesitz_pruefen(..., korrektur_aktien)`, nur mit
+  `lade_firmendaten(rohkurse=True)`.
+
+**Abnahme, zweiter Lauf (16.11.2026 12:47, nach der Änderung):** 18 von 563 Reihen nicht bestanden (3,2 %), Fehlerschwelle
+nicht überschritten, c3 nicht gesperrt (offen bleiben nur die 158 Reihen zum Nachladen). 26 Reihen bestehen mit einem
+Tiingo-Faktor an einer Abspaltung der Liste (Hinweis). Ohne Marktwert nach Variante B: MTCH, DD. Ursache je Reihe:
+`docs/berichte/2026-11-16_1247_rohkurse_abnahme.md`.
 
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
