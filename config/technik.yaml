@@ -49,6 +49,8 @@ universum:
     - {ticker: 4GLD.DE, entscheidung: "Ersatz für 8PSG (fehlerhafte Yahoo-Kurse). Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % bzw. 0,45 %) unverändert übernommen, im Bericht als offen markiert (Claude)", datum: 2026-11-02}
     - {ticker: EUNH.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-02}
     - {ticker: EUN5.DE, entscheidung: "auffällige Tage im Juni 2012 durch den Vortagesschluss ersetzt (Korrektur siehe korrekturen)", datum: 2026-11-02}
+    # Jakob 16.11.2026 (Befund 3, Technik-Nachrechnung): IUSM ersetzt seit 04.11. SXRM; erster gewerteter Lauf mit IUSM.
+    - {ticker: IUSM.DE, entscheidung: "13.06.2012 (Eröffnung = Hoch = Tief = 160,23, Schluss 158,98) unverändert übernommen wie Xetra-Gold; Begründung: Tag liegt nur im nicht gewerteten Vorlauf (Wirkung höchstens über SMA200 bis Anfang 2013)", datum: 2026-11-16}
   # Dokumentierte Korrekturen (Jakob 02.11.2026): alle Preise des Tages = Schlusskurs des Vortags. Wirkung über
   # SMA200 bis Anfang 2013 (Beginn des gewerteten Zeitraums).
   korrekturen:

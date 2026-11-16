@@ -52,6 +52,15 @@ def korrigiere(kurse: pd.DataFrame, korrekturen: list[dict]) -> tuple[pd.DataFra
     return k, protokoll
 
 
+def vergleichspaare(vorher: pd.DataFrame, jetzt: pd.DataFrame, art: str = "nach Kosten") -> list[tuple]:
+    """Paare (Zeile vorher, Zeile jetzt) je Variante und Abschnitt, nur Zeilen derselben Art. Bis 16.11.2026 fehlte der
+    Filter auf der alten Seite; dann standen „ohne Kosten“-Zeilen von vorher neben „nach Kosten“ von jetzt."""
+    if "art" in vorher.columns:
+        vorher = vorher[vorher.art == art]
+    j = jetzt[jetzt.art == art].set_index(["variante", "abschnitt"])
+    return [(r, j.loc[(r.variante, r.abschnitt)]) for r in vorher.itertuples() if (r.variante, r.abschnitt) in j.index]
+
+
 def plausibilitaet_ersatzquelle(original: str, ersatz_eur: pd.DataFrame, von, bis) -> dict:
     """Median der Abweichung |Ersatz / Original − 1| an Tagen mit Umsatz im Original, beide Reihen in EUR."""
     orig = lade_kurse_eur(original, von, bis)
@@ -274,8 +283,11 @@ def main() -> int:
                     "Die Prüfung rechnet vor Steuern (Total-Return-Index, Dividenden reinvestiert, ohne Steuern und Kosten). Im Backtest "
                     "gehen die Dividenden als Zahlung in die Kasse und werden als Aktienfonds versteuert (Teilfreistellung 30 %).")
     text += ["- Xetra-Gold: Zwei Tage (26. und 29.06.2017) mit Schluss über dem Tageshoch (0,14 % und 0,45 %) unverändert "
-             "(Entscheidung Jakob 02.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul).", "",
-             "## Entscheidungsbaum (docs/TECHNIK.md)", "",
+             "(Entscheidung Jakob 02.11.2026). Steuer konservativ mit Abgeltungsteuer (§ 23 EStG offen im Steuermodul)."]
+    if "IUSM.DE" in freigaben:
+        text.append(f"- IUSM (Ersatz für SXRM seit 04.11.2026, erster gewerteter Lauf mit IUSM): {freigaben['IUSM.DE']['entscheidung']} "
+                    f"(Entscheidung Jakob {freigaben['IUSM.DE']['datum']}).")
+    text += ["", "## Entscheidungsbaum (docs/TECHNIK.md)", "",
              "| Variante | Sharpe ≥ B&H ohne Kosten in beiden Hälften | Kriterien nach Kosten bestanden |", "| --- | --- | --- |"]
     text += [f"| {n} | {ok(ohne_kosten_sharpe[n])} | {ok(bewertung[n])} |" for n in VARIANTEN]
     text += ["", f"**Zweig {zweig}):** " + ("Weder Crossover noch Momentum erreichen ohne Kosten den Sharpe von Buy & Hold in beiden Hälften: "
@@ -318,14 +330,10 @@ def main() -> int:
         text.append(f"| {etf} | " + " | ".join(zellen) + " |")
     text += ["", "In Klammern: Zahl der Käufe."]
     if a.vergleich:
-        vorher = pd.read_csv(a.vergleich)
         text += ["", f"## Vergleich mit dem früheren Lauf (`{a.vergleich}`), nach Kosten", "",
                  "| Variante | Abschnitt | Rendite p.a. vorher | jetzt | Sharpe vorher | jetzt | max. DD vorher | jetzt |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
-        jetzt = t[t.art == "nach Kosten"].set_index(["variante", "abschnitt"])
-        for r in vorher.itertuples():
-            if (r.variante, r.abschnitt) in jetzt.index:
-                j = jetzt.loc[(r.variante, r.abschnitt)]
-                text.append(f"| {r.variante} | {r.abschnitt} | {pz(r.cagr)} | {pz(j['cagr'])} | {zahl(r.sharpe)} | {zahl(j['sharpe'])} | {pz(r.max_dd)} | {pz(j['max_dd'])} |")
+        for r, j in vergleichspaare(pd.read_csv(a.vergleich), t):
+            text.append(f"| {r.variante} | {r.abschnitt} | {pz(r.cagr)} | {pz(j['cagr'])} | {zahl(r.sharpe)} | {zahl(j['sharpe'])} | {pz(r.max_dd)} | {pz(j['max_dd'])} |")
     text += ["", "Ablage der Läufe: " + ", ".join(f"`{l.pfad.relative_to(PROJEKT_WURZEL)}`" for l in [*laeufe.values(), lauf_bh] if l.pfad)]
     bericht = "\n".join(text)
     ordner = PROJEKT_WURZEL / "docs" / "berichte"

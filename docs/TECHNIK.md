@@ -60,3 +60,10 @@ sie bleiben als mögliche Risikosignale für den Gesamt-Score erhalten.
 Für künftige Läufe (Jakob, 02.11.2026): Buy & Hold mit Bruchstücken und voll investiert (strengere Messlatte). Der Lauf
 2026-11-02_2004 rechnete Buy & Hold kostenfrei, aber mit ganzen Stücken; kein Neulauf, weil der Sharpe-Vergleich davon kaum
 abhängt. Kosten werden im Bericht nach Gebühr, Spread und Slippage sowie Währungstausch aufgeschlüsselt.
+
+## Nachrechnung nach Befund 3 (16.11.2026): Steuer aus der Kasse
+
+Erster Technik-Lauf mit IUSM statt SXRM (IUSM.DE 13.06.2012 unverändert freigegeben, nur Vorlauf; Jakob 16.11.2026).
+Der Lauf dokumentiert nur die Wirkung von Befund 3; kein Kriterium kippt, der Entscheidungsbaum bleibt bei Zweig a), die
+Entscheidung vom 02.11.2026 bleibt. Zahlen alt gegen neu: `docs/berichte/2026-11-16_steuer_aus_kasse.md`, Abschnitt
+Technik.

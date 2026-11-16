@@ -103,10 +103,17 @@ Anlass „Korrektur der Simulation: Steuer aus der Kasse (Befund 3)“, keine ne
 | 2 | max. Drawdown V1 / Kaufen und Halten | −18,18 % / −34,71 % | −17,15 % / −34,71 % |
 | 2 | Kriterien a / b / c | nein / **ja** / ja | nein / **nein** / ja |
 
-- **Kriterium b in Hälfte 2 kippt von „ja“ auf „nein“:** V1 0,629 gegen Mischung 0,632; vorher 0,643 gegen 0,641.
-  Beide Reihen verlieren an Sharpe, V1 mehr. Das ist laut Zusage zu melden und mit Jakob zu besprechen.
-- **Urteil:** Das Urteil „V1 nicht bestanden“ (`docs/REGIME.md`, 7e) bleibt bestehen und wird nicht geändert. Kriterium
-  a ist in beiden Hälften verfehlt, in Hälfte 1 alle drei; der Kipp ändert daran nichts.
+- **Kriterium b in Hälfte 2 kippt von „ja“ auf „nein“** (von Jakob am 16.11.2026 zur Kenntnis genommen):
+
+  | Hälfte 2, Sharpe | alter Steuerweg | Steuer aus der Kasse |
+  | --- | --- | --- |
+  | V1 | 0,643 | 0,629 |
+  | Mischung | 0,641 | 0,632 |
+  | Kriterium b (V1 ≥ Mischung) | ja | nein |
+
+  Beide Reihen verlieren an Sharpe, V1 mehr.
+- **Urteil:** Kriterium a ist in beiden Hälften verfehlt; das Urteil „V1 nicht bestanden“ (`docs/REGIME.md`, 7e)
+  bleibt deshalb unverändert. In Hälfte 1 sind alle drei Kriterien verfehlt.
 - **Investitionsgrad V1 am 02.01.2024:** vorher 111,6 % des Nachsteuerwerts, jetzt 99,1 %. Das war der Kern von
   Befund 3.
 - **Steuerschuld V1:**
@@ -133,23 +140,57 @@ Beide Steuermodi liefern identische Zahlen (`docs/berichte/2026-11-16_phase2_ges
 - Kriterien unverändert: 1, 3, 4, 5 bestanden; Kriterium 2 verfehlt mit −0,51 Pp. p. a., wie die dokumentierte
   Ausnahme in `docs/PHASE2.md`.
 
-### Technik: nicht gerechnet, Datensperre
+### Technik (beide Steuermodi, gerechnet nach Jakobs Datenfreigabe)
 
-`tools/backtest_technik.py` bricht in beiden Modi vor der Simulation mit der eigenen Datensperre ab (Exit 2), unabhängig
-von Befund 3:
+**Datensperre zuerst.** `tools/backtest_technik.py` brach im ersten Versuch in beiden Modi vor der Simulation mit der
+eigenen Datensperre ab (Exit 2), unabhängig von Befund 3:
 
-- **Befund:** IUSM.DE, 13.06.2012: Eröffnung = Hoch = Tief = 160,23, Schluss 158,98 (außerhalb der Spanne). Für IUSM.DE
-  gibt es keine dokumentierte Freigabe in `config/technik.yaml` (`datenfreigaben`, `korrekturen`).
+- **Befund:** IUSM.DE, 13.06.2012: Eröffnung = Hoch = Tief = 160,23, Schluss 158,98 (außerhalb der Spanne).
 - **Ursache:** IUSM.DE ersetzt seit dem 04.11.2026 SXRM im Satellite-Universum (Commit 9e50ae5, Betrieb). Der
-  gewertete Technik-Backtest wurde seitdem nicht neu gerechnet; die Reihe wurde heute zum ersten Mal für das Werkzeug
-  geladen.
-- **Einordnung:** Der Tag liegt im nicht gewerteten Vorlauf (gewertet ab 02.01.2013) und wirkt nur über Indikatoren
-  wie SMA200. Ähnliche Fälle im Juni 2012 (EUNH, EUN5) wurden am 02.11.2026 mit „Vortagesschluss“ korrigiert.
-- **Offen, Entscheidung bei Jakob:**
-  - Wie IUSM.DE am 13.06.2012 behandelt wird.
-  - Dass die Nachrechnung der erste gewertete Technik-Lauf mit IUSM statt SXRM wäre. Der Vergleich alt gegen neu auf
-    demselben Universum trennt den Steuereffekt trotzdem sauber; die absoluten Zahlen enthalten dann aber auch den
-    Wechsel auf IUSM.
+  gewertete Technik-Backtest wurde seitdem nicht neu gerechnet.
+- **Entscheidung Jakob 16.11.2026:** unverändert übernommen und freigegeben wie Xetra-Gold
+  (`config/technik.yaml`, `datenfreigaben`). Begründung: Der Tag liegt nur im nicht gewerteten Vorlauf (gewertet ab
+  02.01.2013) und wirkt höchstens über Indikatoren wie SMA200.
+
+**Einordnung der Läufe.**
+
+- Dies ist der **erste Technik-Lauf mit IUSM** statt SXRM.
+- Er dokumentiert **nur die Wirkung von Befund 3**. Die Technik-Entscheidung vom 02.11.2026 (Zweig a, `docs/TECHNIK.md`)
+  bleibt bestehen.
+- Gewertet wird nur der Vergleich alt gegen neu auf demselben Universum und demselben Code. Der Abstand zum Lauf vom
+  02.11.2026 mischt den Wechsel auf IUSM mit allen Änderungen an der Simulation seit dem 02.11. und wird hier nicht
+  ausgewertet.
+- Läufe:
+  - alter Steuerweg: Bericht `docs/berichte/2026-11-16_1110_technik_satellite_alter_steuerweg.md`, Kriterien
+    `daten/technik/kriterien_alter_steuerweg.csv`, ohne Ablage und ohne Eintrag in `varianten.csv`;
+  - Steuer aus der Kasse: Bericht `docs/berichte/2026-11-16_1112_technik_satellite.md`, Ablage
+    `daten/backtests/20261116T111112_technik_crossover/` und folgende, in `daten/technik/varianten.csv` mit dem Anlass
+    „Korrektur der Simulation: Steuer aus der Kasse (Befund 3)“, keine neue Variante.
+  - Beide Läufe liefen auf Commit 3c44de0 mit der noch nicht eingecheckten Datenfreigabe für IUSM in
+    `config/technik.yaml`; diese hebt nur die Sperre auf und ändert keine Zahl. Sie ist im Commit nach den Läufen
+    enthalten.
+
+**Ergebnis, nach Kosten, Sharpe und maximaler Drawdown (alter Steuerweg → Steuer aus der Kasse):**
+
+| Variante | Hälfte 1 Sharpe | Hälfte 1 max. DD | Hälfte 2 Sharpe | Hälfte 2 max. DD | Kriterien |
+| --- | --- | --- | --- | --- | --- |
+| Crossover | 0,14 → 0,11 | −20,41 % → −21,56 % | 0,55 → 0,45 | −16,30 % → −16,53 % | unverändert verfehlt |
+| Momentum | 0,18 → 0,18 | −14,30 % → −14,30 % | 0,37 → 0,37 | −17,59 % → −16,82 % | unverändert verfehlt (Sharpe) |
+| Price Channel | −0,70 → −0,70 | −27,96 % → −27,96 % | −0,90 → −0,90 | −32,85 % → −32,85 % | identisch |
+| RSI(2) | −3,35 → −3,35 | −58,57 % → −58,57 % | −2,35 → −2,35 | −3,78 % → −3,78 % | identisch |
+| Regime | −0,03 → −0,03 | −23,40 % → −23,40 % | 0,05 → 0,05 | −24,45 % → −24,45 % | identisch |
+| Buy & Hold (Maßstab) | 0,50 → 0,50 | −15,35 % → −15,27 % | 0,67 → 0,67 | −18,83 % → −18,41 % | – |
+
+- **Kein Kriterium kippt.** Alle fünf Varianten bleiben nach Kosten verfehlt, auch die Zeilen „ohne Kosten“ und der
+  Entscheidungsbaum sind gleich (Zweig a).
+- **Price Channel, RSI(2) und Regime** zahlen im Zeitraum keine laufende Steuer; ihre Zahlen sind in beiden Modi
+  identisch.
+- **Crossover** verliert am meisten: Sharpe −0,03 bzw. −0,10, Rendite p. a. gesamt 3,16 % → 2,57 %. Die Steuer ist klein
+  (Ende 2015 33 €, danach 1 bis 12 € je Jahr; eine Steuerschuld entsteht nie), aber sie fließt jetzt aus der Kasse.
+  Bei 1.250 € und Stückpreisen bis gut 300 € reicht die Kasse danach öfter nicht mehr für ein ganzes Stück: Die an
+  der 125-€-Regel gescheiterten Käufe steigen von 710 auf 871. Der Pfad wird damit ein anderer. Das ist genau die
+  Wirkung, die der alte Steuerweg verdeckt hat.
+- **Momentum** bleibt fast gleich; Buy & Hold verliert 0,11 Pp. Rendite p. a. (5,26 % → 5,14 %) bei gleichem Sharpe.
 
 ### Fundamental A
 
