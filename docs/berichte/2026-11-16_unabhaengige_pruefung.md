@@ -292,3 +292,16 @@ die zugehörigen Stellen in `betrieb/tageslauf.py`.
 - **Befund:** Risk-Manager, Senderiegel und Adapter sind untereinander stimmig (Limit nur im Buch „regime“ erlaubt und
   dort verlangt, höchstens 2 % unter dem letzten Kurs). Der Weg ist aber erst beim ersten Wechsel auf „Risiko aus“
   im echten Betrieb zu sehen; bis dahin ist er nur durch Tests belegt.
+
+## Stand der Behebung (16.11.2026, nachgetragen)
+
+| Befund | Stand | Commits | Nachweis |
+| --- | --- | --- | --- |
+| 3 | behoben | d1996a9, ca95bc0, f96ee50, d066bf6, 3c44de0, 5e7e851 | `docs/berichte/2026-11-16_steuer_aus_kasse.md` (Regime: Kriterium b Hälfte 2 kippt, Urteil bleibt; Technik und Phase 2 ohne Kipp) |
+| 10, 11, 14 | behoben | 6b61d4c, 0a68654, a3d6439 | Kriterium „Splitspalte“ nach dem ersten Lauf geändert (Jakob); zweiter Abnahmelauf 18 von 563, `docs/berichte/2026-11-16_1247_rohkurse_abnahme.md` |
+| 12 | behoben (nur c3) | a3d6439 | Tests mit Abspaltung zwischen den Messtagen |
+| 13, 15, BMS | behoben | 46acbf7 | EQ_OFFER Weg B auch im Betriebsweg (bis 04.01.2027 nur Anzeige); BMS: Übernahme, 8-K Item 2.01 vom 11.06.2019 |
+| 1, 8, 9 | behoben bzw. protokolliert | eeded02 | `docs/TRESOR_BEKANNT.md`; Einordnungswerkzeug nur bis zur Tresorgrenze; Kopf der Liste korrigiert |
+| 6, 7 | behoben | 6f4712c (Festlegung 7g in `docs/REGIME.md`) | Mit 6f4712c trifft `tools/backtest_regime.py --vergleich-ablage` alle sechs Ablagen vom 16.11.2026 (`20261116T1004*_regime_*`, Werte, Trades, Kriterien) genau; Prüflauf 16.11.2026 ohne Abweichung. |
+| 2, 17, 4, 5 | Plan freigegeben (Jakob 16.11.2026) | – | Umsetzung am 17.11.2026 nach dem Tageslauf |
+| 16, 18 | Hinweise | – | Befund 16: Flex seit 12.11.2026 eingerichtet; Befund 18: erster echter Fall beim nächsten Wechsel auf „Risiko aus“ |
