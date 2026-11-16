@@ -237,8 +237,15 @@ Jeweils erst Plan, dann Code, volle Testsuite vor jedem Commit.
   c3); Befunde 12, 13, 15 und Delisting-Grund BMS.
 - **Tresor (1, 8, 9):** Protokoll über das, was über den Zeitraum ab 2025 bekannt geworden ist; Einordnungswerkzeug auf
   die Tresorgrenze begrenzen; Kopf der Liste korrigieren.
+  - **Hinweis zur Ablage (Jakob 16.11.2026):** eigene Datei `docs/TRESOR_BEKANNT.md`; in `docs/TRESOR_PROTOKOLL.md`
+    nur ein Verweis. Grund: `docs/TRESOR_PROTOKOLL.md` ist die Datei, die `backtest/tresor.py` für die Tresor-Öffnungen
+    selbst anlegt und liest; jede Tabellenzeile mit vier Spalten gilt dort als geöffnete Phase
+    (`backtest/tresor.py:67-75`). Der Verweis darf deshalb keine solche Zeile sein.
 - **Niedrig:** Befunde 6 und 7.
 - **Danach:** die offenen Teile der Prüfung.
+- **Zu den Befunden 16–18 (Jakob 16.11.2026):** Befund 17 gehört zu Befund 2 und wird mit ihm behoben (vor dem
+  30.11.). Zu Befund 16: Die Flex-Abfrage ist seit dem 12.11.2026 eingerichtet.
+- Die Behebung übernimmt eine neue Sitzung; dieser Bericht ist ihre Grundlage.
 
 ## Nachtrag Teil 3 (16.11.2026, nur gelesen): zwei Bücher in SPYI.DE, Verkaufslimit, Abgleich
 
