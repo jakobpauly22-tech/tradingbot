@@ -80,6 +80,9 @@ def argumente(argv=None):
     a.add_argument("--name", default=NAME, help="Name des Laufs (Ordner unter daten/backtests/)")
     a.add_argument("--anlass", default=ANLASS, help="Anlass der Neuberechnung (Spalte in varianten.csv)")
     a.add_argument("--kopie", default="backtest_bericht.md", help="Dateiname der Berichtskopie unter daten/fundamental/")
+    a.add_argument("--auch-alter-steuerweg", action="store_true",
+                   help="zusätzlich die Reihe nach laufenden Steuern mit dem Rechenweg bis 15.11.2026 (Befund 3, nur Vergleich, "
+                        "nie gewertet; Entscheidung Jakob 16.11.2026 für c3)")
     return a.parse_args(argv)
 
 
@@ -157,6 +160,11 @@ def main(argv=None) -> int:
     d_steuer = definition()
     lauf = fuehre_lauf_aus(NAME, [d_steuer], m, start, ende, benchmark_ticker="SPYI.DE", konfig=konfig_bt)
     mit_steuern = lauf.ergebnisse[NAME]
+    alter_weg = None
+    if arg.auch_alter_steuerweg:   # Vergleich: Steuer mindert nur die Wertreihe (ohne Ablage, ohne Wertung)
+        konfig_alt = {**konfig_bt, "steuern": {**konfig_bt["steuern"], "zahlung": "jahresende_nur_wertreihe"}}
+        alter_weg = fuehre_lauf_aus(NAME, [definition()], m, start, ende, benchmark_ticker="SPYI.DE", konfig=konfig_alt,
+                                    ablage=False).ergebnisse[NAME]
     # 2) nach Kosten, vor Steuern (ohne Quellensteuer; Grundlage der Kriterien)
     d_vor = definition()
     vor = simuliere([d_vor], m, start, ende, steuern=Steuerregeln.ohne_steuern(), konfig=konfig_bt)[NAME]
@@ -167,6 +175,8 @@ def main(argv=None) -> int:
     reihen = {
         "Schattenportfolio nach Kosten, vor Steuern": vor.wert,
         "Schattenportfolio nach laufenden Steuern": mit_steuern.wert_nach_steuern,
+        **({"Schattenportfolio nach laufenden Steuern, alter Steuerweg (Vergleich, nicht gewertet)": alter_weg.wert_nach_steuern}
+           if alter_weg is not None else {}),
         "Kontrollportfolio (ohne Kosten, vor Steuern)": kontroll,
         "S&P 500 ohne Finanzwerte (EUR, TR)": sp_ex,
         "S&P 500 (SXR8.DE)": total_return_index(m.kurse["SXR8.DE"]),

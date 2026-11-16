@@ -215,6 +215,10 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
   (`daten/backtests/20261115T1428*_regime_*`) treffen. Weicht er ab, geht das vor der Wertung an Jakob.
 - **Urteil:** Das Urteil „V1 nicht bestanden“ (7e) wird nicht geändert, falls es bestehen bleibt. Kippt ein Kriterium,
   steht das im Bericht und wird mit Jakob besprochen; nichts wird nachjustiert.
+- **Ergebnis (16.11.2026, nach dem Lauf ergänzt):** Der alte Steuerweg trifft die Ablagen genau. Mit Steuer aus der
+  Kasse kippt Kriterium b in Hälfte 2 von „ja“ auf „nein“ (V1 0,629 gegen Mischung 0,632). Alle übrigen Kriterien sind
+  unverändert, das Urteil „V1 nicht bestanden“ bleibt. Der Kipp geht an Jakob. Details in
+  `docs/berichte/2026-11-16_steuer_aus_kasse.md`.
 
 ## 8. Sitzungen
 

@@ -763,7 +763,9 @@ zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrektur
 6. **Benchmark S&P 500 ohne Finanzwerte:** `.venv\Scripts\python tools\nachbau_sp500_ohne_finanzwerte.py --c3`
    (überschreibt den Cache `benchmarks/SP500_ohne_finanzwerte`; Kontrolle `daten/benchmarks/sp500_ohne_finanzwerte.md`).
 7. **Backtest A:** `.venv\Scripts\python tools\backtest_fundamental.py --scores scores_eq_offer_marktwert_roh --name
-   fundamental_schatten_c3 --anlass "Neulauf c3: alle Datenkorrekturen (Jakob)" --kopie backtest_bericht_c3.md`
+   fundamental_schatten_c3 --anlass "Neulauf c3: alle Datenkorrekturen (Jakob)" --kopie backtest_bericht_c3.md
+   --auch-alter-steuerweg` (beide Steuermodi nebeneinander, Befund 3, Jakob 16.11.2026; gewertet wird „Steuer aus der
+   Kasse“; die Kriterien a und b rechnen ohnehin auf dem Lauf vor Steuern, nur die Zeile „nach laufenden Steuern“ ändert sich)
    → `daten/backtests/<Zeitstempel>_fundamental_schatten_c3/`; Eintrag in `daten/fundamental/varianten.csv` als
    Datenkorrektur, keine neue Variante. Vergleich mit dem Lauf vom 13.11.2026 (eq_offer). B: nur Signale und Auswahl wie
    beim Neulauf vom 13.11.2026 (Entscheidung 02.11.2026, kein Kennzahlen-Neulauf).
