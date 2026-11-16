@@ -170,3 +170,23 @@ def test_erstmals_angewendet_einmal_im_journal(tmp_path):
     assert datenkorrektur_vermerken(j, ab, "2027-01-05") == []                  # nur einmal
     assert j.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='datenkorrektur_angewendet'").fetchone()[0] == 1
     assert datenkorrektur_vermerken(j, pd.DataFrame({"symbol": ["X"]}), "2027-01-04") == []   # alte Attrappen ohne Spalte
+
+
+def test_weg_b_abspaltung_zaehlt_nicht_als_split():
+    """Befund 13 (Jakob 16.11.2026): Die Kursreihe führt eine Abspaltung als „Split“ 1,25. Ohne Liste wird der Vorjahreswert
+    damit multipliziert (100 → 125 Mio., „keine neuen Aktien“ trotz Ausgabe); mit der Liste (Abspaltung s = 1) nicht. Ein
+    echter Split der Liste bleibt."""
+    roh = _roh([(BASIC, "2022-01-01", "2022-12-31", 100e6, "2023-02-20", "a22"),
+                (BASIC, "2023-01-01", "2023-12-31", 110e6, "2024-02-20", "a23")])
+    f = az.aktienfakten(roh, DEF)
+    splits = pd.Series([0.0, 1.25], index=pd.to_datetime(["2023-08-31", "2023-09-01"]))
+    abspaltung = pd.DataFrame({"art": ["abspaltung"], "split_faktor": [1.0], "geprueft": [True]}, index=pd.to_datetime(["2023-09-01"]))
+    alt = az.eq_offer_vergleich(f, "2023-12-31", "2022-12-31", "2024-04-01", splits)
+    neu = az.eq_offer_vergleich(f, "2023-12-31", "2022-12-31", "2024-04-01", splits, ereignisse=abspaltung)
+    assert alt["wert_vj"] == pytest.approx(125e6) and alt["wert_t"] <= alt["wert_vj"]          # bisher: „keine neuen Aktien“
+    assert neu["split_faktor"] == pytest.approx(1.0) and neu["wert_vj"] == pytest.approx(100e6) and neu["wert_t"] > neu["wert_vj"]
+    split = abspaltung.assign(art="split", split_faktor=1.25)
+    assert az.eq_offer_vergleich(f, "2023-12-31", "2022-12-31", "2024-04-01", splits, ereignisse=split)["split_faktor"] == pytest.approx(1.25)
+    # über vergleich_fuer_abschluesse (Weg im Betrieb und in den Scores)
+    t = pd.DataFrame({"gewichtete_aktien": [110e6, 100e6]}, index=pd.to_datetime(["2023-12-31", "2022-12-31"]))
+    assert az.vergleich_fuer_abschluesse(t, f, "2024-04-01", splits, ereignisse=abspaltung)["wert_vj"] == pytest.approx(100e6)

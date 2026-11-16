@@ -824,6 +824,19 @@ nicht überschritten, c3 nicht gesperrt (offen bleiben nur die 158 Reihen zum Na
 Tiingo-Faktor an einer Abspaltung der Liste (Hinweis). Ohne Marktwert nach Variante B: MTCH, DD. Ursache je Reihe:
 `docs/berichte/2026-11-16_1247_rohkurse_abnahme.md`.
 
+### c3-Absicherung: Befunde 13, 15 und Delisting-Grund BMS (Jakob 16.11.2026, Plan freigegeben)
+
+- **Befund 13, EQ_OFFER Weg B:** Zwischen den beiden Einreichungen zählen nur echte Splits (Π s_e statt Π f_e; Abspaltung
+  der Liste s = 1, ungeklärte Ereignisse s = f wie bisher). `aktienzahl.eq_offer_vergleich(..., ereignisse=,
+  fakten_quartale=)`. Scores: nur mit der Datenkorrektur Marktwert, also in c3. **Betriebsweg angeglichen:**
+  `engines/fundamental/aktuell.py` nutzt dieselben Ereignisse wie beim Marktwert (Liste, Flex-Splits, automatische
+  Einordnung mit Quartalsfakten). Bis 04.01.2027 ändert das nur die Anzeige (`eq_offer_neu`); danach gilt es für Auswahl
+  und Veto. Weg A unverändert.
+- **Befund 15, CSC:** Fehlt der Ex-Tag einer gebuchten Abspaltung innerhalb der geladenen Reihe, bricht
+  `buche_abspaltungen` laut ab (`DatenkorrekturPasstNicht`, wie SIVB). Außerhalb der geladenen Reihe bleibt sie unverändert.
+- **Delisting-Grund BMS:** geprüft. Nach der Kappung auf den 10.06.2019 (und mit dem alten Ende 28.06.2019) findet die
+  Regel die 8-K Item 2.01 vom 11.06.2019, also „Übernahme“, ohne manuellen Eintrag. Test mit lokalem SEC-Cache.
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt

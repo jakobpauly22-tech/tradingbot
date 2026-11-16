@@ -121,9 +121,10 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                 continue
             mw_alt, _ = marktwert_am(tag, kurse["close"], aktien, daten.streubesitz_gueltig.get(firma))
             # Marktwert: beide Rechnungen immer (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
+            ereignisse_firma = ereignisse_mit_flex(ereignisse.get(firma), kurse, (splits_flex or {}).get(symbol_je_firma.get(firma)))
+            fakten_quartale = lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True)
             mk = marktwert_korrigiert(tag, kurse, a[["wert", "filed"]] if len(a) else None, daten.streubesitz_gueltig.get(firma),
-                                      ereignisse=ereignisse_mit_flex(ereignisse.get(firma), kurse, (splits_flex or {}).get(symbol_je_firma.get(firma))),
-                                      ersatz_fakten=lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True),
+                                      ereignisse=ereignisse_firma, ersatz_fakten=fakten_quartale,
                                       max_alter_monate=max_alter, automatisch_einordnen=True)
             mw = mk["marktwert"] if mw_korrektur else mw_alt
             for u in mk["ungeklaert"]:
@@ -131,7 +132,10 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                                  f"Faktor {u['faktor_kursreihe']:g} ({u['art']}), Kursfaktor bleibt")
             industrie = industrie_von <= sic <= industrie_bis
             # EQ_OFFER: beide Wege immer rechnen (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
-            eq = vergleich_fuer_abschluesse(t, lade_aktienfakten(ciks_der_zeile(zeile), cache=cache), tag, kurse["split"])
+            # Weg B mit Π s_e statt Π f_e (Befund 13, Jakob 16.11.2026): dieselben Ereignisse wie beim Marktwert
+            eq = vergleich_fuer_abschluesse(t, lade_aktienfakten(ciks_der_zeile(zeile), cache=cache), tag, kurse["split"],
+                                            ereignisse=ereignisse_firma,
+                                            fakten_quartale=fakten_quartale)
             eq_alt, eq_neu = signal_alt_neu(t, eq)
             p = piotroski(t, eq_offer=eq if eq_korrektur else None)
             p_korrigiert = p if eq_korrektur else piotroski(t, eq_offer=eq)

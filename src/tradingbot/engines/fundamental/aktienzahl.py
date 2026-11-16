@@ -116,8 +116,14 @@ def split_faktor(splits: pd.Series | None, nach, bis) -> float:
     return float(s.prod()) if len(s) else 1.0
 
 
-def eq_offer_vergleich(fakten: pd.DataFrame, ende_t, ende_vj, stichtag, splits: pd.Series | None = None) -> dict:
+def eq_offer_vergleich(fakten: pd.DataFrame, ende_t, ende_vj, stichtag, splits: pd.Series | None = None, *,
+                       ereignisse: pd.DataFrame | None = None, fakten_quartale: pd.DataFrame | None = None) -> dict:
     """Aktienzahl t und t−1 auf gleicher Split-Basis, wie am Stichtag bekannt (bekannt ab dem Tag nach `filed`).
+
+    Weg B (Befund 13, Jakob 16.11.2026): Mit `ereignisse` (Kapitalmaßnahmen-Liste der Firma) oder `fakten_quartale` zählen zwischen den beiden
+    Einreichungen nur echte Splits: Faktor Π f_e · K = Π s_e (Abspaltung s = 1; ungeklärte Ereignisse s = f wie bisher,
+    mit `fakten_quartale` im Betrieb automatisch eingeordnet). Ohne beides bisherige Rechnung (alle Faktoren der
+    Kursreihe, auch Abspaltungen).
 
     Rückgabe: wert_t, wert_vj (gewählt: Weg A, sonst B), quelle („einreichung“ = A, „split“ = B, None = nichts bekannt),
     wert_vj_erst (Erstmeldung t−1, bisherige Rechnung), wert_vj_einreichung (A), wert_vj_split (B), split_faktor
@@ -146,6 +152,10 @@ def eq_offer_vergleich(fakten: pd.DataFrame, ende_t, ende_vj, stichtag, splits: 
     if zeile_vj is not None:
         splits_bis = None if splits is None else splits[splits.index <= tag]
         faktor = split_faktor(splits_bis, zeile_vj["filed"], zeile_t["filed"])
+        if ereignisse is not None or fakten_quartale is not None:
+            from tradingbot.daten.kapitalmassnahmen_historie import korrektur
+
+            faktor *= korrektur(splits_bis, ereignisse, zeile_vj["filed"], zeile_t["filed"], fakten=fakten_quartale)[0]
         ergebnis.update(split_faktor=faktor, wert_vj_split=float(zeile_vj["wert"]) * faktor)
     if ergebnis["wert_vj_einreichung"] is not None:
         ergebnis.update(wert_vj=ergebnis["wert_vj_einreichung"], quelle="einreichung")
@@ -163,11 +173,12 @@ def korrektur_aktiv(tag, konfig: dict | None = None) -> bool:
     return ab is not None and pd.Timestamp(tag).normalize() >= pd.Timestamp(str(ab))
 
 
-def vergleich_fuer_abschluesse(t: pd.DataFrame, fakten: pd.DataFrame, stichtag, splits: pd.Series | None = None) -> dict | None:
+def vergleich_fuer_abschluesse(t: pd.DataFrame, fakten: pd.DataFrame, stichtag, splits: pd.Series | None = None, *,
+                               ereignisse: pd.DataFrame | None = None, fakten_quartale: pd.DataFrame | None = None) -> dict | None:
     """eq_offer_vergleich für die Jahre t (Zeile 0) und t−1 (Zeile 1) aus kennzahlen.abschluesse_am; None ohne zwei Jahre."""
     if t is None or len(t) < 2:
         return None
-    return eq_offer_vergleich(fakten, t.index[0], t.index[1], stichtag, splits)
+    return eq_offer_vergleich(fakten, t.index[0], t.index[1], stichtag, splits, ereignisse=ereignisse, fakten_quartale=fakten_quartale)
 
 
 def signal_alt_neu(t: pd.DataFrame, eq: dict | None) -> tuple[int | None, int | None]:

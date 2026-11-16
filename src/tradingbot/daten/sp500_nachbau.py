@@ -91,13 +91,21 @@ def buche_abspaltungen(k: pd.DataFrame, eintraege: list) -> pd.DataFrame:
     Damit ist die Gesamtrendite am Ex-Tag (P_t + D_t + D_T − P_{t−1}) / P_{t−1} wie bei einer um f bereinigten Reihe;
     Schlusskurse und Marktwerte bleiben unverändert. Quelle: kennzahlen.rendite.simple_return (wissen/02, Abschnitt 2);
     Kriterien docs/FUNDAMENTAL.md, Teil c1.
+
+    Befund 15 (Jakob 16.11.2026): Liegt der Ex-Tag innerhalb der geladenen Reihe, fehlt aber als Handelstag, bricht die
+    Korrektur laut ab (DatenkorrekturPasstNicht, wie bei SIVB) statt den Eintrag still zu übergehen. Außerhalb der
+    geladenen Reihe (Vorlauf, Tresorgrenze, Kappung) oder am ersten Tag ohne Vortag bleibt die Reihe unverändert.
     """
     k = k.copy()
     if "dividende" not in k.columns:
         k["dividende"] = 0.0
     for e in eintraege:
         tag = pd.Timestamp(str(e["datum"]))
-        if tag not in k.index or k.index.get_loc(tag) == 0:
+        if k.empty or tag < k.index.min() or tag > k.index.max():
+            continue
+        if tag not in k.index:
+            raise DatenkorrekturPasstNicht(f"{e.get('ticker', '?')}: Ex-Tag der Abspaltung {tag.date()} fehlt in der Kursreihe")
+        if k.index.get_loc(tag) == 0:
             continue
         vortag = k["close"].iloc[k.index.get_loc(tag) - 1]
         k.loc[tag, "dividende"] = float(k.loc[tag, "dividende"] or 0.0) + vortag * (1 - 1 / float(e["kursfaktor"]))

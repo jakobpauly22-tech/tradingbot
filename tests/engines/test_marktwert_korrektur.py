@@ -252,6 +252,47 @@ def test_csc_abspaltung_als_ausschuettung():
     assert buche_abspaltungen(k.loc[["2015-11-30"]], eintraege).loc["2015-11-30", "dividende"] == 10.5   # ohne Vortag: nichts
 
 
+def test_csc_fehlender_ex_tag_bricht_laut_ab():
+    """Befund 15 (Jakob 16.11.2026): Fehlt der Ex-Tag innerhalb der geladenen Reihe, Abbruch wie bei SIVB; außerhalb der
+    Reihe (Vorlauf, Tresorgrenze, Kappung) bleibt sie unverändert."""
+    from tradingbot.daten.sp500_nachbau import DatenkorrekturPasstNicht, abspaltungen_tiingo, buche_abspaltungen
+
+    eintraege = abspaltungen_tiingo()[(23082, "CSC")]
+    luecke = pd.DataFrame({"close": [68.62, 31.33], "dividende": 0.0}, index=pd.DatetimeIndex(["2015-11-27", "2015-12-01"]))
+    with pytest.raises(DatenkorrekturPasstNicht, match="2015-11-30 fehlt"):
+        buche_abspaltungen(luecke, eintraege)
+    davor = pd.DataFrame({"close": [50.0, 51.0], "dividende": 0.0}, index=pd.DatetimeIndex(["2015-10-01", "2015-10-02"]))
+    danach = pd.DataFrame({"close": [50.0, 51.0], "dividende": 0.0}, index=pd.DatetimeIndex(["2016-01-04", "2016-01-05"]))
+    assert buche_abspaltungen(davor, eintraege)["dividende"].sum() == 0.0
+    assert buche_abspaltungen(danach, eintraege)["dividende"].sum() == 0.0
+
+
+def _bms_submissions_da() -> bool:
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    return (PROJEKT_WURZEL / "daten" / "cache" / "sec" / "submissions" / "CIK0000011199.json.gz").exists()
+
+
+@pytest.mark.skipif(not _bms_submissions_da(), reason="lokaler SEC-Cache für Bemis (CIK 11199) fehlt")
+def test_bms_delisting_grund_uebernahme_nach_der_kappung():
+    """Delisting-Grund BMS (Prüfung 16.11.2026, „nicht geprüft“): Nach der Kappung auf den 10.06.2019 findet die Regel die
+    8-K Item 2.01 vom 11.06.2019 (Übernahme durch Amcor), ohne manuellen Eintrag; ebenso mit dem alten Ende 28.06.2019."""
+    import gzip
+    import json
+
+    from tradingbot.daten.delisting import delisting_grund_mit_korrektur, einreichungen
+    from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
+
+    datei = PROJEKT_WURZEL / "daten" / "cache" / "sec" / "submissions" / "CIK0000011199.json.gz"
+    with gzip.open(datei, "rt", encoding="utf-8") as f:
+        subs = json.load(f)["daten"]                        # Cache-Hülle: url, abgerufen_um, daten
+    korrekturen = lade_konfiguration("universum_korrekturen").get("delisting", [])
+    assert not any(int(k.get("cik") or 0) == 11199 or k.get("ticker") == "BMS" for k in korrekturen)
+    for letzter in ("2019-06-10", "2019-06-28"):
+        grund, beleg = delisting_grund_mit_korrektur("BMS", einreichungen(subs), pd.Timestamp(letzter), None, korrekturen, cik=11199)
+        assert grund == "uebernahme" and "2019-06-11" in beleg, (letzter, grund, beleg)
+
+
 def test_bms_kappung_vor_der_uebernahme():
     from tradingbot.daten.sp500_nachbau import kappe_reihe, kursreihen_ende, kursreihen_ende_je_ticker
 

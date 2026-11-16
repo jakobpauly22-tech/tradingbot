@@ -160,7 +160,9 @@ def main(argv=None) -> int:
                         mw, mw_grund = None, f"{GRUND_UNSICHER} ({u['symbol']}, H {u['H']:.4g})"
                         z["marktwert_kurs"] = "kein Marktwert (Befund 11)"
             industrie = industrie_von <= sic <= industrie_bis
-            eq = (vergleich_fuer_abschluesse(t, aktienfakten.get(firma), tag, daten.kurse[firma]["split"]) if korrektur else None)
+            # Weg B: mit Datenkorrektur Marktwert (also in c3) nur echte Splits, Abspaltungen der Liste s = 1 (Befund 13)
+            eq = (vergleich_fuer_abschluesse(t, aktienfakten.get(firma), tag, daten.kurse[firma]["split"],
+                                             ereignisse=ereignisse.get(firma) if mw_korrektur else None) if korrektur else None)
             p, a, b, acc, m = (piotroski(t, eq_offer=eq), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t),
                                multiples(t, mw))
             try:
