@@ -65,6 +65,26 @@ def test_mischung_quartalsweise_und_neues_gewicht_an_der_haelftengrenze(konfig, 
     assert anteil.loc["2024-06-03":].between(0.45, 0.55).all()
 
 
+def test_mischung_wiederholt_order_ohne_handel_am_ausfuehrungstag(konfig, ohne_kosten, bruchteile):
+    """Festlegung 7 (Befund 7, 16.11.2026): kein Handel am Ausführungstag → Wiederholung am nächsten Tag, wie bei V1."""
+    k = kerzen([100.0] * 10, start="2024-01-31")
+    k.loc["2024-02-01", "open"] = 0.0
+    gewicht = pd.Series({pd.Timestamp("2024-01-31"): 0.8})
+    e = simuliere([_definition(buch.MischungStrategie("A", gewicht))], Marktdaten({"A": k}), "2024-01-31", "2024-02-13",
+                  kosten=ohne_kosten, regeln=bruchteile, konfig=konfig)["regime"]
+    assert len(e.verworfen) == 1 and [t.date().isoformat() for t in e.trades.datum] == ["2024-02-02"]
+    assert 1 - e.werte.loc["2024-02-02", "cash"] / e.werte.loc["2024-02-02", "wert"] == pytest.approx(0.8, abs=0.01)
+
+
+def test_mischung_wiederholt_keinen_regelverwurf(konfig, mit_kosten):
+    """Ein Verwurf durch Regeln (hier: Kauf unter 125 € bei Mindestgebühr, 1-%-Regel) wird nicht wiederholt."""
+    m = Marktdaten({"A": kerzen([100.0] * 10, start="2024-01-31")})
+    gewicht = pd.Series({pd.Timestamp("2024-01-31"): 0.01})                  # 1 % von 10.000 € = 100 € < 125 €
+    e = simuliere([_definition(buch.MischungStrategie("A", gewicht))], m, "2024-01-31", "2024-02-13",
+                  kosten=mit_kosten, regeln=Ausfuehrungsregeln(), konfig=konfig)["regime"]
+    assert e.trades.empty and len(e.verworfen) == 1
+
+
 # --- Aktienanteil ---
 
 def test_ziel_gilt_ab_dem_tag_nach_dem_monatsende():
@@ -238,3 +258,12 @@ def test_festlegung_muss_existieren_und_unveraendert_sein():
     assert "gibt es nicht" in w.pruefe_festlegung("", wurzel)
     # ein alter Commit, in dem es docs/REGIME.md noch nicht gab: seitdem geändert
     assert "geändert" in w.pruefe_festlegung("6bcfb30", wurzel)
+
+
+def test_festlegung_umfasst_werkzeug_simulation_kennzahlen_konfiguration():
+    """Befund 6 (16.11.2026): Änderungen am Werkzeug, an der Simulation, den Kennzahlen oder config/backtest.yaml
+    verlangen einen neuen Festlegungs-Commit."""
+    w = _werkzeug()
+    for pfad in ("tools/backtest_regime.py", "src/tradingbot/backtest", "src/tradingbot/kennzahlen", "config/backtest.yaml",
+                 "docs/REGIME.md", "src/tradingbot/engines/regime"):
+        assert pfad in w.EINGEFROREN, pfad

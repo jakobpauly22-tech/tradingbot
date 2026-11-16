@@ -220,6 +220,24 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
   unverändert, das Urteil „V1 nicht bestanden“ bleibt. Der Kipp geht an Jakob. Details in
   `docs/berichte/2026-11-16_steuer_aus_kasse.md`.
 
+## 7g. Festlegungsprüfung erweitert, Mischung wiederholt Orders ohne Handel (Befunde 6 und 7, festgehalten 16.11.2026)
+
+- **Anlass:** Befunde 6 und 7 der unabhängigen Prüfung (`docs/berichte/2026-11-16_unabhaengige_pruefung.md`), von Jakob
+  am 16.11.2026 zur Behebung freigegeben.
+- **Befund 6:** `tools/backtest_regime.py` friert jetzt auch das Werkzeug selbst, `src/tradingbot/backtest`
+  (Simulation, Ausführung, Steuern), `src/tradingbot/kennzahlen` und `config/backtest.yaml` ein. Datenlader bleiben
+  frei; ob ein Lauf frühere Ablagen trifft, prüft `--vergleich-ablage`.
+- **Befund 7:** Die statische Mischung (`engines/regime/buch.MischungStrategie`) wiederholt eine Order, die am
+  Ausführungstag mangels Handel (keine Kerze oder Eröffnung 0) gescheitert ist, am nächsten Tag, wie es Festlegung 7
+  (Abschnitt 6) seit b628678 verlangt. Ein Verwurf durch Regeln (1-%-Regel, Kasse) wird nicht wiederholt, wie bei V1.
+  Der Code wich also von der Festlegung ab; im gewerteten Lauf gab es keinen Tag ohne Handel.
+- **Unverändert:** Kriterien, Hälften, Signale und Schwellen, Varianten, Präzisierungen 7a–7c, Simulation (Stand 7f).
+  `engines/regime/signale.py` wird nicht angefasst. Das Urteil „V1 nicht bestanden“ bleibt.
+- **Neue Festlegung:** Der Commit, der diesen Abschnitt enthält. Kein neuer gewerteter Lauf.
+- **Prüfung:** Mit dieser Festlegung muss das Werkzeug die Ablagen vom 16.11.2026 (`daten/backtests/20261116T1004*_regime_*`,
+  Lauf zu 7f) genau treffen (`--vergleich-ablage`, ohne Ablage, ohne Eintrag in `daten/regime/varianten.csv`). Weicht es
+  ab, geht das an Jakob.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |

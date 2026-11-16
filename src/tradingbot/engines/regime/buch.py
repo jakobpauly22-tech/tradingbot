@@ -43,6 +43,11 @@ class MischungStrategie:
     `gewicht_ab`: Signaltag → Zielgewicht ab diesem Tag (z. B. erster Tag und letzter Handelstag vor der Hälftengrenze).
     Zurückgestellt wird am Signaltag eines neuen Gewichts und am ersten Handelstag jedes neuen Quartals (Ausführung am
     Folgetag, wie `FesteGewichte`).
+
+    Festlegung 7 (docs/REGIME.md, Abschnitt 6): Gescheiterte Orders (kein Handel am Ausführungstag) werden am nächsten
+    Tag wiederholt. Bis 16.11.2026 fehlte das hier (Befund 7 der unabhängigen Prüfung; im gewerteten Lauf ohne Fall).
+    Wiederholt wird nur bei fehlender Kerze bzw. Eröffnung 0 am Ausführungstag, nicht nach einem Verwurf durch Regeln
+    (1-%-Regel, Kasse), wie bei V1.
     """
 
     def __init__(self, ticker: str, gewicht_ab: pd.Series, name: str = "Statische Mischung"):
@@ -50,17 +55,27 @@ class MischungStrategie:
         self.gewicht_ab = pd.Series(gewicht_ab, dtype=float).sort_index()
         self.gewicht_ab.index = pd.DatetimeIndex(self.gewicht_ab.index)
         self._quartal, self._gewicht = None, None
+        self._ausfuehrung_offen = None          # Zielgewicht der zuletzt erteilten Order (Ausführung am nächsten Handelstag)
+
+    def _gehandelt(self, tag: pd.Timestamp, sicht) -> bool:
+        kurse = sicht.kurse(self.ticker)
+        return tag in kurse.index and float(kurse.loc[tag, "open"]) > 0
 
     def zielgewichte(self, stichtag, sicht):
         tag = pd.Timestamp(stichtag)
+        offen, self._ausfuehrung_offen = self._ausfuehrung_offen, None
         bekannt = self.gewicht_ab.loc[:tag]
         if bekannt.empty:
             return None
         gewicht, quartal = float(bekannt.iloc[-1]), tag.to_period("Q")
-        if gewicht == self._gewicht and quartal == self._quartal:
-            return None
-        self._gewicht, self._quartal = gewicht, quartal
-        return pd.Series({self.ticker: gewicht})
+        if gewicht != self._gewicht or quartal != self._quartal:          # neues Signal geht einer Wiederholung vor
+            self._gewicht, self._quartal = gewicht, quartal
+            self._ausfuehrung_offen = gewicht
+            return pd.Series({self.ticker: gewicht})
+        if offen is not None and not self._gehandelt(tag, sicht):       # heute war Ausführungstag ohne Handel
+            self._ausfuehrung_offen = offen
+            return pd.Series({self.ticker: offen})
+        return None
 
 
 def ziel_an_je_tag(zustand: pd.Series, tage: pd.DatetimeIndex) -> pd.Series:

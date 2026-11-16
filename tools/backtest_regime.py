@@ -2,8 +2,9 @@ r"""Gewerteter Backtest des Schattenbuchs „regime“ auf den Entwicklungsdaten
 
 Aufruf:  .venv\Scripts\python tools\backtest_regime.py --festlegung <Commit>
 
-`--festlegung`: Commit, in dem die Festlegungen eingefroren wurden. Das Werkzeug bricht ab, wenn docs/REGIME.md oder der
-Code der Regime-Engine seitdem geändert wurde. Jeder Aufruf ist ein gewerteter Lauf und kommt in daten/regime/varianten.csv.
+`--festlegung`: Commit, in dem die Festlegungen eingefroren wurden. Das Werkzeug bricht ab, wenn docs/REGIME.md, der
+Code der Regime-Engine, dieses Werkzeug, Simulation (backtest/), Kennzahlen oder config/backtest.yaml seitdem geändert
+wurden (seit 16.11.2026, Befund 6; vorher nur die ersten beiden). Jeder Aufruf ist ein gewerteter Lauf und kommt in daten/regime/varianten.csv.
 
 Gerechnet werden V1 (einzige gewertete Variante), die Diagnosen D1–D4, Kaufen und Halten (Zwilling) und die statische
 Mischung. Der Bericht enthält die Kriterien a–c je Hälfte, aber **kein Gesamturteil**: Das fällt erst nach dem US-Langtest.
@@ -28,7 +29,11 @@ ETF = "SPYI.DE"
 DATEN_AB, ERSTE_BEWERTUNG, ENDE = "2012-01-01", pd.Timestamp("2012-10-31"), pd.Timestamp("2024-12-31")
 HAELFTEN = [(pd.Timestamp("2012-11-01"), pd.Timestamp("2018-11-30")), (pd.Timestamp("2018-12-01"), pd.Timestamp("2024-12-31"))]
 KAPITAL = 10_000.0
-EINGEFROREN = ["docs/REGIME.md", "src/tradingbot/engines/regime"]
+# Befund 6 (Jakob 16.11.2026): eingefroren sind auch das Werkzeug selbst, Simulation und Ausführung (backtest/),
+# Kennzahlen und die Backtest-Konfiguration (Kosten, Steuern, Tresor). Datenlader sind nicht eingefroren; ob ein Lauf
+# frühere Ablagen trifft, prüft --vergleich-ablage.
+EINGEFROREN = ["docs/REGIME.md", "src/tradingbot/engines/regime", "tools/backtest_regime.py", "src/tradingbot/backtest",
+               "src/tradingbot/kennzahlen", "config/backtest.yaml"]
 MAKRO_REIHEN = ["T10Y3M", "BAA10Y", "UNRATE", "ECBDFR"]
 STEUERMODI = ("jahresende_aus_kasse", "jahresende_nur_wertreihe")
 WERTE_SPALTEN = ["wert", "cash", "steuern_kumuliert", "wert_nach_steuern"]
