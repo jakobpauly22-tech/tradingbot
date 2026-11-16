@@ -11,6 +11,8 @@ Sperren (laut, Exit 2): auffällige Kursreihen ohne dokumentierte Freigabe (`uni
 offene Umsetzung des Buy-&-Hold-Vergleichs (`erfolgskriterien.buy_and_hold_umsetzung`).
 Ergebnis: daten/backtests/<zeitstempel>_technik_<variante>/, Bericht docs/berichte/<datum>_technik_satellite.md,
 Zeilen in daten/technik/varianten.csv.
+`--steuermodus jahresende_nur_wertreihe` (Befund 3, 16.11.2026): Rechenweg bis 15.11.2026 als markierter Vergleich, nie
+gewertet: keine Laufablage, kein Eintrag in varianten.csv, Kriterien in kriterien_alter_steuerweg.csv, Bericht mit Zusatz.
 """
 import argparse
 import sys
@@ -122,9 +124,15 @@ def main() -> int:
     arg.add_argument("--nur-pruefen", action="store_true")
     arg.add_argument("--anlass", default="", help="z.B. Modellkorrektur (zählt nicht als neue Variante)")
     arg.add_argument("--vergleich", default="", help="CSV mit Kriterien eines früheren Laufs (alt gegen neu)")
+    arg.add_argument("--steuermodus", choices=("jahresende_aus_kasse", "jahresende_nur_wertreihe"), default=None,
+                     help="Abfluss der Jahressteuer; ohne Angabe laut config/backtest.yaml")
     a = arg.parse_args()
     k = lade_konfiguration("technik")
     bt = lade_konfiguration("backtest")
+    if a.steuermodus:
+        bt["steuern"]["zahlung"] = a.steuermodus
+    alter_weg = bt["steuern"].get("zahlung") == "jahresende_nur_wertreihe"
+    zusatz = "_alter_steuerweg" if alter_weg else ""
     kurse, waehrungen, befunde, pruefprotokoll = lade_universum_kurse(k)
     freigaben = {f["ticker"]: f for f in k["universum"].get("datenfreigaben") or []}
     offen = {t: b for t, b in befunde.items() if t not in freigaben}
@@ -188,11 +196,13 @@ def main() -> int:
         raise SystemExit(f"Unbekannte Umsetzung des Buy-&-Hold-Vergleichs: {umsetzung}")
     laeufe, ohne_kosten = {}, {}
     for name, (regeln, regime) in VARIANTEN.items():
-        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [definition(name, regeln, regime)], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt)
+        laeufe[name] = fuehre_lauf_aus(f"technik_{name}", [definition(name, regeln, regime)], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt,
+                                       ablage=not alter_weg)
         # gleiche Strategie ohne Kosten (keine Gebühren, kein Spread, keine Slippage, kein Tausch), vor Steuern; ganze Stücke bleiben
         ohne_kosten[name] = simuliere([definition(name, regeln, regime)], m, start, ende, kosten=Kostenmodell.ohne_kosten(),
                                       steuern=Steuerregeln.ohne_steuern(), konfig=bt)[f"technik_{name}"]
-    lauf_bh = fuehre_lauf_aus("technik_buy_and_hold", [bh], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt, **optionen_bh)
+    lauf_bh = fuehre_lauf_aus("technik_buy_and_hold", [bh], m, start, ende, benchmark_ticker="IUSA.DE", konfig=bt, ablage=not alter_weg,
+                              **optionen_bh)
 
     rf = lade_makro(bt.get("risikofreier_zins", "ECBDFR"))
     abschnitte = [("gesamt", start, ende)] + [(f"Hälfte {i + 1}", x, y) for i, (x, y) in enumerate(haelften(start, ende, int(sp["haelften"])))]
@@ -235,13 +245,16 @@ def main() -> int:
     neu = pd.DataFrame([{"datum": datetime.now().isoformat(timespec="seconds"), "variante": n, "git": laeufe[n].meta["git"].get("commit"),
                          "lauf": laeufe[n].pfad.name if laeufe[n].pfad else "", "bestanden": bewertung[n], "anlass": a.anlass} for n in VARIANTEN])
     varianten = pd.concat([alt, neu], ignore_index=True)
-    varianten.to_csv(datei, index=False)
+    if not alter_weg:                                   # der alte Steuerweg ist nur Vergleich und zählt nie als Lauf
+        varianten.to_csv(datei, index=False)
 
     # Bericht
     pz = lambda x: f"{x:.2%}".replace(".", ",")  # noqa: E731
     zahl = lambda x: f"{x:.2f}".replace(".", ",")  # noqa: E731
     ok = lambda b: "ja" if b else "**nein**"  # noqa: E731
-    text = [f"# Satellite-Strategien der Technik-Engine – gewertete Backtests" + (f" ({a.anlass})" if a.anlass else ""), "",
+    text = [(f"# Satellite-Strategien der Technik-Engine – Vergleich mit dem alten Steuerweg, nicht gewertet" if alter_weg else
+             f"# Satellite-Strategien der Technik-Engine – gewertete Backtests") + (f" ({a.anlass})" if a.anlass else ""), "",
+            f"Steuer: `steuern.zahlung: {bt['steuern']['zahlung']}` (docs/berichte/2026-11-16_steuer_aus_kasse.md).", "",
             f"Stand {datetime.now():%d.%m.%Y %H:%M}. Zeitraum {start.date()} bis {ende.date()}, Kapital {sp['kapital']:,.0f} € (Schatten), "
             f"{len(instrumente)} ETFs/ETCs laut `config/technik.yaml`. Getestete Varianten bisher: {varianten['variante'].nunique()}"
             + (" (diese Neuberechnung zählt nicht als neue Variante)." if a.anlass else "."), "",
@@ -317,8 +330,8 @@ def main() -> int:
     bericht = "\n".join(text)
     ordner = PROJEKT_WURZEL / "docs" / "berichte"
     ordner.mkdir(parents=True, exist_ok=True)
-    (ordner / f"{datetime.now():%Y-%m-%d_%H%M}_technik_satellite.md").write_text(bericht, encoding="utf-8")
-    t.to_csv(ziel / "kriterien.csv", index=False)
+    (ordner / f"{datetime.now():%Y-%m-%d_%H%M}_technik_satellite{zusatz}.md").write_text(bericht, encoding="utf-8")
+    t.to_csv(ziel / f"kriterien{zusatz}.csv", index=False)
     print(bericht)
     return 0
 

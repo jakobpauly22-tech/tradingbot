@@ -120,9 +120,13 @@ class Ergebnis:
     @property
     def twr_vor_steuern(self) -> pd.Series:
         """Zeitgewichtete Rendite vor Steuern als Index: Steuern zählen als Auszahlung am Tagesende, Einzahlungen als
-        Zufluss am Tagesbeginn (kennzahlen.performance.zeitgewichtete_rendite)."""
+        Zufluss am Tagesbeginn (kennzahlen.performance.zeitgewichtete_rendite). Im Vergleichsmodus
+        `jahresende_nur_wertreihe` blieb die Steuer im Depot investiert; dort ist wie bis 15.11.2026 die TWR des Depotwerts
+        `wert` die Rendite vor Steuern."""
         from tradingbot.kennzahlen.performance import zeitgewichtete_rendite
 
+        if self.meta.get("steuerzahlung") == "jahresende_nur_wertreihe":
+            return zeitgewichtete_rendite(self.werte["wert"], self.werte["einzahlung"])
         return zeitgewichtete_rendite(self.werte["wert_nach_steuern"], self.werte["einzahlung"], self.werte["steuer"])
 
     @property

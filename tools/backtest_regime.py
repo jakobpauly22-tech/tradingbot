@@ -8,6 +8,10 @@ Code der Regime-Engine seitdem geändert wurde. Jeder Aufruf ist ein gewerteter 
 Gerechnet werden V1 (einzige gewertete Variante), die Diagnosen D1–D4, Kaufen und Halten (Zwilling) und die statische
 Mischung. Der Bericht enthält die Kriterien a–c je Hälfte, aber **kein Gesamturteil**: Das fällt erst nach dem US-Langtest.
 Ergebnis: daten/backtests/<zeitstempel>_regime_*/, Bericht docs/berichte/<datum>_regime_backtest.md.
+
+`--steuermodus jahresende_nur_wertreihe --vergleich-ablage <Ordner> …` (Befund 3, Jakob 16.11.2026): rechnet mit dem
+Rechenweg bis 15.11.2026 und prüft, ob er die Ablage eines früheren Laufs trifft. Kein gewerteter Lauf, keine Ablage, kein
+Eintrag in daten/regime/varianten.csv, kein Bericht; Exit 2 bei Abweichung.
 """
 import argparse
 import hashlib
@@ -26,6 +30,57 @@ HAELFTEN = [(pd.Timestamp("2012-11-01"), pd.Timestamp("2018-11-30")), (pd.Timest
 KAPITAL = 10_000.0
 EINGEFROREN = ["docs/REGIME.md", "src/tradingbot/engines/regime"]
 MAKRO_REIHEN = ["T10Y3M", "BAA10Y", "UNRATE", "ECBDFR"]
+STEUERMODI = ("jahresende_aus_kasse", "jahresende_nur_wertreihe")
+WERTE_SPALTEN = ["wert", "cash", "steuern_kumuliert", "wert_nach_steuern"]
+
+
+def vergleiche_mit_ablage(erg: dict, ordner: list[Path], *, toleranz: float = 1e-6) -> tuple[list[str], list[str]]:
+    """Vergleicht Werte, Trades und Kriterien eines Laufs mit früheren Ablagen. Rückgabe (geprüft, Abweichungen).
+
+    Zugeordnet wird über den Teilportfolio-Ordner der Ablage (regime_V1, benchmark_regime_V1, regime_mischung, …).
+    Werte relativ mit `toleranz`, Trades auf Datum, Richtung und Stückzahl exakt, Kriterien a–c exakt.
+    """
+    reihen = {}
+    for lauf in [*erg["laeufe"].values(), erg["lauf_mischung"]]:
+        for n, e in lauf.ergebnisse.items():
+            reihen[n] = e
+            reihen[f"benchmark_{n}"] = lauf.zwillinge[n]
+    geprueft, abweichungen = [], []
+    for o in ordner:
+        for unter in sorted(x for x in Path(o).iterdir() if x.is_dir() and (x / "werte.csv").exists()):
+            e = reihen.get(unter.name)
+            if e is None:
+                abweichungen.append(f"{unter}: kein passendes Teilportfolio im Lauf")
+                continue
+            alt = pd.read_csv(unter / "werte.csv", index_col="datum", parse_dates=True)
+            neu = e.werte
+            if not alt.index.equals(neu.index):
+                abweichungen.append(f"{unter.name}: Handelstage weichen ab ({len(alt)} gegen {len(neu)})")
+                continue
+            for spalte in WERTE_SPALTEN:
+                rel = ((neu[spalte] - alt[spalte]).abs() / alt[spalte].abs().clip(lower=1.0)).max()
+                if rel > toleranz:
+                    tag = ((neu[spalte] - alt[spalte]).abs()).idxmax()
+                    abweichungen.append(f"{unter.name}.{spalte}: größte relative Abweichung {rel:.2e} am {tag.date()} "
+                                        f"({alt.loc[tag, spalte]:.4f} gegen {neu.loc[tag, spalte]:.4f})")
+            t_alt = pd.read_csv(unter / "trades.csv", parse_dates=["datum"])[["datum", "richtung", "stueck"]].reset_index(drop=True)
+            t_neu = e.trades[["datum", "richtung", "stueck"]].reset_index(drop=True)
+            t_neu = t_neu.assign(datum=pd.to_datetime(t_neu.datum))
+            if not (len(t_alt) == len(t_neu) and (t_alt.values == t_neu.values).all()):
+                abweichungen.append(f"{unter.name}: Trades weichen ab ({len(t_alt)} gegen {len(t_neu)})")
+            geprueft.append(f"{Path(o).name}/{unter.name}: {len(alt)} Tage, {len(t_alt)} Trades")
+        kdatei = Path(o) / "kriterien.csv"
+        if kdatei.exists():
+            k_alt = pd.read_csv(kdatei)
+            for r_alt, r_neu in zip(k_alt.itertuples(), erg["kriterien"].itertuples()):
+                for c in "abc":
+                    if bool(getattr(r_alt, c)) != bool(getattr(r_neu, c)):
+                        abweichungen.append(f"Kriterium {c} Hälfte {r_alt.haelfte}: {getattr(r_alt, c)} gegen {getattr(r_neu, c)}")
+                for c in ("v1_sharpe", "kuh_sharpe", "mischung_sharpe", "v1_max_dd", "kuh_max_dd"):
+                    if abs(getattr(r_alt, c) - getattr(r_neu, c)) > toleranz:
+                        abweichungen.append(f"{c} Hälfte {r_alt.haelfte}: {getattr(r_alt, c):.6f} gegen {getattr(r_neu, c):.6f}")
+            geprueft.append(f"{Path(o).name}/kriterien.csv")
+    return geprueft, abweichungen
 
 
 def pruefe_festlegung(commit: str, wurzel: Path) -> str | None:
@@ -159,6 +214,9 @@ def main(argv=None) -> int:
     a = argparse.ArgumentParser(description="Gewerteter Backtest des Schattenbuchs regime")
     a.add_argument("--festlegung", required=True, help="Commit, in dem die Festlegungen eingefroren wurden")
     a.add_argument("--anlass", default="", help="z. B. Datenkorrektur (zählt trotzdem als Lauf)")
+    a.add_argument("--steuermodus", choices=STEUERMODI, default=None,
+                   help="Abfluss der Jahressteuer; ohne Angabe laut config/backtest.yaml (gewertet nur jahresende_aus_kasse)")
+    a.add_argument("--vergleich-ablage", nargs="+", default=[], help="Ordner früherer Läufe: nur prüfen, ob dieser Lauf sie trifft")
     arg = a.parse_args(argv)
     fehler = pruefe_festlegung(arg.festlegung, PROJEKT_WURZEL)
     if fehler:
@@ -173,7 +231,25 @@ def main(argv=None) -> int:
     kurse = echte_anteilspreise(roh, ETF, lade_konfiguration("daten").get("kapitalmassnahmen") or [])
     makro = signale.makro_stand_aus_cache()
     verlaeufe = {v: signale.regime_verlauf(kurse["close"], makro, variante=v) for v in signale.VARIANTEN}
-    erg = rechne(kurse, verlaeufe, lade_makro("ECBDFR"))
+    bt = lade_konfiguration("backtest")
+    if arg.steuermodus:
+        bt["steuern"]["zahlung"] = arg.steuermodus
+    nur_vergleich = bool(arg.vergleich_ablage) or bt["steuern"].get("zahlung") != "jahresende_aus_kasse"
+    if nur_vergleich and not arg.vergleich_ablage:
+        return laut_melden(RuntimeError("Der Vergleichsmodus jahresende_nur_wertreihe ist nie gewertet: nur mit --vergleich-ablage"))
+    erg = rechne(kurse, verlaeufe, lade_makro("ECBDFR"), konfig=bt, ablage=not nur_vergleich)
+    if nur_vergleich:
+        geprueft, abweichungen = vergleiche_mit_ablage(erg, [PROJEKT_WURZEL / o for o in arg.vergleich_ablage])
+        print(f"Steuermodus {bt['steuern']['zahlung']}, Vergleich mit {len(arg.vergleich_ablage)} Ablage(n):")
+        for g in geprueft:
+            print(f"  geprüft: {g}")
+        if abweichungen:
+            print("ABWEICHUNG – vor der Wertung an Jakob:")
+            for x in abweichungen:
+                print(f"  {x}")
+            return 2
+        print("Keine Abweichung: Der Lauf trifft die Ablage(n).")
+        return 0
 
     # eingefrorener Makro-Datenstand im Laufordner von V1
     pfad_v1 = erg["laeufe"]["V1"].pfad

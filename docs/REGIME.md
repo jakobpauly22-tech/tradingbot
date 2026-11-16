@@ -199,6 +199,23 @@ verfehlt a. Der US-Langtest (Abschnitt 5) hätte nur zusätzlich Kriterium b gep
 - Hinweis: Weil diese Datei nach dem Lauf ergänzt wurde, verweigert `tools/backtest_regime.py --festlegung b628678` einen
   weiteren Lauf; das ist gewollt.
 
+## 7f. Nachrechnung nach der Korrektur der Simulation (Befund 3, festgehalten 16.11.2026 vor dem Lauf)
+
+- **Anlass:** Korrektur der Simulation, Steuer aus der Kasse (Befund 3 der unabhängigen Prüfung,
+  `docs/berichte/2026-11-16_steuer_aus_kasse.md`; Zusage „unabhängig vom Ergebnis übernommen“ in Commit d1996a9).
+- **Unverändert:** Kriterien a–c und Hälften (Abschnitt 4), Signale und Schwellen (Abschnitt 2), Varianten (Abschnitt
+  7), Präzisierungen 7a–7c, Kapital, Kasse zu 0 %. `engines/regime/signale.py` wird nicht angefasst. Gegenüber b628678
+  enthält `signale.py` nur die Betriebsregel für Datenlücken (9b), die auf den Entwicklungsdaten rechnerisch identisch ist.
+- **Geändert:** nur die Simulation (`backtest/simulation.py`): Die Jahressteuer fließt aus der Kasse, ohne Zwangsverkauf.
+- **Neue Festlegung:** Der Commit, der diesen Abschnitt enthält, ist die Festlegung der Nachrechnung („nur für die
+  Simulation“). Gerechnet wird mit `tools/backtest_regime.py --festlegung <dieser Commit> --anlass "Korrektur der
+  Simulation: Steuer aus der Kasse (Befund 3)"`; der Lauf kommt als Lauf mit Anlass in `daten/regime/varianten.csv`,
+  nicht als neue Variante.
+- **Vorher geprüft:** Der alte Steuerweg (`--steuermodus jahresende_nur_wertreihe`) muss die Ablagen vom 15.11.2026
+  (`daten/backtests/20261115T1428*_regime_*`) treffen. Weicht er ab, geht das vor der Wertung an Jakob.
+- **Urteil:** Das Urteil „V1 nicht bestanden“ (7e) wird nicht geändert, falls es bestehen bleibt. Kippt ein Kriterium,
+  steht das im Bericht und wird mit Jakob besprochen; nichts wird nachjustiert.
+
 ## 8. Sitzungen
 
 | Sitzung | Inhalt | Stand |

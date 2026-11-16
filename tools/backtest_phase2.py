@@ -3,7 +3,11 @@ r"""Abschluss-Backtest Phase 2: Gesamtdepot (Realbuch) mit eingehängtem Risk-Ma
 Aufruf:  .venv\Scripts\python tools\backtest_phase2.py
 Festgeschrieben vor dem Lauf: docs/PHASE2.md, config/backtest.yaml `phase2_gesamtdepot` (03.11.2026).
 Ergebnis: docs/berichte/<datum>_phase2_gesamtdepot.md, Tabellen in daten/backtests/<zeitstempel>_phase2_gesamtdepot/.
+
+`--steuermodus jahresende_nur_wertreihe` (Befund 3, 16.11.2026): Rechenweg bis 15.11.2026 als markierter Vergleich, nie
+gewertet; Ablage und Bericht mit dem Zusatz „_alter_steuerweg“.
 """
+import argparse
 import copy
 import json
 import math
@@ -27,8 +31,15 @@ from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager
 warnings.simplefilter("ignore")
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    a = argparse.ArgumentParser(description="Abschluss-Backtest Phase 2")
+    a.add_argument("--steuermodus", choices=("jahresende_aus_kasse", "jahresende_nur_wertreihe"), default=None,
+                   help="Abfluss der Jahressteuer; ohne Angabe laut config/backtest.yaml")
+    arg = a.parse_args(argv)
     bt = lade_konfiguration("backtest")
+    if arg.steuermodus:
+        bt["steuern"]["zahlung"] = arg.steuermodus
+    zusatz = "_alter_steuerweg" if bt["steuern"].get("zahlung") == "jahresende_nur_wertreihe" else ""
     p = bt["phase2_gesamtdepot"]
     krit = p["kriterien"]
     etf = p["etf"]
@@ -130,7 +141,7 @@ def main() -> int:
 
     # --- Ablage und Bericht ----------------------------------------------------------------------------------------------
     stempel = datetime.now()
-    ordner = PROJEKT_WURZEL / "daten" / "backtests" / f"{stempel:%Y%m%dT%H%M%S}_phase2_gesamtdepot"
+    ordner = PROJEKT_WURZEL / "daten" / "backtests" / f"{stempel:%Y%m%dT%H%M%S}_phase2_gesamtdepot{zusatz}"
     ordner.mkdir(parents=True, exist_ok=True)
     r.trades.to_csv(ordner / "trades_realbuch.csv", index=False)
     z.trades.to_csv(ordner / "trades_zwilling.csv", index=False)
@@ -142,7 +153,9 @@ def main() -> int:
     zahl = lambda x, n=2: f"{x:,.{n}f}".replace(",", "X").replace(".", ",").replace("X", ".")  # noqa: E731
     ok = lambda b: "**bestanden**" if b else "**verfehlt**"  # noqa: E731
     vetos = r.meta["vetos"]
-    text = [f"# Phase 2 – Abschluss-Backtest Gesamtdepot (Realbuch mit Risk-Manager)", "",
+    text = [f"# Phase 2 – Abschluss-Backtest Gesamtdepot (Realbuch mit Risk-Manager)"
+            + (" – Vergleich mit dem alten Steuerweg, nicht gewertet" if zusatz else ""), "",
+            f"Steuer: `steuern.zahlung: {bt['steuern']['zahlung']}` (docs/berichte/2026-11-16_steuer_aus_kasse.md).", "",
             f"Stand {stempel:%d.%m.%Y %H:%M}. Zeitraum {start.date():%d.%m.%Y} bis {tage[-1].date():%d.%m.%Y}. Start {zahl(p['start_eur'], 0)} €, "
             f"danach {len(einzahlungen)} Einzahlungen à {zahl(p['einzahlung_eur'], 0)} € am ersten Handelstag des Monats "
             f"(eingezahlt gesamt {zahl(p['start_eur'] + einzahlungen.sum(), 0)} €). Festgeschrieben vor dem Lauf: `docs/PHASE2.md`.", "",
@@ -174,7 +187,7 @@ def main() -> int:
              f"(Zwilling {zahl(z.meta['steuern_gezahlt'])} €), Steuer bei fiktivem Verkauf {zahl(r.meta['liquidationssteuer'])} €.",
              "", f"Ablage: `{ordner.relative_to(PROJEKT_WURZEL)}`."]
     bericht = "\n".join(text)
-    ziel = PROJEKT_WURZEL / "docs" / "berichte" / f"{stempel:%Y-%m-%d}_phase2_gesamtdepot.md"
+    ziel = PROJEKT_WURZEL / "docs" / "berichte" / f"{stempel:%Y-%m-%d}_phase2_gesamtdepot{zusatz}.md"
     ziel.write_text(bericht, encoding="utf-8")
     print(bericht)
     return 0

@@ -156,6 +156,12 @@ def _werkzeug():
 
 def _kuenstlicher_lauf(konfig):
     w = _werkzeug()
+    kurse, verlaeufe, rf, haelften = _kuenstliche_eingaben()
+    erg = w.rechne(kurse, verlaeufe, rf, konfig=konfig, start="2020-01-31", ende=kurse.index[-1], haelften=haelften, ablage=False)
+    return w, erg, verlaeufe["V1"]
+
+
+def _kuenstliche_eingaben():
     rng = np.random.default_rng(5)
     r = rng.normal(0.0005, 0.008, 1000)
     r[300:340] = -0.012                                          # Einbruch in Hälfte 1
@@ -169,8 +175,7 @@ def _kuenstlicher_lauf(konfig):
     verlaeufe = {"V1": verlauf, "D1": verlauf.assign(risiko_aus=False)}
     haelften = [(pd.Timestamp("2020-02-03"), pd.Timestamp("2021-12-31")), (pd.Timestamp("2022-01-01"), kurse.index[-1])]
     rf = pd.Series([0.0], index=[pd.Timestamp("2019-01-01")])
-    erg = w.rechne(kurse, verlaeufe, rf, konfig=konfig, start="2020-01-31", ende=kurse.index[-1], haelften=haelften, ablage=False)
-    return w, erg, verlauf
+    return kurse, verlaeufe, rf, haelften
 
 
 def test_werkzeug_rechnet_v1_zwilling_und_mischung(konfig):
@@ -186,6 +191,25 @@ def test_werkzeug_rechnet_v1_zwilling_und_mischung(konfig):
     assert [int(t.richtung) for t in v1.trades.itertuples()] == [1, -1, 1]
     assert v1.trades.datum.iloc[1] == pd.Timestamp("2021-04-01")                 # Bewertung 31.03., Order am nächsten Handelstag
     assert erg["gesamt"].loc["V1", "steuern_gezahlt"] >= 0
+
+
+def test_vergleich_mit_ablage_findet_gleichheit_und_abweichung(konfig, tmp_path):
+    """Befund 3 (16.11.2026): Prüfung, ob ein Lauf frühere Ablagen trifft (Werte, Trades, Kriterien)."""
+    w = _werkzeug()
+    kurse, verlaeufe, rf, haelften = _kuenstliche_eingaben()
+    abgelegt = w.rechne(kurse, verlaeufe, rf, konfig=konfig, start="2020-01-31", ende=kurse.index[-1], haelften=haelften,
+                        ablage_wurzel=tmp_path)
+    ordner = [l.pfad for l in [*abgelegt["laeufe"].values(), abgelegt["lauf_mischung"]]]
+    abgelegt["kriterien"].to_csv(abgelegt["laeufe"]["V1"].pfad / "kriterien.csv", index=False)
+    erneut = w.rechne(kurse, verlaeufe, rf, konfig=konfig, start="2020-01-31", ende=kurse.index[-1], haelften=haelften, ablage=False)
+    geprueft, abweichungen = w.vergleiche_mit_ablage(erneut, ordner)
+    assert abweichungen == [] and len(geprueft) == 7                     # V1, D1, Mischung je mit Zwilling, Kriterien
+    datei = abgelegt["laeufe"]["V1"].pfad / "regime_V1" / "werte.csv"
+    werte = pd.read_csv(datei, index_col="datum")
+    werte.iloc[-1, werte.columns.get_loc("wert_nach_steuern")] *= 1.001
+    werte.to_csv(datei)
+    _, abweichungen = w.vergleiche_mit_ablage(erneut, ordner)
+    assert len(abweichungen) == 1 and abweichungen[0].startswith("regime_V1.wert_nach_steuern")
 
 
 def test_werkzeug_bricht_bei_anderer_erster_bewertung_ab(konfig):
