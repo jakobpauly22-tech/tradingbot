@@ -21,7 +21,8 @@ Regeln der Ausführung (config/backtest.yaml):
   Jahres aus der Kasse ab, ohne Zwangsverkauf. Reicht die EUR-Kasse nicht, wird vorhandene Fremdwährungskasse
   zurückgetauscht (Auszahlung); der Rest ist eine zinslose Steuerschuld. Zuflüsse (Verkaufserlöse, Dividenden,
   Einzahlungen) tilgen sie zuerst. Verkäufe rechnen gegen den Depotwert ohne Abzug der Schuld (sie löst nie einen Verkauf
-  aus), Käufe gegen den Depotwert minus Schuld (anteilig kleiner). Für die Schuld getauscht wird nur am Zahltag und an
+  aus), Käufe gegen den Depotwert minus Schuld; reicht die Kasse nach Tilgung dann noch nicht, werden alle Käufe des Tags
+  mit demselben Faktor skaliert (streng anteilig, Präzisierung 16.11.2026; ohne Schuld gilt „größte Lücke zuerst“). Für die Schuld getauscht wird nur am Zahltag und an
   Ausführungstagen, nicht je Dividende. Vergleichsmodus `steuern.zahlung: jahresende_nur_wertreihe` = Rechenweg bis
   15.11.2026 (Steuer mindert nur die Wertreihe, die Kasse bleibt unberührt); nie gewertet.
 - Käufe und Aufstockungen nur, wenn Gebühr plus Währungstausch höchstens `max_gebuehr_anteil` (1 %) des
@@ -405,9 +406,61 @@ class _Lauf:
         self.steuerschuld_tilgen(tag, tauschen=True)   # Verkaufserlöse tilgen zuerst die Steuerschuld
         # Käufe, größte Lücke zuerst
         kaeufe = sorted(((t, d) for t, d in plan.items() if d > TOLERANZ), key=lambda x: -x[1] * eroeffnung[x[0]])
+        if schuld > TOLERANZ and kaeufe:
+            # Präzisierung 16.11.2026: bei offener Steuerschuld alle Käufe des Tags mit demselben Faktor auf die Kasse
+            faktor = self._kauffaktor(tag, kaeufe, eroeffnung, schluss_vortag)
+            kaeufe = [(t, d * faktor) for t, d in kaeufe]
         self.tausch_fuer_kaeufe(tag, [(t, d, eroeffnung[t]) for t, d in kaeufe])
         for ticker, delta in kaeufe:
             self._kaufen(tag, ticker, delta, eroeffnung[ticker], schluss_vortag.get(ticker))
+
+    def _kaufpreis(self, ticker, kurs, vortag) -> tuple[float | None, float]:
+        """(Limit, Ausführungspreis) eines Kaufs wie in `_kaufen`; Limit None ohne Limit-Order."""
+        limit = None
+        if self.d.kauf_limit_aufschlag is not None and vortag is not None and pd.notna(vortag):
+            limit = math.floor(float(vortag) * (1 + self.d.kauf_limit_aufschlag) * 100 + 1e-9) / 100
+        preis = self.kosten.ausfuehrungspreis(kurs, +1, self.klassen[ticker])
+        return limit, (min(preis, limit) if limit is not None else preis)
+
+    def _kauffaktor(self, tag, kaeufe, eroeffnung, schluss_vortag) -> float:
+        """Gemeinsamer Faktor f ∈ [0, 1] für alle Käufe eines Tags bei offener Steuerschuld (Präzisierung 16.11.2026).
+
+        f = größter Wert mit Σ_i (n_i(f) · p_i + Gebühr_i) + Tauschkosten ≤ K,  n_i(f) = abrunden(f · Δ_i · Kurs_i / p_i)
+        K = Kasse nach Tilgung der Steuerschuld (EUR und Fremdwährung in EUR), p_i = Ausführungspreis wie in `_kaufen`.
+        Gesucht per Bisektion, weil Abrunden auf ganze Stücke und Mindestgebühren nicht linear sind; der Rest bleibt Kasse.
+        Annahme: Verfallende Limits werden mitgezählt (vorsichtig, die Kürzung fällt dann etwas größer aus).
+        """
+        kurse = {w: self.m.eur_kurs(w, tag) for w in self.portfolio.fremdkasse}
+        verfuegbar = self.portfolio.kasse_eur(kurse)
+
+        def bedarf(f: float) -> float:
+            je_waehrung: dict[str, float] = {}
+            for ticker, delta in kaeufe:
+                kurs = eroeffnung[ticker]
+                _, preis = self._kaufpreis(ticker, kurs, schluss_vortag.get(ticker))
+                stueck = self._stueck_runden(f * delta * kurs / preis)
+                if stueck > TOLERANZ:
+                    w = self.m.waehrungen[ticker]
+                    je_waehrung[w] = je_waehrung.get(w, 0.0) + stueck * preis + self._gebuehren(tag, ticker, stueck, stueck * preis)
+            summe = sum(je_waehrung.values())
+            for w, b in je_waehrung.items():
+                if w != "EUR":
+                    kurs_w = self.m.eur_kurs(w, tag)
+                    fehl = b - self.portfolio.verfuegbar_eur(w, kurs_w)
+                    if fehl > TOLERANZ:
+                        summe += self.kosten.tauschkosten_eur(w, fehl * kurs_w, kurs_w)
+            return summe
+
+        if bedarf(1.0) <= verfuegbar + 1e-9:
+            return 1.0
+        unten, oben = 0.0, 1.0
+        for _ in range(50):
+            mitte = (unten + oben) / 2
+            if bedarf(mitte) <= verfuegbar + 1e-9:
+                unten = mitte
+            else:
+                oben = mitte
+        return unten
 
     def _stueck_runden_auf(self, stueck: float) -> float:
         """Zielbestand beim Verkauf aufrunden: Es wird nur so viel verkauft, wie das Ziel verlangt (weniger Umschlag)."""
@@ -444,16 +497,11 @@ class _Lauf:
         ])))
 
     def _kaufen(self, tag, ticker, delta, kurs, vortag=None):
-        limit = None
-        if self.d.kauf_limit_aufschlag is not None and vortag is not None and pd.notna(vortag):
-            limit = math.floor(float(vortag) * (1 + self.d.kauf_limit_aufschlag) * 100 + 1e-9) / 100
-            if kurs > limit + 1e-12:
-                self.verfallen.append({"datum": tag, "ticker": ticker, "eroeffnung": kurs, "limit": limit, "kasse": self.portfolio.cash})
-                self._verwerfen(tag, ticker, +1, 0, f"Limit {limit:.2f} verfallen (Eröffnung {kurs:.2f})")
-                return
-        preis = self.kosten.ausfuehrungspreis(kurs, +1, self.klassen[ticker])
-        if limit is not None:
-            preis = min(preis, limit)                     # Limit-Order: nie teurer als das Limit
+        limit, preis = self._kaufpreis(ticker, kurs, vortag)   # Limit-Order: nie teurer als das Limit
+        if limit is not None and kurs > limit + 1e-12:
+            self.verfallen.append({"datum": tag, "ticker": ticker, "eroeffnung": kurs, "limit": limit, "kasse": self.portfolio.cash})
+            self._verwerfen(tag, ticker, +1, 0, f"Limit {limit:.2f} verfallen (Eröffnung {kurs:.2f})")
+            return
         stueck = self._stueck_runden(delta * kurs / preis)  # Zielwert durch den teureren Ausführungspreis
         if stueck <= TOLERANZ:
             if self.portfolio.stueck(ticker) <= TOLERANZ:

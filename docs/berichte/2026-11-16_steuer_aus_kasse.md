@@ -23,6 +23,11 @@ Zwangsverkauf**. Neu ist nur, dass der Abfluss die Kasse im Lauf trifft:
    (Verkaufserlöse, Dividenden, Einzahlungen) tilgen sie zuerst.
 4. **Käufe bei offener Schuld werden anteilig kleiner:** Verkäufe rechnen gegen den Depotwert ohne Abzug der Schuld,
    Käufe gegen den Depotwert minus Schuld.
+   **Präzisierung von Jakobs Entscheidung 1 (16.11.2026, festgehalten 09:50 vor der Nachrechnung):** Streng anteilig.
+   Reichen die Käufe eines Ausführungstags mit offener Steuerschuld nicht in die Kasse nach Tilgung der Schuld, werden
+   alle Käufe dieses Tags mit demselben Faktor skaliert (bei ganzen Stücken abgerundet, der Rest bleibt Kasse), statt
+   die Lücke nach der Regel „größte Lücke zuerst“ bei den letzten Käufen zu kürzen. Anlass: Bei einer Teilumschichtung
+   reicht der Abzug der Schuld vom Zielwert allein nicht. Ohne offene Steuerschuld bleibt die bisherige Regel.
 5. **Wertreihen:** „Nach Steuern“ = Kasse + Positionen − offene Steuerschuld (die gewertete Reihe). „Vor Steuern“ =
    Wert nach Steuern + festgesetzte Steuern; in der zeitgewichteten Rendite vor Steuern zählen Steuerzahlungen als
    Auszahlung.

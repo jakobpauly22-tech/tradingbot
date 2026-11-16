@@ -36,8 +36,9 @@ class Plan:
         return None if g is None else pd.Series(g, dtype=float)
 
 
-def _lauf(plan, konfig, ohne_kosten, bruchteile, *, zahlung="jahresende_aus_kasse", ticker=("A",), einzahlungen=None, ende=TAGE[-1]):
-    d = TeilportfolioDefinition("core", 1000.0, Plan(plan), [Instrument(t, "aktie") for t in ticker], einzahlungen=einzahlungen)
+def _lauf(plan, konfig, ohne_kosten, bruchteile, *, zahlung="jahresende_aus_kasse", ticker=("A",), einzahlungen=None, ende=TAGE[-1],
+          kapital=1000.0):
+    d = TeilportfolioDefinition("core", kapital, Plan(plan), [Instrument(t, "aktie") for t in ticker], einzahlungen=einzahlungen)
     return simuliere([d], _kurse(ticker), TAGE[0], ende, kosten=ohne_kosten, regeln=bruchteile,
                      steuern=Steuerregeln(sparer_pauschbetrag=0.0, zahlung=zahlung), konfig={**konfig, "steuern": {**konfig["steuern"], "pauschbetrag_anteil": {}}})["core"]
 
@@ -119,6 +120,43 @@ def test_kaeufe_bei_offener_schuld_anteilig_kleiner(konfig, ohne_kosten, bruchte
     assert t.loc["B", "kurswert"] == pytest.approx((1500.0 - STEUER) / 2)
     assert t.loc["C", "kurswert"] == pytest.approx((1500.0 - STEUER) / 2)
     assert e.werte.loc[tag, "steuerschuld"] == 0.0 and e.werte.loc[tag, "cash"] == pytest.approx(0.0)
+
+
+TEILUMSCHICHTUNG = {"2023-01-02": {"A": 1.0}, "2023-06-05": {"A": 0.0}, "2023-07-03": {"A": 0.5, "B": 0.5},
+                    "2024-03-01": {"A": 0.5, "B": 0.0, "C": 0.3, "D": 0.2}}
+
+
+def test_teilumschichtung_alle_kaeufe_mit_demselben_faktor(konfig, ohne_kosten, bruchteile):
+    """Präzisierung 16.11.2026: A bleibt (750 €), B wird verkauft (750 €), C und D werden gekauft. Kasse nach Tilgung
+    750 − S. Ziele gegen Wert minus Schuld: C 0,3 · (1.500 − S), D 0,2 · (1.500 − S), zusammen 0,5 · (1.500 − S) > 750 − S.
+    Beide Käufe werden mit demselben Faktor auf die Kasse skaliert (alte Regel: C voll, D trägt die ganze Lücke)."""
+    e = _lauf(TEILUMSCHICHTUNG, konfig, ohne_kosten, bruchteile, ticker=("A", "B", "C", "D"))
+    tag = pd.Timestamp("2024-03-04")
+    t = e.trades[e.trades.datum == tag].set_index("ticker")
+    assert "A" not in t.index and t.loc["B", "richtung"] == -1             # A unverändert, kein Zwangsverkauf
+    kasse = 750.0 - STEUER
+    faktor = kasse / (0.5 * (1500.0 - STEUER))
+    assert t.loc["C", "kurswert"] == pytest.approx(0.3 * (1500.0 - STEUER) * faktor)
+    assert t.loc["D", "kurswert"] == pytest.approx(0.2 * (1500.0 - STEUER) * faktor)
+    assert t.loc["C", "kurswert"] / t.loc["D", "kurswert"] == pytest.approx(1.5)
+    assert e.werte.loc[tag, "cash"] == pytest.approx(0.0, abs=1e-6) and e.werte.loc[tag, "steuerschuld"] == 0.0
+
+
+def test_teilumschichtung_ganze_stuecke_abgerundet_rest_bleibt_kasse(konfig, ohne_kosten):
+    """Ganze Stücke, 10.000 €: Gewinn 5.000 €, Steuer S = 1.318,75 €. Verkauf B (50 Stück) → Kasse nach Tilgung 6.181,25 €.
+    Ziele C 0,3 · (15.000 − S) = 27,36 Stück, D 0,2 · (15.000 − S) = 18,24 Stück; 45 Stück passen nicht. Größter Faktor
+    f mit abrunden(27,36 f) + abrunden(18,24 f) ≤ 41: f ∈ [0,914; 0,932) → C 25, D 16, Rest 31,25 € bleibt Kasse.
+    Die alte Regel „größte Lücke zuerst“ ergäbe C 27, D 14."""
+    from tradingbot.backtest.simulation import Ausfuehrungsregeln
+
+    e = _lauf(TEILUMSCHICHTUNG, konfig, ohne_kosten, Ausfuehrungsregeln(max_gebuehr_anteil=1.0, ganze_stuecke=True),
+              ticker=("A", "B", "C", "D"), kapital=10_000.0)
+    steuer = 5000.0 * SATZ
+    assert e.werte.loc[ZAHLTAG_2023, "steuerschuld"] == pytest.approx(steuer)
+    tag = pd.Timestamp("2024-03-04")
+    t = e.trades[e.trades.datum == tag].set_index("ticker")
+    assert t.loc["B", "stueck"] == 50 and t.loc["C", "stueck"] == 25 and t.loc["D", "stueck"] == 16
+    assert e.werte.loc[tag, "cash"] == pytest.approx(7500.0 - steuer - 41 * 150.0)
 
 
 def test_steuergruppe_zahlt_aus_beiden_kassen(konfig, ohne_kosten, bruchteile):
