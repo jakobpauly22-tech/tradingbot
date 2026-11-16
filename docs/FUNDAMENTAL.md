@@ -784,6 +784,20 @@ Rohreihe und Vergleichsreihe aus derselben Quelle, das Kriterium entfällt dort)
 nicht bestanden haben (dieselbe Schwelle wie die Fehlerschwelle der Abnahme). Damit starten die c3-Werkzeuge nach einer
 überschrittenen Schwelle auch technisch nicht; `--probe` bleibt möglich und zählt nie als c3.
 
+**Umsetzung (16.11.2026):**
+
+- `daten/rohkurse_marktwert.py`: `splitabgleich` (Befund 10), `schwelle_der_abnahme` und `sperre_c3`/`sperrtext`
+  (Befund 14), `unsichere_reihen` (Befund 11). `tools/auswertung_scores.py` nutzt jetzt dieselbe Sperre wie die übrigen
+  c3-Werkzeuge (vorher eigene Prüfung nur auf fehlende Reihen).
+- `tools/pruefe_rohkurse.py`: zweites Kriterium für Yahoo-Reihen, Spalte `split_abgleich` in `abnahme.csv`, Zahl der nur
+  an der Splitspalte gescheiterten Reihen und Stand der Fehlerschwelle im Bericht. Die Fehlerschwelle wird erst am Ende
+  geprüft (vorher konnte sie mitten im Lauf abbrechen, bevor `abnahme.csv` geschrieben war); die Sperre liest sie aus
+  `abnahme.csv`.
+- `lade_firmendaten(rohkurse=True)` führt `rohkurse_unsicher`; `tools/auswertung_scores.py` rechnet dafür keinen Marktwert
+  (Grund „Abnahme nicht bestanden, H ≠ 1“). Rückfall-Listen: Scores-Bericht, Gegenprobe mit `--c3` (Gewicht im Nachbau,
+  `sp500_nachbau.rueckfall_gewichte`), Backtest-Bericht (Stichtage und Haltetage im Buch).
+- Tests: `tests/daten/test_c3_absicherung.py`.
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt
@@ -797,8 +811,10 @@ zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrektur
    die der Nachlader als dauerhaft nicht verfügbar führt. META muss geladen sein (Metadaten-404 ist kein Hindernis);
    Fehler stehen in `daten/cache/tiingo/roh_bis_tresor/stand.json`.
 2. **Abnahme der Rohreihen:** `.venv\Scripts\python tools\pruefe_rohkurse.py` → `docs/berichte/<Datum>_rohkurse_abnahme.md`.
-   Erwartet: „Für c3 noch offen: 0“. Nicht bestandene Reihen nutzen Teil b (gemeldet); mehr als 5 % nicht bestanden →
-   Fehlerschwelle, Abbruch, mit Jakob besprechen. Namensmeldungen kurz prüfen (Umbenennungen sind in Ordnung).
+   Erwartet: „Für c3 noch offen: 0“. Seit 16.11.2026 mit dem zweiten Kriterium „Splitspalte“ (Befund 10, Spalte
+   `split_abgleich`). Nicht bestandene Reihen nutzen Teil b (gemeldet), bei |H − 1| > 0,5 % ohne Marktwert (Befund 11,
+   Variante B); mehr als 5 % nicht bestanden → Fehlerschwelle, **alle c3-Werkzeuge sperren technisch** (Befund 14), mit
+   Jakob besprechen. Namensmeldungen kurz prüfen (Umbenennungen sind in Ordnung).
 3. **Unabhängige Stichprobe:** `.venv\Scripts\python tools\stichprobe_marktwert_roh.py` (eingefrorene 20 Einheiten,
    Kriterium 0,70 ≤ q ≤ 1,05) → `docs/berichte/<Datum>_stichprobe_marktwert_roh.md`, Titel muss „gewertet“ lauten.
    **Ergebnis an Jakob, bevor es weitergeht;** Abweichungen nicht anpassen.

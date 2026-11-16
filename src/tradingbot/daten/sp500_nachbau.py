@@ -20,7 +20,7 @@ from tradingbot.backtest.tresor import begrenze
 from tradingbot.daten.abdeckung import STREUBESITZ
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
-from tradingbot.daten.index_nachbau import (ABNAHME_ZEITRAUM, aktien_splitbereinigt, handelstage, marktwert_index,
+from tradingbot.daten.index_nachbau import (ABNAHME_ZEITRAUM, aktien_splitbereinigt, handelstage, marktwert_index, nachbau_gewichte,
                                             marktwerte_aus_streubesitz, streubesitz_pruefen)
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.kennzahlen.rendite import simple_return
@@ -50,6 +50,9 @@ class Firmendaten:
     sic: dict = field(default_factory=dict)
     rohkurse: dict = field(default_factory=dict)          # Firma → unbereinigte Reihe (close, split); nur mit rohkurse=True
     rohkurse_status: dict = field(default_factory=dict)   # Firma → "roh" oder Grund für den Rückfall
+    # Befund 11, Variante B (Jakob 16.11.2026): Firma → {"symbol", "H", "grund"} für Teilreihen, die die Abnahme nicht
+    # bestanden haben und |H − 1| > 0,5 % zeigen; Scores rechnen dafür keinen Marktwert, der Index-Nachbau bleibt bei Teil b.
+    rohkurse_unsicher: dict = field(default_factory=dict)
 
 
 def _kappungs_eintraege() -> list:
@@ -183,11 +186,12 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()
     eingefroren = eingefrorene_kurse()
-    roh_kurse, roh_status, roh_ok = {}, {}, set()
+    roh_kurse, roh_status, roh_ok, roh_unsicher, unsicher = {}, {}, set(), {}, {}
     if rohkurse:
-        from tradingbot.daten.rohkurse_marktwert import abgenommen, lade_abnahme, rohreihe
+        from tradingbot.daten.rohkurse_marktwert import abgenommen, lade_abnahme, rohreihe, unsichere_reihen
 
-        roh_ok = abgenommen(lade_abnahme())
+        abn = lade_abnahme()
+        roh_ok, unsicher = abgenommen(abn), unsichere_reihen(abn)
     schwelle = Fehlerschwelle("Nachbau: Kurse aus dem Cache")
     kurse: dict = {}
     for nr, z in relevant.iterrows():
@@ -207,6 +211,8 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             k = buche_abspaltungen(k, abspaltungen.get((firma, str(z["ticker"]).upper()), []))
             k = ersetze_eingefrorene(k, eingefroren.get((firma, str(z["ticker"]).upper()), []))
             kurse[firma] = k if kurse.get(firma) is None else kurse[firma].combine_first(k)
+            if rohkurse and (s["quelle"], s["symbol"]) in unsicher:
+                roh_unsicher[firma] = {"symbol": s["symbol"], **unsicher[(s["quelle"], s["symbol"])]}
             if rohkurse and roh_status.get(firma, "roh") == "roh":
                 r = rohreihe(s["quelle"], s["symbol"]) if (s["quelle"], s["symbol"]) in roh_ok else None
                 if r is None:
@@ -251,7 +257,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             gueltig[firma] = g
             verworfen += [{"cik": firma, "ende": e.date(), "wert_mrd": r.wert / 1e9, "grund": r.grund} for e, r in v.iterrows()]
     return Firmendaten(kurse, roh, gueltig, pd.DataFrame(verworfen, columns=["cik", "ende", "wert_mrd", "grund"]), relevant, sic,
-                       roh_kurse, roh_status)
+                       roh_kurse, roh_status, roh_unsicher)
 
 
 def finanzwert_maske(sic: dict, tage: pd.DatetimeIndex, firmen: list) -> pd.DataFrame:
@@ -294,7 +300,23 @@ def baue_nachbau(daten: Firmendaten, *, ohne_finanzwerte: bool = False, von=STAR
                               if daten.kurse[f] is not None and "split" in daten.kurse[f].columns and not isinstance(f, str)}
     marktwerte = marktwerte_aus_streubesitz(schluss_voll, daten.streubesitz_gueltig, korrektur_je_firma).reindex(tage)
     nachbau = marktwert_index(renditen.where(mitglied), marktwerte, mitglied)
-    return {"nachbau": nachbau, "tage": tage, "mitglied": mitglied}
+    gewichte, _ = nachbau_gewichte(renditen.where(mitglied), marktwerte, mitglied)
+    return {"nachbau": nachbau, "tage": tage, "mitglied": mitglied, "gewichte": gewichte}
+
+
+def rueckfall_gewichte(daten: Firmendaten, gewichte: pd.DataFrame, ab) -> pd.DataFrame:
+    """Befund 11 (Jakob 16.11.2026): Firmen ohne abgenommene Rohreihe im Index-Nachbau (dort Teil b, gemeldet) mit
+    Grund, H-Schätzung (Variante B) und Gewicht ab `ab` (Mittel über die Tage mit Gewicht und Maximum)."""
+    g = gewichte.loc[pd.Timestamp(ab):]
+    zeilen = []
+    for firma, grund in sorted(daten.rohkurse_status.items(), key=lambda x: str(x[0])):
+        if grund == "roh" or firma not in g.columns:
+            continue
+        w = g[firma].dropna()
+        u = daten.rohkurse_unsicher.get(firma, {})
+        zeilen.append({"firma": firma, "grund": grund, "H": u.get("H"), "tage": len(w),
+                       "gewicht_mittel": float(w.mean()) if len(w) else 0.0, "gewicht_max": float(w.max()) if len(w) else 0.0})
+    return pd.DataFrame(zeilen, columns=["firma", "grund", "H", "tage", "gewicht_mittel", "gewicht_max"])
 
 
 BENCHMARK_SCHLUESSEL = "SP500_ohne_finanzwerte"

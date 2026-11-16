@@ -140,16 +140,21 @@ def aktien_splitbereinigt(aktien: pd.Series, splits: pd.Series) -> pd.Series:
     return pd.Series({d: float(a) * float(faktoren[faktoren.index > d].prod()) for d, a in aktien.items()}).sort_index()
 
 
+def nachbau_gewichte(renditen: pd.DataFrame, marktwerte: pd.DataFrame, mitglied: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Gewichte des Kettenindex (Marktwerte des Vortags, nur Mitglieder mit Rendite) und Maske „nutzbar“."""
+    mw_vortag = marktwerte.shift(1)
+    nutzbar = mitglied & renditen.notna() & mw_vortag.notna() & (mw_vortag > 0)
+    gewicht_roh = mw_vortag.where(nutzbar)
+    return gewicht_roh.div(gewicht_roh.sum(axis=1), axis=0), nutzbar
+
+
 def marktwert_index(renditen: pd.DataFrame, marktwerte: pd.DataFrame, mitglied: pd.DataFrame, basis: float = 100.0) -> pd.DataFrame:
     """Kettenindex aus Tagesrenditen und Marktwerten (Tage × Titel); `mitglied` bool (Tage × Titel).
 
     Gewichte aus den Marktwerten des Vortags, nur für Titel, die am Tag t Mitglied sind und für die eine Rendite
     vorliegt. Ergebnis: Spalten index, abdeckung (Anteil der Mitglieder mit Rendite und Vortags-Marktwert).
     """
-    mw_vortag = marktwerte.shift(1)
-    nutzbar = mitglied & renditen.notna() & mw_vortag.notna() & (mw_vortag > 0)
-    gewicht_roh = mw_vortag.where(nutzbar)
-    gewichte = gewicht_roh.div(gewicht_roh.sum(axis=1), axis=0)
+    gewichte, nutzbar = nachbau_gewichte(renditen, marktwerte, mitglied)
     r_index = (gewichte * renditen).sum(axis=1, min_count=1).fillna(0.0)
     r_index.iloc[0] = 0.0
     abdeckung = nutzbar.sum(axis=1) / mitglied.sum(axis=1).where(mitglied.sum(axis=1) > 0)

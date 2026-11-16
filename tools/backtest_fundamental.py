@@ -51,6 +51,23 @@ def _nn(x):
     return None if pd.isna(x) else x
 
 
+def rueckfall_im_buch(scores: pd.DataFrame, bestaende: pd.DataFrame, namen: dict) -> list[str]:
+    """Befund 11 (Jakob 16.11.2026): Firmen, deren Marktwert an mindestens einem Stichtag nicht aus dem Rohkurs kam
+    (Rückfall auf Teil b oder, Variante B, kein Marktwert), mit Stichtagen und Haltetagen im Buch. Nur für Scores mit
+    Rohkursen (Spalte marktwert_kurs); sonst leer."""
+    if "marktwert_kurs" not in scores.columns:
+        return []
+    b = scores[(scores["veraltet"] == False) & scores["marktwert_kurs"].notna() & (scores["marktwert_kurs"] != "roh")]  # noqa: E712
+    text = ["", f"## Rückfall ohne Rohkurs-Marktwert (Befund 11): {b['firma'].nunique()} Firmen", "",
+            "| Firma | Ticker | Kurs | Stichtage | davon ohne Marktwert | Haltetage im Buch |", "| --- | --- | --- | --- | --- | --- |"]
+    for firma, g in b.groupby("firma"):
+        spalte = f"CIK{int(firma)}"
+        halte = int((bestaende[spalte] > 0).sum()) if spalte in bestaende.columns else 0
+        text.append(f"| {int(firma)} | {namen.get(int(firma), '')} | {g['marktwert_kurs'].iloc[-1]} | {len(g)} | "
+                    f"{int(g['marktwert'].isna().sum())} | {halte} |")
+    return text
+
+
 def ranglisten_aus_scores(scores: pd.DataFrame, konfig: dict) -> tuple[dict, pd.DataFrame]:
     """Wendet die Filter mit dem aktuellen Code an und bildet je Stichtag die Gesamtscore-Rangliste."""
     b = scores[~scores["veraltet"].astype(bool)].copy()
@@ -306,6 +323,7 @@ def main(argv=None) -> int:
     ende_bestand = vor.bestaende.iloc[-1]
     ende_bestand = ende_bestand[ende_bestand > 0].index
     text += ["", "## Bestand am Ende", "", ", ".join(sorted(namen.get(int(t[3:]), t) for t in ende_bestand))]
+    text += rueckfall_im_buch(scores, vor.bestaende, namen)
 
     bericht = "\n".join(text)
     if lauf.pfad:

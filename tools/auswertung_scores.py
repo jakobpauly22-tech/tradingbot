@@ -29,6 +29,24 @@ from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
 warnings.simplefilter("ignore")
 Z2_GRUND = "Altman Z'' "
+GRUND_UNSICHER = "Abnahme nicht bestanden, H ≠ 1"
+
+
+def rueckfall_tabelle(tabelle: pd.DataFrame, rohkurse_status: dict, unsicher: dict, namen: dict) -> list[str]:
+    """Befund 11 (Jakob 16.11.2026): Firmen ohne Rohkurs-Marktwert (Rückfall auf Teil b oder, Variante B, kein Marktwert)
+    mit Grund, H-Schätzung und Zahl der Firmen-Stichtage. `tabelle` braucht die Spalten firma, veraltet, marktwert_kurs."""
+    if "marktwert_kurs" not in tabelle.columns:
+        return []
+    b = tabelle[(tabelle["veraltet"] == False) & tabelle["marktwert_kurs"].notna() & (tabelle["marktwert_kurs"] != "roh")]  # noqa: E712
+    text = ["", f"## Rückfall ohne Rohkurs-Marktwert (Befund 11): {b['firma'].nunique()} Firmen, {len(b)} Firmen-Stichtage", "",
+            "Variante B: Abnahme nicht bestanden und |H − 1| > 0,5 % → kein Marktwert (fällt bei den Multiples heraus); sonst Teil b.", "",
+            "| Firma | Ticker | Kurs | Grund | H | Firmen-Stichtage | davon ohne Marktwert |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for firma, g in b.groupby("firma"):
+        u = unsicher.get(firma, {})
+        h = f"{u['H']:.4g}" if u else "–"
+        text.append(f"| {firma} | {namen.get(firma, '')} | {g['marktwert_kurs'].iloc[-1]} | {rohkurse_status.get(firma, '')} | {h} | {len(g)} | "
+                    f"{int(g['marktwert'].isna().sum()) if 'marktwert' in g else 0} |")
+    return text
 
 
 def marktwert_wahl(mr: dict, mw_teil_b, grund_teil_b) -> tuple:
@@ -58,14 +76,11 @@ def main(argv=None) -> int:
     korrektur, mw_korrektur, mw_roh = argumente.eq_offer_splitbereinigt, argumente.marktwert_korrektur, argumente.marktwert_rohkurse
     mw_korrektur = mw_korrektur or mw_roh
     if mw_roh and not argumente.probe:
-        from tradingbot.daten.rohkurse_marktwert import dauerhaft_nicht_verfuegbar, fehlende_fuer_c3, lade_abnahme
+        from tradingbot.daten import rohkurse_marktwert as rm
 
-        fehlend = fehlende_fuer_c3(pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv"), lade_abnahme(),
-                                   dauerhaft_nicht_verfuegbar())
-        if fehlend:
-            return laut_melden(RuntimeError(f"Sperre c3: {len(fehlend)} Reihen ohne Abnahme der Rohkurse (erst nachladen und "
-                                            f"tools/pruefe_rohkurse.py, oder --probe): {', '.join(fehlend[:30])}"
-                                            + (" …" if len(fehlend) > 30 else "")))
+        sperre = rm.sperrtext(rm.sperre_c3())     # Reihen ohne Abnahme und, seit Befund 14, Fehlerschwelle der Abnahme
+        if sperre:
+            return laut_melden(RuntimeError(sperre))
     konfig = lade_konfiguration("fundamental")
     kennzahlen, filt, mult = konfig["kennzahlen"], konfig["filter"], konfig["multiples"]
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
@@ -140,6 +155,10 @@ def main(argv=None) -> int:
                                   "marktwert_ungeklaert_roh": "; ".join(f"{x['datum']} {x['faktor_kursreihe']:g} ({x['art']})" for x in mr["ungeklaert"])})
                         mw, mw_grund, kurs = marktwert_wahl(mr, mw, mw_grund)
                         z["marktwert_kurs"] = kurs
+                    elif firma in daten.rohkurse_unsicher:   # Befund 11, Variante B: Teil b enthielte den verdeckten Faktor
+                        u = daten.rohkurse_unsicher[firma]
+                        mw, mw_grund = None, f"{GRUND_UNSICHER} ({u['symbol']}, H {u['H']:.4g})"
+                        z["marktwert_kurs"] = "kein Marktwert (Befund 11)"
             industrie = industrie_von <= sic <= industrie_bis
             eq = (vergleich_fuer_abschluesse(t, aktienfakten.get(firma), tag, daten.kurse[firma]["split"]) if korrektur else None)
             p, a, b, acc, m = (piotroski(t, eq_offer=eq), altman(t, industrie=industrie, marktwert_ek=mw), beneish(t), accruals_quote(t),
@@ -237,6 +256,9 @@ def main(argv=None) -> int:
     text += ["", "## Häufigste fehlende Posten (Anzahl Firmen-Stichtage)", "", ", ".join(f"{k}: {v}" for k, v in fehlend.most_common(12)), "",
              f"Kein Marktwert, Gründe: {gruende_mw}", "",
              f"Negativer EV (markiert, ohne EBIT/EV): {int(bewertbar['ev_negativ'].fillna(False).sum())} Firmen-Stichtage."]
+    if mw_roh:
+        namen = {int(z["cik"]): z["ticker"] for _, z in daten.relevant.iterrows() if pd.notna(z["cik"])}
+        text += rueckfall_tabelle(tabelle, daten.rohkurse_status, daten.rohkurse_unsicher, namen)
     ziel = PROJEKT_WURZEL / "daten" / "fundamental"
     ziel.mkdir(parents=True, exist_ok=True)
     # eigener Bericht je Schalter (scores_eq_offer, scores_marktwert, scores_marktwert_roh[_probe]); Basisbericht bleibt

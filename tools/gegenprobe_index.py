@@ -82,6 +82,18 @@ def main(argv=None) -> int:
             "", f"**Gesamt: {'bestanden' if ergebnis['bestanden'] else 'NICHT bestanden – nicht weiter anpassen, mit Jakob besprechen'}**", "",
             "| Jahr | Nachbau | S&P 500 TR | Abweichung |", "| --- | --- | --- | --- |"]
     text += [f"| {j}{' (ab ' + pd.Timestamp(ABNAHME_ZEITRAUM[0]).strftime('%d.%m.') + ')' if j == pd.Timestamp(ABNAHME_ZEITRAUM[0]).year else ''} | {r.nachbau:.2%} | {r.referenz:.2%} | {r.abweichung*100:+.2f} Pp. |" for j, r in ergebnis["jahre"].iterrows()]
+    if arg.c3:                                      # Befund 11: Rückfall auf Teil b sichtbar, mit Gewicht im Nachbau
+        from tradingbot.daten.sp500_nachbau import rueckfall_gewichte
+
+        rf = rueckfall_gewichte(daten, ergebnis_nachbau["gewichte"], ABNAHME_ZEITRAUM[0])
+        namen = {int(z["cik"]): z["ticker"] for _, z in daten.relevant.iterrows() if pd.notna(z["cik"])}
+        text += ["", f"## Rückfall auf Teil b im Nachbau (Befund 11): {len(rf)} Firmen, Gewicht zusammen im Mittel "
+                 f"{rf['gewicht_mittel'].sum():.2%}", "",
+                 "Firmen ohne abgenommene Rohreihe: Prüfung der Streubesitzwerte und Fortschreibung nach Teil b (bei H ≠ 1 "
+                 "möglicherweise um H falsch; Variante B gilt nur für die Scores).", "",
+                 "| Firma | Ticker | Grund | H | Tage mit Gewicht | Gewicht Mittel | Gewicht Max |", "| --- | --- | --- | --- | --- | --- | --- |"]
+        text += [f"| {r.firma} | {namen.get(r.firma, '')} | {r.grund} | {'–' if pd.isna(r.H) else f'{r.H:.4g}'} | {r.tage} | "
+                 f"{r.gewicht_mittel:.3%} | {r.gewicht_max:.3%} |" for r in rf.itertuples()]
     (ziel / f"{name}.md").write_text("\n".join(text), encoding="utf-8")
     print("\n".join(text))
     return 0
