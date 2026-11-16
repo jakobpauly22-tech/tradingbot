@@ -222,8 +222,7 @@ Pfade ohne führendes Verzeichnis liegen unter `src/tradingbot/`. Die Nummern fo
 - **Teil 2:** Nachlader (`daten/tiingo_rohkurse.py`), `tools/gegenprobe_index.py`,
   `tools/obergrenze_abspaltungen_tiingo.py`. Ob BMS nach der Kappung den Delisting-Grund „Übernahme“ bekommt, ist nicht
   verifiziert (in `config/universum_korrekturen.yaml` steht nur DD).
-- **Teil 3:** Risk-Manager und Senderiegel für das Verkaufslimit, `betrieb/nachtrag.py` bei zwei Büchern im selben
-  Titel und der Abgleich in `betrieb/buchstopp.py` sind nur überflogen.
+- **Teil 3:** am 16.11.2026 nachgeholt, siehe Abschnitt „Nachtrag Teil 3“ unten.
 - **Befund 2:** Verhalten von IBKR bei gegenläufigen Orders desselben Kontos.
 
 ## Reihenfolge der Behebung (Jakob 16.11.2026)
@@ -240,3 +239,49 @@ Jeweils erst Plan, dann Code, volle Testsuite vor jedem Commit.
   die Tresorgrenze begrenzen; Kopf der Liste korrigieren.
 - **Niedrig:** Befunde 6 und 7.
 - **Danach:** die offenen Teile der Prüfung.
+
+## Nachtrag Teil 3 (16.11.2026, nur gelesen): zwei Bücher in SPYI.DE, Verkaufslimit, Abgleich
+
+Anlass: Am Abend des 16.11.2026 kauft „regime“ erstmals SPYI.DE, während das Realbuch SPYI.DE hält. Gelesen wurden
+`betrieb/nachtrag.py`, `risiko/manager.py`, `broker/basis.py`, `broker/ibkr.py` (`sende`), `betrieb/buchstopp.py` und
+die zugehörigen Stellen in `betrieb/tageslauf.py`.
+
+**Ergebnis für den Abend: nichts gefunden, das den Kauf falsch buchen oder falsch senden würde.** Das Senden für
+„regime“ wurde nicht gesperrt.
+
+- **Kaufweg:** Derselbe Weg wie in den anderen Büchern (Limit, gültig für den nächsten Handelstag,
+  `broker/ibkr.py:387-392`). Der Risk-Manager prüft Kasse, Budget, 1-%-Gebührenregel und Limitabstand gegen das Buch
+  „regime“ (`risiko/manager.py:147-169`); als Core-Buch mit ETF gibt es keine Positionsgrenze (`:192-195`).
+- **Zuordnung der Ausführung:** über die Kennung der Order „<Buch>:<Vorschlag>“ (`betrieb/tageslauf.py:112-116`), also
+  eindeutig auch bei zwei Büchern im selben Titel.
+- **Abgleich:** summiert je Titel über alle Bücher (`betrieb/buchstopp.py:44-47`); eine Abweichung in SPYI.DE stoppt
+  Realbuch und „regime“, nicht den ganzen Lauf (`:55-62`). Die Kassenbasis ändert sich durch das neue Buch nicht
+  (`betrieb/tageslauf.py:245-249`).
+- **Gegenläufige Orders (Befund 2) heute:** nicht möglich. Das Realbuch kauft nur, und SPYI.DE steht nicht im
+  Technik-Universum (`config/technik.yaml`).
+
+### 16. Nachtrag über die Position entfällt für SPYI.DE (niedrig; Betrieb)
+
+- **Stelle:** `betrieb/nachtrag.py:220-221`, Stopp in `betrieb/tageslauf.py:403-405`.
+- **Befund:** Der Weg „Position mit Einstand“ gilt nur, wenn kein Buch den Titel hält. Weil das Realbuch SPYI.DE hält,
+  bleibt für eine Ausführung von „regime“ außerhalb des API-Zeitfensters (verpasster Abend) nur die Flex-Abfrage.
+- **Wirkung:** Enthält der Flex-Bericht die Ausführung nicht (nicht eingerichtet, Zeitraum zu kurz, noch nicht
+  erzeugt), stoppt der ganze Tageslauf, bis der Beleg da ist. Es wird nichts falsch gebucht.
+
+### 17. Zwei Orders im selben Titel aus zwei Büchern nach einem verpassten Abend (niedrig; Betrieb)
+
+- **Stelle:** `betrieb/nachtrag.py:115-116`, `:218-219`, `:295-296`.
+- **Befund:** Haben Realbuch und „regime“ am selben Abend je eine Order in SPYI.DE unterwegs, wird der Folgeabend
+  verpasst und nur eine ausgeführt, dann gelten beide als Verdacht (die Abweichung wird je Titel gemessen). Die nicht
+  ausgeführte Order hat keinen Flex-Beleg, der Weg über die Position scheidet aus („mehrere Orders unterwegs“), und
+  wegen „alles oder nichts“ wird auch die belegte nicht gebucht.
+- **Wirkung:** Stopp des Tageslaufs, den kein späterer Lauf von selbst auflöst. Tritt nur auf, wenn beide Bücher am
+  selben Abend eine SPYI-Order senden.
+
+### 18. Verkauf mit Limit ist im Betrieb noch nie gelaufen (Hinweis; Betrieb)
+
+- **Stelle:** `broker/ibkr.py:393-396`, `risiko/manager.py:171-180`, `broker/basis.py:133-138`,
+  `betrieb/tageslauf.py:1081-1083`.
+- **Befund:** Risk-Manager, Senderiegel und Adapter sind untereinander stimmig (Limit nur im Buch „regime“ erlaubt und
+  dort verlangt, höchstens 2 % unter dem letzten Kurs). Der Weg ist aber erst beim ersten Wechsel auf „Risiko aus“
+  im echten Betrieb zu sehen; bis dahin ist er nur durch Tests belegt.
