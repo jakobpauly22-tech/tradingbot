@@ -1,7 +1,11 @@
 # Einordnung der „Split“-Ereignisse der Kursreihen (tools/split_ereignisse_einordnen.py, Jakob 13.11.2026).
 # art: split (auch Reverse-Split, Aktiendividende) | abspaltung | kombiniert | unklar | nicht_zugehoerig; split_faktor gilt für die Aktienzahl (Abspaltung: 1).
 # Einträge mit geprueft: true hat Jakob bestätigt; sie bleiben bei neuen Läufen unverändert.
-# Backtests lesen nur Ereignisse bis zur Datumsgrenze des Tresors.
+# Datumsfilter (korrigiert 16.11.2026, Befund 8 der unabhängigen Prüfung): lade_ereignisse liest ALLE Einträge, ohne
+# Datumsfilter. In Backtests wirken nur Ereignisse, die in der vom Tresor begrenzten Kursreihe stehen
+# (kapitalmassnahmen_historie.korrektur geht von den Ereignissen der Kursreihe aus). Einträge ab 2025 stammen aus
+# Läufen im Betriebsmodus bis 13.11.2026 und dienen dem Betrieb; seit 16.11.2026 ordnet das Werkzeug nur bis zur
+# Tresorgrenze ein und übernimmt sie unverändert (docs/TRESOR_BEKANNT.md).
 stand: '2026-11-13T12:54:11'
 ereignisse:
 - cik: 107263

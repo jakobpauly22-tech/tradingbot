@@ -61,6 +61,39 @@ def test_split_sec_verhaeltnis_nur_periodenberichte():
     assert w.sec_verhaeltnis(f, pd.Timestamp("2016-06-01"))[3].startswith("kein Periodenbericht danach")
 
 
+def test_split_einordnung_nur_bis_zur_tresorgrenze(monkeypatch, tmp_path):
+    """Befund 8 (Jakob 16.11.2026): kein Betriebsmodus, SEC-Einreichungen nur bis zur Grenze, Einträge nach der Grenze
+    werden unverändert übernommen; der Kopf der Liste behauptet keinen Datumsfilter mehr."""
+    import pytest
+
+    from tradingbot.backtest.tresor import TresorGesperrt, betriebsmodus
+
+    w = _werkzeug("split_ereignisse_einordnen")
+    grenze = pd.Timestamp("2024-12-31")
+    alt = {(1, "2024-06-03"): {"cik": 1, "datum": "2024-06-03", "art": "split"},
+           (2, "2025-03-03"): {"cik": 2, "datum": "2025-03-03", "art": "abspaltung", "geprueft": False}}
+    bis, nach = w.teile_nach_grenze(alt, grenze)
+    assert list(bis) == [(1, "2024-06-03")] and nach == [alt[(2, "2025-03-03")]]
+    with betriebsmodus("Test", protokoll=tmp_path / "betriebsfreigaben.log"):
+        with pytest.raises(TresorGesperrt):
+            w.main()
+    # Einreichungen nach der Grenze fallen weg (Aktienfakten aus dem Cache)
+    fakten = pd.DataFrame([_fakt("2023-01-01", "2023-12-31", 1e8, "2024-02-20"), _fakt("2024-01-01", "2024-12-31", 2e8, "2025-02-20")])
+    monkeypatch.setattr(w, "aktienfakten", lambda roh, d, dauer: fakten)
+
+    class _Client:
+        def __init__(self, **k):
+            pass
+
+        def companyfacts_aus_cache(self, cik):
+            return {}, None
+
+    import tradingbot.daten.sec as sec
+    monkeypatch.setattr(sec, "SecClient", _Client)
+    assert list(w.aktienfakten_mit_quartalen([1])["filed"]) == [pd.Timestamp("2024-02-20")]
+    assert "liest ALLE Einträge, ohne" in w.KOPF and "Backtests lesen nur Ereignisse bis zur Datumsgrenze" not in w.KOPF
+
+
 # --- tools/pruefe_abspaltungen_tiingo.py (Teil c1, S2 nach der zweiten Änderung, Jakob 13.11.2026) ------------------------
 def test_abspaltung_suchwoerter_s2():
     w = _werkzeug("pruefe_abspaltungen_tiingo")
