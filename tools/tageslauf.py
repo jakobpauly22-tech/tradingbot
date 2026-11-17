@@ -127,6 +127,9 @@ def rechnen(probe: bool, kopie: bool = False):
             journal = Journal(ziel)
         else:
             journal = Journal(betriebspfad("probe/journal.sqlite" if probe else "journal.sqlite"))
+        # eigener Kurs-Cache des Betriebs (Befund 5): einmalige Übernahme, auch im Probelauf (Jakob 17.11.2026)
+        from tradingbot.betrieb import kurscache
+        meldungen.append(kurscache.protokollzeile(kurscache.sicherstellen()))
         broker = broker_oder_none(meldungen, nur_lesen=probe or kopie)
         erg = tageslauf(datetime.now(BERLIN), journal, broker=broker, sichern=not probe)
         gateway = getattr(broker, "gateway_meldungen", [])

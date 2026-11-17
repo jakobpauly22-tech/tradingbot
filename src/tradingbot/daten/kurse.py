@@ -106,6 +106,18 @@ def _als_datum(wert) -> date:
     return pd.Timestamp(wert).date()
 
 
+def kurscache() -> ParquetCache:
+    """Standard-Cache für Kurse: im Betriebsmodus der eigene Cache des Betriebs (daten/betrieb/cache/kurse, Befund 5,
+    betrieb/kurscache.py), sonst daten/cache/kurse. So kann ein Betriebslauf die Entwicklungsdaten nie verändern."""
+    from tradingbot.backtest.tresor import im_betriebsmodus
+
+    if im_betriebsmodus():
+        from tradingbot.betrieb.kurscache import betriebs_kurscache
+
+        return betriebs_kurscache()
+    return standard_cache()
+
+
 def lade_kurse(
     ticker: str,
     start,
@@ -119,10 +131,10 @@ def lade_kurse(
 
     Spalten: open, high, low, close (splitbereinigt), volume, dividende (je Aktie am Ex-Tag),
     split (Faktor am Split-Tag, sonst 0). Index `datum`. Währung steht in `df.attrs["waehrung"]`.
-    Fehlende Zeiträume werden nachgeladen, bereits geladene kommen aus dem Cache.
+    Fehlende Zeiträume werden nachgeladen, bereits geladene kommen aus dem Cache (ohne `cache`: `kurscache()`).
     """
     heute = heute or date.today()
-    cache = cache or standard_cache()
+    cache = cache or kurscache()
     abrufer = abrufer or yfinance_abruf
     start = _als_datum(start)
     ende = min(_als_datum(ende) if ende is not None else heute, heute - timedelta(days=1))
