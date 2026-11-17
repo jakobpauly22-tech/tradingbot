@@ -477,3 +477,44 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   ersten Mal mit der Zahl der übernommenen Dateien (Jakob 17.11.2026).
 - **Nicht umfasst:** SEC-Fakten der Fundamental-Bewertung liegen weiter im Standard-Cache (kein Kurs-Cache; Backtests
   begrenzen sie über `filed`).
+
+## Gegenläufige Orders im selben Titel (Befund 2, Jakob 16.11.2026)
+
+- **Anlass:** Realbuch und „regime“ handeln beide SPYI.DE. Ein Kauf des einen und ein Verkauf des anderen lägen in derselben
+  Eröffnungsauktion im selben Konto. Wie IBKR das behandelt, ist nicht verlässlich belegt; der Bot schließt es selbst aus.
+- **Regel vor dem Senden** (`betrieb/gegenlaeufig.py`, eingebunden in die Sendeschleife):
+  - Liegt im selben Titel schon eine Order eines anderen Buchs in Gegenrichtung (unterwegs oder bei IBKR offen, auch ohne
+    Bot-Kennung), wird die neue nicht gesendet.
+  - Kommen am selben Abend beide Richtungen neu, geht der Verkauf raus (Risiko senken), der Kauf wartet.
+  - „Wartet“: Meldung „WARTET – gegenläufige Order im selben Titel“, Ereignis `wartet_gegenlaeufig`, eigene Kategorie in
+    der Sofortmeldung nach dem Senden. Die Freigabe bleibt bis zu ihrem Ablauf stehen; der Vorschlag kommt am nächsten
+    Abend von selbst wieder. Gleiche Richtung in mehreren Büchern bleibt erlaubt, Tausch ist nicht betroffen.
+
+## Zwei Orders im selben Titel nach einem verpassten Abend (Befund 17, Jakob 16.11.2026)
+
+- Die Abweichung zur IBKR-Position wird je Titel gemessen; nach einem verpassten Abend gelten deshalb alle Orders eines
+  Titels als Verdacht. Bisher stoppte der Lauf, wenn nur eine davon ausgeführt war („alles oder nichts“).
+- **Neu** (`betrieb/nachtrag.py`): Eine Verdachts-Order ohne Flex-Treffer gilt als verfallen, wenn der Flex-Bericht ihren
+  Handelstag abdeckt (`fromDate` ≤ Handelstag ≤ `toDate`) **und** die belegten Ausführungen die Abweichung des Titels genau
+  erklären. Die belegte Order wird gebucht; Ereignis „verfallen“ mit Verweis auf Befund 17. Sonst Stopp wie bisher.
+
+## Wächter gegen ein verschobenes Universum (Jakob 17.11.2026)
+
+- **Anlass:** `daten/universum/kursstatus.csv` hängt an der Zeilennummer des Universums. Der Wikipedia-Abruf der Probe am
+  16.11.2026 um 22:18 brachte 89 Zeilen mehr (fast alle vor 2012 beendet); 653 von 813 Zuordnungen zeigten danach auf ein
+  anderes Symbol. Der echte Lauf um 22:39 lief schon damit; der Vorschlag P (fundamental_b) war nachweislich nicht
+  betroffen (gleiche Zeile 893, Kurs 103,68 USD = Yahoo-Schluss von P).
+- **Sperre:** `pruefe_zuordnung` (in `lade_firmendaten` und vor dem Kursabruf der Fundamental-Bewertung) verlangt je
+  genutzter Zeile denselben Ticker wie in `kursstatus.csv`, sonst `UniversumVerschoben`. Im Tageslauf setzen dann nur die
+  Fundamental-Bücher aus (Sofortmeldung, Ereignis `fundamental_gesperrt`, Buchwert trotzdem gespeichert); alle anderen
+  Bücher laufen normal. Backtest- und c3-Werkzeuge brechen laut ab.
+- **Offen (Plan ab 18.11.2026):** Zuordnung über den Schlüssel (Ticker, von, bis) in Betrieb und Backtest, eingefrorener
+  Wikipedia-Stand für Backtest und c3, eigener Wikipedia-Cache des Betriebs, Probelauf ohne jedes Schreiben von
+  Betriebsdaten (Kurse, Wikipedia, Universum, SEC).
+
+## Zeitmessung im Tageslauf (Jakob 17.11.2026, nur Anzeige)
+
+- Am Ende jedes Tageslaufs steht im Protokoll „Dauer je Abschnitt: …; gesamt … s“ (Vorbereitung, Gateway und Abgleich,
+  Realbuch, Regime, Technik-Bücher, Fundamental-Bücher, S&P-500-Liste, Fundamental-Bewertung, Risk-Manager und Speichern,
+  Sicherung), beim Senden „Dauer je Abschnitt (Senden): …“. Gespeichert in `Laufergebnis.dauer`; am Ablauf ändert sich
+  nichts (`betrieb/zeitmessung.py`).

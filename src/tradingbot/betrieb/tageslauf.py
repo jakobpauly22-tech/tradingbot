@@ -52,6 +52,7 @@ class Laufergebnis:
     buchstopps: dict[str, dict] = field(default_factory=dict)         # gestoppte Bücher (A1, betrieb/buchstopp.py)
     sofort: list[str] = field(default_factory=list)                   # Sofortmeldungen (Buchstopp, Stop gerissen, Aufhebung)
     regime: dict = field(default_factory=dict)                        # Schattenbuch regime: Zustand, Signale, Bewertungen (Anzeige, Meldung)
+    dauer: dict[str, float] = field(default_factory=dict)             # Sekunden je Abschnitt (Zeitmessung, nur Anzeige, 17.11.2026)
 
 
 # --- Ausführungen, Verfall, Abgleich ------------------------------------------------------------------------------
@@ -473,6 +474,14 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     risk = risk or RiskManager.aus_konfig()
     kurse_laden = kurse_laden or _yahoo_kurse
     erg = Laufergebnis(jetzt)
+    from tradingbot.betrieb.zeitmessung import Zeitmessung
+    uhr = Zeitmessung()                                               # Dauer je Abschnitt, nur Anzeige (Jakob 17.11.2026)
+    uhr.abschnitt("Vorbereitung und Devisenkurs")
+
+    def mit_dauer(e):
+        e.meldungen.append(uhr.zeile())
+        e.dauer = dict(uhr.dauer)
+        return e
     xetra, nyse = letzte_abgeschlossene_sitzung("xetra", jetzt), letzte_abgeschlossene_sitzung("nyse", jetzt)
     erg.xetra, erg.nyse = xetra, nyse
     tag = pd.Timestamp(xetra)
@@ -486,6 +495,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     erg.fx = dict(fx)
 
     offene = []
+    uhr.abschnitt("Gateway und Abgleich (Ausführungen, Klärung, Dividenden, Kapitalmaßnahmen)")
     if broker is not None:
         try:
             if not broker.verbunden():
@@ -519,7 +529,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 erg.abgleich = "gestoppt"
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
-                return erg
+                return mit_dauer(erg)
             # Titelabgleich je Buch (A1, Jakob 12.11.2026): nicht zuordenbar → Stopp für alles, sonst nur die betroffenen Bücher
             diff, je_buch = buchstopp.zuordnen(journal, list(b["buecher"]), positionen)
             # Fundamental: Kurs und Kennzahlen je Aktie nach einem Split auf demselben Stand? Sonst Buch gestoppt (A2)
@@ -537,7 +547,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 erg.abgleich = "gestoppt"
                 journal.ereignis("abgleich", erg.gestoppt)
                 erg.meldungen.append(erg.gestoppt)
-                return erg
+                return mit_dauer(erg)
             stopp_zeilen, stopp_sofort = buchstopp.aktualisieren(journal, je_buch, jetzt)
             erg.meldungen += stopp_zeilen
             erg.sofort += stopp_sofort
@@ -581,6 +591,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         return not befunde
 
     # Realbuch
+    uhr.abschnitt("Realbuch")
     etf = b["core"]["etf"]
     k_real = {etf: kurse_laden(etf, tag.date(), "etf")}
     erg.spyi = k_real[etf]["close"]
@@ -594,11 +605,13 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             roh += realbuch(tag, etf, kurs, frei_real, aufschlag, gebuehr_fuer("EUR"))
 
     # Schattenbuch regime (V1 aus der Festlegung b628678; betrieb/regimebuch.py, Jakob 15.11.2026)
+    uhr.abschnitt("Regime")
     if "regime" in b["buecher"]:
         roh += _regimebuch(journal, b, tag, xetra, kurse_laden, k_real, regime_daten, gest, pruefen, werte_buch, fx, aufschlag,
                            gebuehr_fuer("EUR"), erg)
 
     # Technik-Bücher
+    uhr.abschnitt("Technik-Bücher")
     etfs = kt["universum"]["etfs"]
     k_tech = {e["ticker"]: kurse_laden(e["ticker"], tag.date(), "etf") for e in etfs}
     waehrung = {e["ticker"]: e.get("handelswaehrung", "EUR") for e in etfs}
@@ -675,6 +688,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     erg.befunde.pop("technik", None)
 
     # Fundamental-Bücher (Bewertung nur, wenn ein Buch sie heute braucht)
+    uhr.abschnitt("Fundamental-Bücher (ohne Bewertung)")
     fb = {n: v for n, v in (("fundamental_a", "A"), ("fundamental_b", "B")) if n in b["buecher"] and n not in gest}
     def _nachkauf(n):
         seit = (journal.zustand(n) or {}).get("letzter_signaltag")
@@ -697,6 +711,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
             werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
             erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
+    uhr.abschnitt("S&P-500-Liste")
     if fundamental_bewertung is None and fb:
         try:
             from tradingbot.daten.universum import universum_aktualisieren
@@ -708,6 +723,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.meldungen.append(f"S&P-500-Liste nicht aktualisiert ({type(f).__name__}: {f}) – Stand unverändert")
     if braucht:
         splits_flex = _km.flex_splits_je_symbol(journal)        # Split-Verhältnis „Quelle: Flex“, von Jakob quittiert
+        uhr.abschnitt("Fundamental-Bewertung")
         try:
             bewertung, _, meldungen = (fundamental_bewertung or (lambda t: _fundamental_bewertung(t, splits_flex)))(pd.Timestamp(nyse))
         except UniversumVerschoben as f:
@@ -724,6 +740,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
                 erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
             braucht = []
+    uhr.abschnitt("Fundamental-Bücher (ohne Bewertung)")
     if braucht:
         if splits_flex:
             meldungen = [f"Aktienzahl mit Split-Verhältnis aus Flex (Quelle: Flex): {', '.join(sorted(splits_flex))}"] + list(meldungen)
@@ -772,6 +789,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             roh.append(t)
 
     # Risk-Manager je Buch, Speichern
+    uhr.abschnitt("Risk-Manager, Kontrakte, Speichern")
     kontexte = {n: kontext(journal, n, tag, werte_buch[n], offene=offene, fundamental=fundamental_gruende, fx=fx) for n in werte_buch}
     urteile = risk.pruefe_alle([x.vorschlag for x in roh], kontexte)
     nach_id = {x.vorschlag.id: x for x in roh}
@@ -799,9 +817,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         erg.meldungen += zeitfenster_hinweis(jetzt, us_fx)
     journal.ereignis("tageslauf", f"{len(erg.vorschlaege)} Vorschläge, Befunde in {sorted(erg.befunde)}; Xetra {xetra:%d.%m.%Y}, NYSE {nyse:%d.%m.%Y}")
     if sichern:
+        uhr.abschnitt("Sicherung")
         ziel = journal.sichern(None, jetzt=jetzt)
         erg.meldungen.append(f"Journal gesichert: {ziel.name}" if ziel else "Journal NICHT gesichert: JOURNAL_BACKUP_DIR fehlt in .env")
-    return erg
+    return mit_dauer(erg)
 
 
 def _regimebuch(journal, b: dict, tag, xetra, kurse_laden, k_real: dict, regime_daten, gest: dict, pruefen, werte_buch: dict, fx, aufschlag: float,
@@ -1047,6 +1066,9 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
     if hasattr(broker, "waehrend_warten"):
         broker.waehrend_warten = fortschritt
     kurse_laden = kurse_laden or _yahoo_kurse
+    from tradingbot.betrieb.zeitmessung import Zeitmessung
+    uhr = Zeitmessung()                                               # Dauer je Abschnitt, nur Anzeige (Jakob 17.11.2026)
+    uhr.abschnitt("Devisenkurs, Einlesen, Abgleich vor dem Senden")
     fx = {"USD": float(kurse_laden("EURUSD=X", jetzt.date(), "fx")["close"].iloc[-1])}
     zeilen: list[str] = []
     neu = einlesen(journal, broker, fx, kosten=risk.kosten, protokoll=zeilen)
@@ -1071,13 +1093,22 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
     offene = [(o.order_ref.split(":")[0], o.ticker, o.richtung) for o in offene_liste]
     gesendet = journal.gesendete_refs()
     stand = {}                                                                     # Kasse je Buch und Währung im Durchgang
+    # Befund 2 (Jakob 16.11.2026): keine gegenläufigen Orders im selben Titel aus verschiedenen Büchern (betrieb/gegenlaeufig.py)
+    from tradingbot.betrieb import gegenlaeufig
+    warten = gegenlaeufig.wartende([z for z in freigegeben if z["buch"] not in betroffen | gestoppte], journal.unterwegs(), offene)
     reihenfolge = lambda z: (z["buch"], 1 if z["art"] == "fx" else (0 if z["richtung"] < 0 else 2))   # noqa: E731 – Verkäufe, Tausch, Käufe
+    uhr.abschnitt("Sendeschleife")
     for z in sorted(freigegeben, key=reihenfolge):
         weiter()
         if z["buch"] in betroffen:
             continue
         if z["buch"] in gestoppte:
             meldungen.append(f"{z['id']}: Buch {z['buch']} gestoppt – nicht gesendet")
+            continue
+        if z["id"] in warten:
+            text = gegenlaeufig.meldung(z, warten[z["id"]])
+            journal.ereignis("wartet_gegenlaeufig", text, z["buch"])
+            meldungen.append(text)
             continue
         letzte = journal.buchwerte(z["buch"])
         wert = float(letzte.iloc[-1]) if len(letzte) else journal.kasse(z["buch"])
@@ -1137,11 +1168,13 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
         offene.append((z["buch"], z["ticker"], z["richtung"]))
         if antwort.status != "unbestaetigt":
             meldungen.append(f"{z['id']}: von IBKR angenommen (Order {antwort.order_id}, {antwort.text}" + (f", conId {antwort.con_id})" if antwort.con_id else ")"))
+    uhr.abschnitt("Abgleich der offenen Orders")
     try:
         meldungen += offene_orders_abgleichen(journal, broker, jetzt)
     except Exception as f:  # noqa: BLE001 – der Abgleich darf das Senden nie nachträglich zum Abbruch machen
         journal.ereignis("order_offen_abgleich", f"Abgleich der offenen Orders fehlgeschlagen: {type(f).__name__}: {f}", jetzt=jetzt)
         meldungen.append(f"Abgleich der offenen Orders nach dem Senden fehlgeschlagen ({type(f).__name__}) – im Client Portal prüfen")
+    meldungen.append(uhr.zeile("Dauer je Abschnitt (Senden)"))
     return meldungen
 
 

@@ -39,6 +39,7 @@ SENDEPROBLEME = (                                   # Anfang der Meldung von fre
     ("Read-Only im Gateway ist aktiv", "Read-Only im Gateway aktiv"),
     ("Senden abgebrochen", "Senden abgebrochen (Ausnahme)"),
     ("Abgleich der offenen Orders nach dem Senden fehlgeschlagen", "Abgleich der offenen Orders fehlgeschlagen"),
+    ("WARTET – gegenläufige Order im selben Titel", "Order wartet: gegenläufige Order im selben Titel aus einem anderen Buch (Befund 2)"),
 )
 ORDER_OFFEN = "Order bei IBKR offen, im Journal nicht unterwegs"      # gleicher Text wie tageslauf.ORDER_OFFEN_MELDUNG
 TICKER_MUSTER = re.compile(r"[A-Z0-9][A-Z0-9.\-]{0,14}")

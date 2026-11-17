@@ -529,7 +529,7 @@ def vorschlagszeilen(erg, betrieb: dict, *, probe: bool) -> list[Zeile]:
 # --- Meldungen -----------------------------------------------------------------------------------------------------------
 _FEHLER = ("GESTOPPT", "gestoppt", "ABGELEHNT", "VETO", "Veto", "abgebrochen", "fehlgeschlagen", "weicht ab", "nicht verbunden",
            "Read-Only im Gateway ist aktiv", "NICHT gesichert", "ohne Beleg", "unerklärte", "Fehler")
-_HINWEIS = ("(kein Abbruch)", "HINWEIS", "Hinweis", "Zeitpunkt", "nicht vorschlagbar", "verfallen", "Nachtrag", "nachgeholt",
+_HINWEIS = ("(kein Abbruch)", "HINWEIS", "Hinweis", "WARTET", "Zeitpunkt", "nicht vorschlagbar", "verfallen", "Nachtrag", "nachgeholt",
             "vermutet", "UNBESTÄTIGT", "Datenprüfung", "nicht eingelesen", "nicht möglich", "erstmals", "nicht kaufbar",
             "Aufbau wie beim ersten Lauf", "ohne Lauf")
 _OK = ("stimmen", "stimmt", "angenommen", "gesichert", "verbunden", "geprüft", "eingelesen", "belegt")
