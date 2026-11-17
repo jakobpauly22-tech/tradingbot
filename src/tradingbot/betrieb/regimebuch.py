@@ -11,6 +11,12 @@ begründet nie echte Trades.
   einmal laut gemeldet und nichts übernommen; das Buch läuft weiter.
 - Beim ersten Lauf wird die Vorgeschichte ab der ersten möglichen Bewertung (Kurse ab 2012, wie im Backtest)
   protokolliert und die Position sofort nach dem aktuellen Zustand eingenommen.
+- Datenstand (Befund 4, Jakob 16.11.2026; docs/REGIME.md, Abschnitt 9c): Jeder neue Protokolleintrag hält je Makroreihe
+  das Datum der letzten verwendeten Beobachtung fest (`datenstand`); eine Neuberechnung sieht für protokollierte Monate
+  genau diesen Stand. Eine nachgeholte Bewertung zählt bei den Tagesreihen (Zinskurve, Kreditaufschlag) den Wert vom Vortag
+  des Monatsendes nicht mit, sieht also dasselbe wie eine pünktliche (FRED stellt ihn erst am Abend des Folgetags ein).
+  Alte Einträge ohne Datenstand: Verschwindet eine Abweichung ohne den Vortageswert, nennt die Meldung den Datenstand als
+  Ursache. `engines/regime/signale.py` bleibt unverändert; begrenzt wird nur die Makrofunktion, die die Signale bekommen.
 - Makrodaten (FRED/ALFRED) werden nur geladen, wenn eine Bewertung ansteht, und liegen im Betriebsbereich. Ohne Daten
   gibt es keinen neuen Zustand: Position bleibt, Meldung, Bewertung am nächsten Abend.
 - Orders: „Risiko an“ ohne Bestand → Kauf in ganzen Stücken, Limit = Vortagesschluss + 2 %; „Risiko aus“ mit Bestand →
@@ -206,6 +212,50 @@ def fehlende_signale(c: pd.Series, makro) -> str:
     return text + (f"; am {enden[-1]:%d.%m.%Y} weiter nicht bestimmbar: {', '.join(fehlt)}" if fehlt else f"; am {enden[-1]:%d.%m.%Y} wieder bestimmbar")
 
 
+TAGESREIHEN = (signale.REIHEN["kurve"], signale.REIHEN["kredit"])     # Tagesreihen mit Monatsdurchschnitt (Befund 4)
+
+
+def _stichtage(monatsende) -> dict:
+    """(Reihe, Stichtag) → Monatsende: die Abfragen von `signale.signale_am` und `signalwerte` für dieses Monatsende."""
+    m = pd.Timestamp(monatsende).normalize()
+    return {(signale.REIHEN["kurve"], m): m, (signale.REIHEN["kredit"], m): m, (signale.REIHEN["arbeit"], m - pd.Timedelta(days=1)): m}
+
+
+def ohne_vortag(werte: pd.Series, monatsende) -> pd.Series:
+    """Tageswerte ohne die Beobachtung vom Vortag des Monatsendes (und spätere): was eine pünktliche Bewertung sieht."""
+    return werte[werte.index < pd.Timestamp(monatsende).normalize() - pd.Timedelta(days=1)]
+
+
+def makro_mit_datenstand(makro, grenzen: dict):
+    """Makrofunktion mit Datenstand je Monatsende (Befund 4). `grenzen`: Monatsende → {Reihe: letzte Beobachtung} (aus dem
+    Protokoll) oder → "ohne_vortag" (Tagesreihen ohne den Vortageswert). Andere Stichtage bleiben unverändert."""
+    zuordnung: dict = {}
+    for ende in grenzen:
+        zuordnung.update(_stichtage(ende))
+
+    def stand(reihe, stichtag):
+        werte = makro(reihe, stichtag)
+        ende = zuordnung.get((reihe, pd.Timestamp(stichtag).normalize()))
+        if ende is None:
+            return werte
+        grenze = grenzen[ende]
+        if grenze == "ohne_vortag":
+            return ohne_vortag(werte, ende) if reihe in TAGESREIHEN else werte
+        if grenze.get(reihe):
+            return werte.loc[: pd.Timestamp(grenze[reihe])]
+        return werte
+    return stand
+
+
+def datenstand(makro, monatsende) -> dict:
+    """Datum der letzten verwendeten Beobachtung je Makroreihe für dieses Monatsende (Befund 4)."""
+    aus = {}
+    for reihe, stichtag in _stichtage(monatsende):
+        werte = makro(reihe, stichtag)
+        aus[reihe] = str(pd.Timestamp(werte.index.max()).date()) if len(werte) else None
+    return aus
+
+
 def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[dict, Stand]:
     """Zustand des Buchs am Signaltag `tag`. `makro_laden()` liefert den MakroStand und wird nur gerufen, wenn eine
     Bewertung ansteht. Gibt den neuen Buchzustand (fürs Journal) und den Stand zurück. Fehler (keine Makrodaten, Lücke)
@@ -217,23 +267,43 @@ def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[
     faellig = faellige_monate(schlusskurse, tag, protokoll)
     if faellig:
         c = _schluesse(schlusskurse, tag)
-        makro = makro_laden()
+        makro_roh = makro_laden()
+        letzter_ab = ist_monatsende(c.index[-1])
+        # Datenstand (Befund 4): protokollierte Monate mit ihrem Stand, nachgeholte neue Monate ohne den Vortageswert
+        grenzen = {pd.Timestamp(e["monatsende"]).normalize(): e["datenstand"] for e in protokoll.values() if e.get("datenstand")}
+        if not stand.start:
+            for e in signale.monatsenden(c.index, letzter_monat_abgeschlossen=letzter_ab):
+                if str(e.to_period("M")) in faellig and e.normalize() != tag.normalize():
+                    grenzen[e.normalize()] = "ohne_vortag"
+        makro = makro_mit_datenstand(makro_roh, grenzen)
         try:
-            verlauf = signale.regime_verlauf(c, makro, variante=VARIANTE, letzter_monat_abgeschlossen=ist_monatsende(c.index[-1]))
+            verlauf = signale.regime_verlauf(c, makro, variante=VARIANTE, letzter_monat_abgeschlossen=letzter_ab)
         except ValueError as f:
             raise ValueError(f"{f}; {fehlende_signale(c, makro)}") from None
         verlauf = verlauf[verlauf["roh_aus"].notna()]
         neu_gerechnet = {str(pd.Timestamp(e).to_period("M")): (pd.Timestamp(e), z) for e, z in verlauf.iterrows()}
         # Protokoll gegen Neuberechnung: das Protokoll gilt, jede Abweichung wird einmal laut gemeldet
-        for monat in sorted(set(protokoll) & set(neu_gerechnet)):
-            for f in FELDER:
-                kennung = f"{monat}:{f}"
-                if bool(neu_gerechnet[monat][1][f]) != bool(protokoll[monat][f]) and kennung not in gemeldet:
-                    gemeldet.append(kennung)
-                    stand.laut.append(f"regime: Neuberechnung weicht vom Protokoll ab ({monat}, {SIGNALNAMEN.get(f, 'Rohzustand')}: "
-                                      f"protokolliert {'aus' if protokoll[monat][f] else 'an'}, neu gerechnet "
-                                      f"{'aus' if neu_gerechnet[monat][1][f] else 'an'}) – das Protokoll gilt, nichts übernommen; "
-                                      "Ursache prüfen (geänderte Kurshistorie?)")
+        abweichend = [(m, f) for m in sorted(set(protokoll) & set(neu_gerechnet)) for f in FELDER
+                      if bool(neu_gerechnet[m][1][f]) != bool(protokoll[m][f]) and f"{m}:{f}" not in gemeldet]
+        nur_datenstand: set = set()
+        alte = {pd.Timestamp(protokoll[m]["monatsende"]).normalize() for m, _ in abweichend if not protokoll[m].get("datenstand")}
+        if alte:                                     # alte Einträge ohne Datenstand: Abweichung nur wegen des Vortageswerts?
+            try:
+                probe = signale.regime_verlauf(c, makro_mit_datenstand(makro_roh, {**grenzen, **{e: "ohne_vortag" for e in alte}}),
+                                               variante=VARIANTE, letzter_monat_abgeschlossen=letzter_ab)
+                probe = {str(pd.Timestamp(e).to_period("M")): z for e, z in probe.iterrows()}
+            except ValueError:
+                probe = {}
+            nur_datenstand = {(m, f) for m, f in abweichend if m in probe and probe[m][f] is not None
+                              and bool(probe[m][f]) == bool(protokoll[m][f])}
+        for monat, f in abweichend:
+            gemeldet.append(f"{monat}:{f}")
+            ursache = ("Ursache: Datenstand (ohne den Vortageswert, den FRED am Bewertungsabend noch nicht hatte, stimmt die "
+                       "Neuberechnung mit dem Protokoll überein)" if (monat, f) in nur_datenstand
+                       else "Ursache prüfen (geänderte Kurshistorie?)")
+            stand.laut.append(f"regime: Neuberechnung weicht vom Protokoll ab ({monat}, {SIGNALNAMEN.get(f, 'Rohzustand')}: "
+                              f"protokolliert {'aus' if protokoll[monat][f] else 'an'}, neu gerechnet "
+                              f"{'aus' if neu_gerechnet[monat][1][f] else 'an'}) – das Protokoll gilt, nichts übernommen; {ursache}")
         fehlend = [m for m in faellig if m not in neu_gerechnet]
         if stand.start:
             fehlend = [m for m in fehlend if neu_gerechnet and m > min(neu_gerechnet)]    # Vorlauf ohne Zustand ist in Ordnung
@@ -245,7 +315,8 @@ def bewerten(tag, schlusskurse: pd.Series, makro_laden, zustand: dict) -> tuple[
             if protokoll and pd.Period(monat, "M") != pd.Period(max(protokoll), "M") + 1:
                 raise ValueError(f"Lücke im Protokoll zwischen {max(protokoll)} und {monat}")
             protokoll[monat] = {"monatsende": str(ende.date()), **{f: bool(z[f]) for f in FELDER}, "bewertet_am": str(tag.date()),
-                                "art": "start" if stand.start else ("bewertung" if ende == tag else "nachgeholt")}
+                                "art": "start" if stand.start else ("bewertung" if ende == tag else "nachgeholt"),
+                                "datenstand": datenstand(makro, ende)}
             if not stand.start:
                 stand.neu.append(monat)
         # Haltepflicht über die protokollierten Rohzustände (eingefrorene Funktion); protokollierte Monate bleiben unverändert

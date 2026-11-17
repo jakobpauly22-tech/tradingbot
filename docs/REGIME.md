@@ -261,7 +261,8 @@ Plan von Jakob freigegeben am 15.11.2026, mit einer Änderung (Verkauf mit Limit
   0 %. Das Senden war zum Start gesperrt; Jakob hat es am 15.11.2026 nach dem zweiten Probelauf freigeschaltet
   (`senden_freigeschaltet: true`).
 - **Bewertung:** am letzten Xetra-Handelstag des Monats nach Börsenschluss; die Order gilt für den nächsten Handelstag.
-  Ein verpasster Abend wird im nächsten Lauf nachgeholt, mit dem Wissensstand des Monatsendes (ALFRED).
+  Ein verpasster Abend wird im nächsten Lauf nachgeholt, mit dem Wissensstand des Monatsendes (ALFRED); seit dem
+  17.11.2026 ohne den Vortageswert der Tagesreihen (Abschnitt 9c).
 - **Start (Entscheidung 1):** Der erste Lauf protokolliert die Vorgeschichte ab Oktober 2012 (Kurse ab 2012, wie im
   Backtest) und nimmt die Position sofort nach dem aktuellen Zustand ein.
 - **Protokoll (Entscheidung 3):** Jede Monatsbewertung steht mit den vier Signalen, dem Rohzustand und dem Zustand mit
@@ -341,3 +342,30 @@ und hat ausdrücklich keine Wirkung auf das Urteil „V1 nicht bestanden“ (Abs
     (1,46 gegen 1,62 Pp.), Arbeitsmarkt an (Sahm-Wert 0,00 Pp., mit der Betriebsregel für Datenlücken gerechnet).
   - Vorschlag: Kauf 838 × SPYI.DE, Limit 11,92 € (Kurs 11,69 €), vom Risk-Manager frei; das Buch ist zum Senden
     gesperrt. Nächste Bewertung 30.11.2026.
+
+## 9c. Datenstand der Makroreihen im Betrieb (Befund 4, Jakob 16.11.2026; ergänzt am 17.11.2026)
+
+Datierte Ergänzung der Betriebsregel aus Abschnitt 9, Plan von Jakob am 16.11.2026 freigegeben. Sie betrifft nur das
+Schattenbuch im Betrieb und hat keine Wirkung auf das Urteil „V1 nicht bestanden“. `engines/regime/signale.py` bleibt
+unverändert (Prüfsummen-Test); begrenzt wird nur die Makrofunktion, die die Signale im Betrieb bekommen
+(`betrieb/regimebuch.py`, `makro_mit_datenstand`). Diese Änderung an `docs/REGIME.md` bricht den Freeze der
+Festlegungsprüfung (7g); vor einem neuen Regime-Lauf ist eine neue Festlegung nötig. Das ist gewollt.
+
+- **Anlass (Befund 4 der unabhängigen Prüfung):** Die Signale zählen bei Zinskurve und Kreditaufschlag den Wert vom Vortag
+  des Monatsendes mit. FRED hat ihn am Bewertungsabend meist noch nicht (Abschnitt 9, bekannte Abweichungen). Eine
+  spätere Neuberechnung enthält ihn; liegt ein Signal nahe der Schwelle, meldete das Buch fälschlich „geänderte
+  Kurshistorie?“. Eine nachgeholte Bewertung sah aus demselben Grund einen Tag mehr als eine pünktliche.
+- **Datenstand im Protokoll:** Jeder neue Protokolleintrag hält je Makroreihe das Datum der letzten verwendeten
+  Beobachtung fest (`datenstand`). Die Neuberechnung bekommt für protokollierte Monate genau diesen Stand.
+- **Alte Einträge ohne Datenstand:** Weicht die Neuberechnung ab und verschwindet die Abweichung, wenn der Vortageswert
+  weggelassen wird, nennt die Meldung „Ursache: Datenstand“ statt „geänderte Kurshistorie?“. Das Protokoll gilt
+  weiter, jede Abweichung wird einmal gemeldet.
+- **Nachgeholte Bewertung (Entscheidung Jakob 16.11.2026):** Sie zählt bei den Tagesreihen (T10Y3M, BAA10Y) die
+  Beobachtung vom Vortag des Monatsendes nicht mit und sieht damit dasselbe wie eine pünktliche. Die Arbeitslosenquote
+  (Monatsreihe) bleibt unverändert. Damit ändert sich die Regel „Wissensstand des Monatsendes“ aus Abschnitt 9 für
+  nachgeholte Bewertungen.
+- **Grenzfall:** Hat FRED den Vortageswert am Abend einer pünktlichen Bewertung ausnahmsweise schon (Lauf nach etwa
+  22 Uhr), zählt die pünktliche Bewertung ihn mit. Das Protokoll hält diesen Stand fest; eine spätere Neuberechnung
+  meldet deshalb keine Abweichung.
+- **Tests:** `tests/betrieb/test_regime_datenstand.py` (pünktlich ohne Vortageswert, spätere Neuberechnung, alter
+  Eintrag, echte Abweichung, nachgeholte Bewertung).

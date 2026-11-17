@@ -83,6 +83,7 @@ def test_start_protokolliert_die_vorgeschichte_und_setzt_den_zustand():
     assert min(z["protokoll"]) == "2012-10" and max(z["protokoll"]) == "2026-10"          # erste Bewertung wie im Backtest
     e = z["protokoll"]["2026-10"]
     werte = e.pop("werte")
+    assert e.pop("datenstand") == {"T10Y3M": "2026-10-29", "BAA10Y": "2026-10-29", "UNRATE": "2026-09-01"}   # Befund 4
     assert e == {"monatsende": "2026-10-30", "trend_aus": False, "kurve_aus": True, "kredit_aus": False, "arbeit_aus": False,
                  "roh_aus": False, "risiko_aus": False, "bewertet_am": "2026-11-16", "art": "start"}
     assert werte["schluss"] > werte["schluss_mittel"] and werte["kurve"] == -0.5 and werte["kredit"] == werte["kredit_mittel"] == 2.0
