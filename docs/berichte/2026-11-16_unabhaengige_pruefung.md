@@ -305,3 +305,62 @@ die zugehörigen Stellen in `betrieb/tageslauf.py`.
 | 6, 7 | behoben | 6f4712c (Festlegung 7g in `docs/REGIME.md`) | Mit 6f4712c trifft `tools/backtest_regime.py --vergleich-ablage` alle sechs Ablagen vom 16.11.2026 (`20261116T1004*_regime_*`, Werte, Trades, Kriterien) genau; Prüflauf 16.11.2026 ohne Abweichung. |
 | 2, 17, 4, 5 | Plan freigegeben (Jakob 16.11.2026) | – | Umsetzung am 17.11.2026 nach dem Tageslauf |
 | 16, 18 | Hinweise | – | Befund 16: Flex seit 12.11.2026 eingerichtet; Befund 18: erster echter Fall beim nächsten Wechsel auf „Risiko aus“ |
+
+## Nachtrag 17.11.2026: Universum verschoben, Probe schreibt Betriebsdaten
+
+Gefunden beim Testlauf vor dem ersten Commit (17.11.2026, etwa 10:45), nach Jakobs Freigabe vom selben Tag aufgenommen.
+
+### 19. Universum gegen `kursstatus.csv` verschoben (hoch; Betrieb und c3)
+
+- **Stelle:** `daten/universum.py` (`lade_wikipedia`, `lade_universum`, `universum_aktualisieren`), Zuordnung über die
+  Zeilennummer in `daten/sp500_nachbau.lade_firmendaten` und `engines/fundamental/aktuell.bewertung_am`.
+- **Befund:** Der Betrieb erneuert den Wikipedia-Cache wöchentlich, und diesen Cache lesen auch Backtest und c3. Der
+  Abruf vom 16.11.2026 um 22:18 (Probe) brachte 89 Zeilen mehr, fast alle vor 2012 beendet. Ab 2012 haben sich nur
+  sechs Zeilen inhaltlich geändert: XEC und IR (Datum um einen Tag), CDAY und DAY (andere Darstellung, CDAY jetzt
+  fälschlich ohne Ende) sowie ein echter Indexwechsel im Oktober 2026. Weil `kursstatus.csv` an der Zeilennummer hängt,
+  zeigen 653 von 813 Zuordnungen auf ein anderes Symbol.
+- **Wirkung:**
+  - Der echte Lauf vom 16.11.2026 um 22:39 lief schon damit, weil die Probe das neue Universum für den Tag gespeichert
+    hatte. Der einzige Einzelaktien-Vorschlag (P, fundamental_b) war nachweislich nicht betroffen: gleiche Zeile 893,
+    Kurs gleich dem Yahoo-Schluss, eigene SEC-Daten.
+  - Der Test `test_now_2020_bis_2022_mit_echten_daten` schlägt fehl. Alle c3-Werkzeuge und das Einordnungswerkzeug
+    hätten falsch zugeordnet.
+- **Sofortmaßnahme (17.11.2026, bc97ac7):** Wächter `pruefe_zuordnung` in `lade_firmendaten` und vor dem Kursabruf der
+  Fundamental-Bewertung, mit lautem Abbruch. Im Tageslauf setzen nur die Fundamental-Bücher aus.
+- **Behebung (Jakob 17.11.2026, Plan ab 18.11.2026, vor c3):**
+  - Den Wikipedia-Stand für Backtest und c3 auf den Stand von `kursstatus.csv` (02.11.2026) einfrieren. Abnahme:
+    813 Zeilen, alle Ticker passen, die betroffenen Fälle ab 2012 einzeln im Bericht.
+  - Der Betrieb bekommt einen eigenen Wikipedia-Cache. Der Indexwechsel vom Oktober 2026 gehört nur in den
+    Betriebsstand.
+  - Zuordnung über den Schlüssel (Ticker, von, bis) in Betrieb **und** Backtest, zusätzlich zum eingefrorenen Stand.
+
+### 20. Probelauf schreibt Betriebs- und Entwicklungsdaten (mittel; Betrieb)
+
+- **Stelle:** `tools/tageslauf.py` (`--kopie`, `--probe`) über `betrieb/tageslauf.tageslauf` mit
+  `universum_aktualisieren`, `aktuell.kurse_aktualisieren` und den SEC-Abrufen.
+- **Befund:** Die Probe vom 16.11.2026 (22:17 bis 22:30) hat geschrieben:
+  - 515 Kursdateien,
+  - beide Wikipedia-Seiten,
+  - das Universum,
+  - drei SEC-Einreichungen.
+
+  Der echte Lauf um 22:39 hat das Universum daraus übernommen.
+- **Regel (Jakob 17.11.2026):** Eine Probe darf keinerlei Betriebsdaten verändern: keine Kurse, kein Wikipedia, kein
+  Universum, keine SEC-Daten. Dass die Probe seit Befund 5 in den Kurs-Cache des Betriebs schreibt, ist bis dahin in
+  Ordnung. Plan zusammen mit Befund 19.
+
+## Stand der Behebung (17.11.2026, nachgetragen)
+
+| Befund | Stand | Commits | Nachweis |
+| --- | --- | --- | --- |
+| 5 | behoben | 9c37723 | Eigener Kurs-Cache des Betriebs `daten/betrieb/cache/kurse`; einmalige Übernahme ohne Downloads, auch im Probelauf, Protokollzeile mit Zahl der Dateien; Test: Split-Neuladen im Betrieb lässt den Standard-Cache byteweise unverändert |
+| 19 (Sofortmaßnahme) | Sperre | bc97ac7 | `pruefe_zuordnung`; Tageslauf: nur die Fundamental-Bücher setzen aus |
+| 17 | behoben | 7c68e2c | Flex-Zeitraum deckt den Handelstag ab und die Belege erklären die Abweichung, dann gilt die Order ohne Treffer als verfallen; Test mit dem Szenario aus dem Befund und zwei Gegenfällen |
+| 4 | behoben | 380e952 | Datenstand im Protokoll, nachgeholte Bewertung ohne Vortageswert, Meldung „Datenstand“ bei alten Einträgen; `docs/REGIME.md` 9c (bricht den Freeze 7g, gewollt) |
+| 2 | behoben | 4622221 | Gegenläufige Orders über Bücher: Verkauf vor Kauf, bestehende Order hat Vorrang; Meldung, Ereignis, Sofortmeldung |
+| 9 (Rest) | behoben | dieser Commit | `tools/pruefe_rohkurse.py` nennt H ≠ 1 nur als Anzahl |
+| 8 (Rest) | offen | – | Lauf des begrenzten Einordnungswerkzeugs zurückgestellt, bis Befund 19 behoben ist (Checkliste c3, Schritt 1b) |
+| 19, 20 | offen | – | Plan am 18.11.2026 |
+
+Alle Commits vom 17.11.2026 mit der vollen Suite: alles grün außer dem bekannten roten Test aus Befund 19. Das Committen
+mit diesem Vermerk hat Jakob freigegeben.

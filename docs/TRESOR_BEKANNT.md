@@ -38,10 +38,12 @@ einschätzen können, wie unabhängig sie vom Tresorzeitraum sind.
 | 8 | `docs/PHASE2.md`, `config/daten.yaml`, Berichte zum Phase-2-Gesamtdepot | Split der SPYI 2026 | Betrieb und Rückrechnung der Anteilspreise | Im Backtest rückgängig gemacht; ohne Kurswissen nach 2024. |
 | 9 | `docs/BETRIEB.md` (Kontrakte, Universum) und `docs/berichte/2026-11-13_reihen_nach_indexabgang.md` | Indexwechsel, Übernahmen und Kursenden 2025/2026 | Betrieb und Prüfung der Kursreihen | Die Zusammensetzung des S&P 500 nach 2024 wird in Backtests nicht verwendet. |
 | 10 | `docs/berichte/2026-11-16_unabhaengige_pruefung.md` | Zusammenfassung von Nr. 1, 2, 5 | Prüfbericht | wie dort |
+| 11 | `docs/BETRIEB.md` (Wächter gegen ein verschobenes Universum), `docs/berichte/2026-11-16_unabhaengige_pruefung.md` (Befunde 19 und 20), Commit-Nachrichten vom 17.11.2026 | einzelne Indexwechsel 2026 und Kurs eines gehaltenen Titels am 16.11.2026 | Prüfung der Universums-Verschiebung nach dem Wikipedia-Abruf des Betriebs (17.11.2026) | Betrieb; die Zusammensetzung nach 2024 wird in Backtests nicht verwendet. |
 
 ## Ausblick
 
-- Befund 9 bleibt offen in der Form: Der Abnahmebericht nennt Firmen mit H ≠ 1 weiterhin mit Namen und Faktor. Ob er
-  künftig nur die Zahl nennt, entscheidet Jakob.
+- Befund 9: Jakob hat am 16.11.2026 entschieden, dass Abnahmeberichte H ≠ 1 nur noch als Anzahl nennen, ohne Namen und
+  Faktor; umgesetzt am 17.11.2026 in `tools/pruefe_rohkurse.py` (auch die Tabelle „Nicht bestanden“ ohne Spalte H).
+  Bestehende Berichte (Nr. 5) bleiben unverändert.
 - Nr. 3: neuer Lauf des begrenzten Einordnungswerkzeugs vor c3, nur nach Jakobs Freigabe (ändert die Liste, die auch der
   Tageslauf liest).

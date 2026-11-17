@@ -849,9 +849,17 @@ zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrektur
    Monats- oder Netzgrenze an, dann einfach erneut starten). Fertig, wenn „noch offen 0“ meldet oder nur Symbole bleiben,
    die der Nachlader als dauerhaft nicht verfügbar führt. META muss geladen sein (Metadaten-404 ist kein Hindernis);
    Fehler stehen in `daten/cache/tiingo/roh_bis_tresor/stand.json`.
+1b. **Einordnung der Split-Ereignisse, nur bis zur Tresorgrenze** (ergänzt 17.11.2026, Entscheidung Jakob 16.11.2026):
+   Voraussetzung: Universum und `kursstatus.csv` passen zusammen (Wächter `pruefe_zuordnung`; seit dem 17.11.2026
+   verschoben, Behebung nach eigenem Plan). Erst `config/kapitalmassnahmen_historie.yaml` sichern
+   (`daten/fundamental/sicherung/kapitalmassnahmen_historie_<Zeit>.yaml`; das Werkzeug schreibt die Liste direkt), dann
+   `.venv\Scripts\python tools\split_ereignisse_einordnen.py`. **Ergebnis zu den fünf Ereignissen aus 2024 (SMCI, ANET,
+   ETR, PANW, TSCO) mit dem Unterschied zur gesicherten Liste an Jakob, bevor die Liste übernommen wird;** bis dahin die
+   gesicherte Liste zurückspielen. Grund: docs/TRESOR_BEKANNT.md, Nr. 3.
 2. **Abnahme der Rohreihen:** `.venv\Scripts\python tools\pruefe_rohkurse.py` → `docs/berichte/<Datum>_rohkurse_abnahme.md`.
    Erwartet: „Für c3 noch offen: 0“. Seit 16.11.2026 mit dem zweiten Kriterium „Splitspalte“ (Befund 10, Spalte
-   `split_abgleich`). Nicht bestandene Reihen nutzen Teil b (gemeldet), bei |H − 1| > 0,5 % ohne Marktwert (Befund 11,
+   `split_abgleich`). Der Bericht nennt H ≠ 1 nur als Anzahl, ohne Namen und Faktor (Jakob 16.11.2026). Nicht bestandene
+   Reihen nutzen Teil b (gemeldet), bei |H − 1| > 0,5 % ohne Marktwert (Befund 11,
    Variante B); mehr als 5 % nicht bestanden → Fehlerschwelle, **alle c3-Werkzeuge sperren technisch** (Befund 14), mit
    Jakob besprechen. Namensmeldungen kurz prüfen (Umbenennungen sind in Ordnung).
 3. **Unabhängige Stichprobe:** `.venv\Scripts\python tools\stichprobe_marktwert_roh.py` (eingefrorene 20 Einheiten,

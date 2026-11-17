@@ -50,6 +50,27 @@ def name_passt(a, b) -> bool:
     return bool(set(wa) & set(wb)) or "".join(wa) == "".join(wb)
 
 
+def mit_verdecktem_faktor(t: pd.DataFrame) -> pd.Series:
+    """Reihen mit verdecktem Faktor H ≠ 1 (|H − 1| > 0,5 %): Split nach der Tresorgrenze."""
+    return (t["H"] - 1).abs() > 0.005
+
+
+def abschnitt_nicht_bestanden(nicht: pd.DataFrame) -> list[str]:
+    """Tabelle der nicht bestandenen Reihen OHNE die Spalte H (Jakob 16.11.2026): Ein Faktor H ≠ 1 verrät einen Split
+    nach der Tresorgrenze; er erscheint nur als Anzahl. Bestehende Berichte bleiben unverändert (docs/TRESOR_BEKANNT.md)."""
+    n_h = int(mit_verdecktem_faktor(nicht).sum()) if len(nicht) else 0
+    zeilen = [f"## Nicht bestanden ({len(nicht)}; davon mit H ≠ 1: {n_h})", "",
+              "| Symbol (Quelle) | Tage | Anteil ≤ 1 % | größte Abweichung | Grund |", "| --- | --- | --- | --- | --- |"]
+    return zeilen + [f"| {r.symbol} ({r.quelle}) | {r.tage} | {r.anteil_ok:.1%} | {r.max_abw:.1%} | {r.grund} |" for r in nicht.itertuples()]
+
+
+def abschnitt_verdeckt(t: pd.DataFrame) -> list[str]:
+    """Verdeckter Faktor H ≠ 1 bei bestandenen Reihen: nur die Anzahl, ohne Namen und Faktor (Jakob 16.11.2026)."""
+    n = int((t["bestanden"] & mit_verdecktem_faktor(t)).sum())
+    return [f"## Verdeckter Faktor H ≠ 1 (Split nach der Tresorgrenze; Rohkurs nötig): {n} Reihen", "",
+            "Nur als Anzahl, ohne Namen und Faktor (Tresor, Jakob 16.11.2026); die Werte stehen in abnahme.csv (nicht in Git)."]
+
+
 def liste_der_reihe(ciks: set[int], ereignisse: dict[int, pd.DataFrame]) -> pd.DataFrame | None:
     """Einträge der Kapitalmaßnahmen-Liste für alle CIKs, deren Universumszeilen die Reihe nutzen (Befund 10)."""
     teile = [ereignisse[c] for c in sorted(ciks) if c in ereignisse]
@@ -109,7 +130,6 @@ def main() -> int:
 
     nicht = t[~t["bestanden"]]
     nur_split = t[~t["bestanden"] & t["grund"].fillna("").str.startswith("Splitspalte:")]   # erstes Kriterium bestanden
-    verdeckt = t[t["bestanden"] & ((t["H"] - 1).abs() > 0.005)]
     namen = t[~t["name_passt"]]
     text = ["# Abnahme der Rohreihen für den Marktwert (c2 (2))", "",
             f"Erstellt {datetime.now():%d.%m.%Y %H:%M} mit `tools/pruefe_rohkurse.py`. Kriterien vor dem Lauf festgehalten (docs/FUNDAMENTAL.md, "
@@ -122,14 +142,12 @@ def main() -> int:
             f"Ohne Rohreihe: {len(ohne_roh)}. Für c3 noch offen (ohne Abnahme, nicht dauerhaft unverfügbar): {len(fehlend)}.", "",
             f"Davon nur am Kriterium „Splitspalte“ gescheitert: {len(nur_split)}. "
             f"Fehlerschwelle (Befund 14, sperrt c3): {schwelle_der_abnahme(t) or 'nicht überschritten'}.", "",
-            f"## Nicht bestanden ({len(nicht)})", "", "| Symbol (Quelle) | Tage | Anteil ≤ 1 % | größte Abweichung | H | Grund |", "| --- | --- | --- | --- | --- | --- |"]
-    text += [f"| {r.symbol} ({r.quelle}) | {r.tage} | {r.anteil_ok:.1%} | {r.max_abw:.1%} | {r.H:.4g} | {r.grund} |" for r in nicht.itertuples()]
+            ] + abschnitt_nicht_bestanden(nicht)
     mit_hinweis = t[t["split_abgleich"].fillna("").str.contains("Hinweis:")]
     text += ["", f"## Bestanden mit Tiingo-Faktor an einer Abspaltung der Liste (über K behandelt) ({len(mit_hinweis)})", "",
              "| Symbol (Quelle) | Hinweis |", "| --- | --- |"]
     text += [f"| {r.symbol} ({r.quelle}) | {r.split_abgleich.split('Hinweis: ', 1)[1]} |" for r in mit_hinweis.itertuples()]
-    text += ["", f"## Verdeckter Faktor H ≠ 1 (Split nach der Tresorgrenze; Rohkurs nötig) ({len(verdeckt)})", "",
-             "| Symbol (Quelle) | H |", "| --- | --- |"] + [f"| {r.symbol} ({r.quelle}) | {r.H:.4f} |" for r in verdeckt.itertuples()]
+    text += [""] + abschnitt_verdeckt(t)
     text += ["", f"## Name bei Tiingo passt nicht zum Universum ({len(namen)}, nur Meldung)", "",
              "| Symbol | Tiingo | Universum | Abnahme |", "| --- | --- | --- | --- |"]
     text += [f"| {r.symbol} | {r.name_tiingo} | {r.name_universum} | {'bestanden' if r.bestanden else 'nicht bestanden'} |" for r in namen.itertuples()]

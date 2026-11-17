@@ -257,3 +257,18 @@ def test_geldmarkt_etf_kriterien_aus_regime_md():
 
     e = w.pruefe_geldmarkt_etf(_geldmarkt(tage, 0.02), tage, satz)                                       # 2 % p. a. gegen Satz 0 %
     assert e["kriterien"]["3 Jahresrendite"] is False and e["kriterien"]["2 Tagesänderung"] is True
+
+
+def test_rohkurse_bericht_nennt_h_ungleich_1_nur_als_anzahl():
+    """Jakob 16.11.2026: Abnahmeberichte nennen H ≠ 1 nur als Anzahl, ohne Namen und Faktor (Tresor)."""
+    import pandas as pd
+
+    w = _werkzeug("pruefe_rohkurse")
+    t = pd.DataFrame([{"quelle": "yfinance", "symbol": "AAA", "tage": 3000, "H": 15.0, "anteil_ok": 1.0, "max_abw": 0.001, "bestanden": True, "grund": ""},
+                      {"quelle": "yfinance", "symbol": "BBB", "tage": 3000, "H": 1.0, "anteil_ok": 1.0, "max_abw": 0.001, "bestanden": True, "grund": ""},
+                      {"quelle": "tiingo", "symbol": "CCC", "tage": 900, "H": 0.0666, "anteil_ok": 0.9, "max_abw": 0.2, "bestanden": False,
+                       "grund": "nur 90.0% der Tage innerhalb 1 %"}])
+    verdeckt = "\n".join(w.abschnitt_verdeckt(t))
+    assert ": 1 Reihen" in verdeckt and "AAA" not in verdeckt and "15" not in verdeckt
+    nicht = "\n".join(w.abschnitt_nicht_bestanden(t[~t["bestanden"]]))
+    assert "davon mit H ≠ 1: 1" in nicht and "CCC" in nicht and "0.0666" not in nicht and "0,0666" not in nicht and "| H |" not in nicht
