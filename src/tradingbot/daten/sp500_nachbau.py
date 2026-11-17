@@ -116,6 +116,27 @@ class DatenkorrekturPasstNicht(RuntimeError):
     """Eine konfigurierte Datenkorrektur passt nicht (mehr) zu den Daten; wird nie still übergangen."""
 
 
+class UniversumVerschoben(RuntimeError):
+    """Universum und daten/universum/kursstatus.csv passen über die Zeilennummer nicht mehr zusammen."""
+
+
+def pruefe_zuordnung(relevant: pd.DataFrame, status: pd.DataFrame) -> None:
+    """Wächter (Jakob 17.11.2026): kursstatus.csv ist über die Zeilennummer des Universums verknüpft. Ändert sich das
+    Universum (Wikipedia-Abruf des Betriebs am 16.11.2026, 22:18: 89 Zeilen mehr), bekäme eine Firma still die Kurse eines
+    anderen Symbols. Deshalb muss für jede genutzte Zeile, die in kursstatus.csv steht, der Ticker übereinstimmen; sonst
+    lauter Abbruch. Behebung der Ursache (Zuordnung über den Schlüssel, eingefrorener Stand) folgt mit eigenem Plan."""
+    if "ticker" not in status.columns or "ticker" not in relevant.columns:
+        return
+    gemeinsam = relevant.index.intersection(status.index)
+    a = relevant.loc[gemeinsam, "ticker"].astype(str)
+    b = status.loc[gemeinsam, "ticker"].astype(str)
+    falsch = a.index[a.to_numpy() != b.to_numpy()]
+    if len(falsch):
+        beispiele = ", ".join(f"Zeile {i}: {a[i]} ≠ {b[i]}" for i in falsch[:3])
+        raise UniversumVerschoben(f"Universum und kursstatus.csv verschoben: {len(falsch)} von {len(gemeinsam)} Zeilen mit anderem "
+                                  f"Ticker ({beispiele}) – keine Kurse zugeordnet")
+
+
 def eingefrorene_kurse() -> dict:
     """Eingefrorene Kurse nach einem Handelsstopp bei Insolvenz (config/universum_korrekturen.yaml, `eingefrorene_kurse`,
     vierte Datenkorrektur): (CIK, Ticker) → Liste der Einträge."""
@@ -205,6 +226,7 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     aktien_def = lade_konfiguration("fundamental")["kennzahlen"]["aktien_ausstehend"]
     mitglied_ab, bis = pd.Timestamp(mitglied_ab), pd.Timestamp(bis)
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
+    pruefe_zuordnung(relevant, status)                       # Wächter: keine still falsch zugeordneten Kurse (17.11.2026)
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()

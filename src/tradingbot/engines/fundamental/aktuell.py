@@ -78,6 +78,8 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
     universum, _ = lade_universum()
     status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    from tradingbot.daten.sp500_nachbau import pruefe_zuordnung
+    pruefe_zuordnung(universum, status)                      # Wächter (17.11.2026): vor jedem Kursabruf, sonst falsche Symbole
     aktiv = mitglieder_am(universum, tag)
     meldungen = []
     if aktualisieren:

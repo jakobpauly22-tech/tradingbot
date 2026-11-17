@@ -23,6 +23,7 @@ import pandas as pd
 
 from tradingbot.betrieb.buecher import BuchVorschlag, _verkauf, fundamentalbuch, quartalsstichtag, realbuch, tausch_vorschlag, technikbuch
 from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung, pruefe_tageskurse
+from tradingbot.daten.sp500_nachbau import UniversumVerschoben
 from tradingbot.broker.basis import Auftrag, KontraktUnbekannt, SendeErgebnis, SendenGesperrt, verkaufslimit_abschlag
 from tradingbot.risiko.manager import Kontext, OrderVorschlag, RiskManager, Urteil
 
@@ -707,7 +708,23 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.meldungen.append(f"S&P-500-Liste nicht aktualisiert ({type(f).__name__}: {f}) – Stand unverändert")
     if braucht:
         splits_flex = _km.flex_splits_je_symbol(journal)        # Split-Verhältnis „Quelle: Flex“, von Jakob quittiert
-        bewertung, _, meldungen = (fundamental_bewertung or (lambda t: _fundamental_bewertung(t, splits_flex)))(pd.Timestamp(nyse))
+        try:
+            bewertung, _, meldungen = (fundamental_bewertung or (lambda t: _fundamental_bewertung(t, splits_flex)))(pd.Timestamp(nyse))
+        except UniversumVerschoben as f:
+            # Sperre (Jakob 17.11.2026): ohne stimmige Zuordnung keine Bewertung; nur die Fundamental-Bücher setzen aus
+            text = (f"Fundamental-Bewertung gesperrt – {f}. {', '.join(braucht)} heute ohne Bewertung und ohne Vorschläge; "
+                    "übrige Bücher laufen normal")
+            erg.meldungen.append(text)
+            erg.sofort.append(text)
+            journal.ereignis("fundamental_gesperrt", text)
+            for n in braucht:
+                bestand = journal.bestand(n)
+                k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
+                kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
+                werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
+                erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
+            braucht = []
+    if braucht:
         if splits_flex:
             meldungen = [f"Aktienzahl mit Split-Verhältnis aus Flex (Quelle: Flex): {', '.join(sorted(splits_flex))}"] + list(meldungen)
         erg.meldungen += meldungen[:5]
