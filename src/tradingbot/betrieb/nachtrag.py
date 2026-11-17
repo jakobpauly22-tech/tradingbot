@@ -20,6 +20,11 @@ Festgelegter Weg (je Order „unterwegs“, deren Handelstag vorbei ist und die 
 3. Buchen über denselben Weg wie API-Ausführungen (`einlesen`), mit Quelle je Ausführung (`ausfuehrungen.quelle`) und
    Ereignis „nachtrag“ im Journal. Jede Nachbuchung steht im Protokoll des Laufs.
 4. Bleibt ein Verdacht ohne Beleg, stoppt der Lauf (keine Vorschläge, Status bleibt „gesendet“).
+5. Mehrere Orders im selben Titel (Befund 17 der unabhängigen Prüfung, Plan freigegeben von Jakob 16.11.2026): Die Abweichung
+   wird je Titel gemessen, deshalb gelten nach einem verpassten Abend alle Orders des Titels als Verdacht. Eine Order ohne
+   Flex-Treffer gilt als verfallen (Tagesorder, nicht ausgeführt), wenn der Flex-Bericht ihren Handelstag abdeckt
+   (fromDate ≤ Handelstag ≤ toDate) UND die belegten Ausführungen die Abweichung des Titels genau erklären
+   (Position − Bücher = Σ belegte Stück mit Vorzeichen). Sonst gilt der bisherige Weg (Position mit Einstand oder Stopp).
 """
 from __future__ import annotations
 
@@ -41,6 +46,7 @@ class Klaerung:
     verdacht: list = field(default_factory=list)         # Journalzeilen: Ausführung außerhalb des API-Zeitfensters vermutet
     gebucht: list[str] = field(default_factory=list)     # Meldungen der Nachbuchungen
     ohne_beleg: list[str] = field(default_factory=list)  # Meldungen: Verdacht ohne Beleg → Stopp
+    verfallen_flex: list = field(default_factory=list)   # (Journalzeile, Text): laut Flex nicht ausgeführt (Befund 17)
     hinweise: list[str] = field(default_factory=list)
 
 
@@ -137,6 +143,7 @@ def flex_aus_env():
             kopf = next(iter(root.iter("FlexStatement")), None)
             stand = (kopf.attrib.get("whenGenerated") if kopf is not None else "") or "unbekannt"
             zwischenspeicher.update(root=root, quelle=f"{QUELLE_FLEX} {abfrage}, erstellt {stand}",
+                                    von=(kopf.attrib.get("fromDate") if kopf is not None else None),
                                     bis=(kopf.attrib.get("toDate") if kopf is not None else None))
         return zwischenspeicher
 
@@ -152,9 +159,40 @@ def flex_aus_env():
         """Kapitalmaßnahmen (Abschnitt Corporate Actions; A1, Jakob 12.11.2026)."""
         b = bericht()
         return [dict(t.attrib) for t in b["root"].iter("CorporateAction")], b["quelle"]
+    def zeitraum() -> tuple[date | None, date | None]:
+        """Abgedeckter Zeitraum des Berichts (fromDate, toDate; Befund 17)."""
+        b = bericht()
+        return flex_datum(b.get("von")), flex_datum(b.get("bis"))
     laden.bargeld = bargeld
     laden.kapitalmassnahmen = kapitalmassnahmen
+    laden.zeitraum = zeitraum
     return laden
+
+
+def flex_datum(text) -> date | None:
+    """Flex-Datum „20261116“ oder „2026-11-16“ → date; None, wenn leer oder unlesbar."""
+    ziffern = "".join(c for c in str(text or "") if c.isdigit())[:8]
+    if len(ziffern) != 8:
+        return None
+    try:
+        return date(int(ziffern[:4]), int(ziffern[4:6]), int(ziffern[6:8]))
+    except ValueError:
+        return None
+
+
+def flex_deckt(flex, tag: date) -> tuple[bool, str]:
+    """Deckt der Flex-Bericht den Handelstag ab? (Befund 17) Ohne Zeitraumangabe: nein."""
+    zeitraum = getattr(flex, "zeitraum", None)
+    if zeitraum is None:
+        return False, "Flex-Bericht ohne Zeitraum"
+    try:
+        von, bis = zeitraum()
+    except Exception as f:  # noqa: BLE001
+        return False, f"Zeitraum des Flex-Berichts unbekannt ({type(f).__name__})"
+    if von is None or bis is None:
+        return False, "Zeitraum des Flex-Berichts unbekannt"
+    text = f"Flex-Bericht {von:%d.%m.%Y}–{bis:%d.%m.%Y}"
+    return von <= tag <= bis, text
 
 
 def _flex_zeit(text: str) -> str:
@@ -276,6 +314,7 @@ def nachtragen(journal, buecher: list[str], k: Klaerung, positionen, fx, *, kost
     for b in buecher:
         for t, s in journal.bestand(b).items():
             soll[t] = soll.get(t, 0.0) + s
+    ohne_treffer = []
     for z in k.verdacht:
         r = _ref(z)
         if r in belege:
@@ -284,6 +323,30 @@ def nachtragen(journal, buecher: list[str], k: Klaerung, positionen, fx, *, kost
                 k.ohne_beleg.append(f"{r}: Flex meldet {menge:g} von {z['stueck']} Stück (Teilausführung) – bitte prüfen")
                 del belege[r]
             continue
+        ohne_treffer.append(z)
+    # Befund 17: ohne Flex-Treffer, Handelstag vom Flex-Bericht abgedeckt, Abweichung des Titels durch die Belege erklärt → verfallen
+    ist = {p.ticker: p.stueck for p in positionen}
+    belegt: dict[str, float] = {}
+    for ausf, _ in belege.values():
+        for a in ausf:
+            if a.get("art") != "fx":
+                belegt[a["ticker"]] = belegt.get(a["ticker"], 0.0) + a["richtung"] * a["stueck"]
+    rest = []
+    for z in ohne_treffer:
+        if flex is None or z["art"] == "fx":
+            rest.append(z)
+            continue
+        tag = gueltig_fuer(z) or naechste_sitzung(boerse_von(z["ticker"]), z["signaltag"])
+        deckt, text = flex_deckt(flex, tag)
+        abw = ist.get(z["ticker"], 0.0) - soll.get(z["ticker"], 0.0)
+        if deckt and abs(abw - belegt.get(z["ticker"], 0.0)) <= 1e-9:
+            z_text = (f"{_ref(z)}: laut {text} am {tag:%d.%m.%Y} nicht ausgeführt (kein Flex-Treffer; Abweichung {z['ticker']} "
+                      f"{abw:g} Stück durch die belegten Ausführungen erklärt) – verfallen")
+            k.verfallen_flex.append((z, z_text))
+        else:
+            rest.append(z)
+    for z in rest:
+        r = _ref(z)
         if not gebuehrenplan:
             k.ohne_beleg.append(f"{r}: kein Beleg (Flex ohne Treffer, Gebühr für den Weg über die Position nicht festgelegt)")
             continue
@@ -293,7 +356,12 @@ def nachtragen(journal, buecher: list[str], k: Klaerung, positionen, fx, *, kost
         else:
             belege[r] = ([a], f"{QUELLE_POSITION}: {grund}")
     if k.ohne_beleg:                                   # alles oder nichts: bei offenem Fall wird nichts gebucht
+        k.verfallen_flex = []
         return k
+    for z, text in k.verfallen_flex:
+        journal.status_setzen(z["id"], "verfallen")
+        journal.ereignis("verfallen", f"Order {z['id']} {text} (Befund 17)", z["buch"])
+        k.gebucht.append(f"Nachtrag: {text}")
     for r, (ausf, quelle) in belege.items():
         zeilen: list[str] = []
         einlesen(journal, _Liste(ausf), fx, kosten=kosten, protokoll=zeilen, eroeffnung=eroeffnung)
