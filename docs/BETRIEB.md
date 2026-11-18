@@ -501,8 +501,9 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
 ## Wächter gegen ein verschobenes Universum (Jakob 17.11.2026)
 
 - **Anlass:** `daten/universum/kursstatus.csv` hängt an der Zeilennummer des Universums. Der Wikipedia-Abruf der Probe am
-  16.11.2026 um 22:18 brachte 89 Zeilen mehr (fast alle vor 2012 beendet); 653 von 813 Zuordnungen zeigten danach auf ein
-  anderes Symbol. Der echte Lauf um 22:39 lief schon damit; der Vorschlag P (fundamental_b) war nachweislich nicht
+  16.11.2026 um 22:18 brachte eine Zeile mehr (896 → 897): DAY steht neu alphabetisch an Stelle 120, ab dort rücken alle
+  Zeilen um eins. 653 von 813 Zuordnungen zeigten danach auf ein anderes Symbol (648 verschoben, 5 inhaltlich geändert).
+  *Korrektur 18.11.2026: Hier stand „89 Zeilen mehr (fast alle vor 2012 beendet)“; das war falsch (Prüfbericht, Befund 19).* Der echte Lauf um 22:39 lief schon damit; der Vorschlag P (fundamental_b) war nachweislich nicht
   betroffen (gleiche Zeile 893, Kurs 103,68 USD = Yahoo-Schluss von P).
 - **Sperre:** `pruefe_zuordnung` (in `lade_firmendaten` und vor dem Kursabruf der Fundamental-Bewertung) verlangt je
   genutzter Zeile denselben Ticker wie in `kursstatus.csv`, sonst `UniversumVerschoben`. Im Tageslauf setzen dann nur die

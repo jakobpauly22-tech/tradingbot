@@ -122,7 +122,8 @@ class UniversumVerschoben(RuntimeError):
 
 def pruefe_zuordnung(relevant: pd.DataFrame, status: pd.DataFrame) -> None:
     """Wächter (Jakob 17.11.2026): kursstatus.csv ist über die Zeilennummer des Universums verknüpft. Ändert sich das
-    Universum (Wikipedia-Abruf des Betriebs am 16.11.2026, 22:18: 89 Zeilen mehr), bekäme eine Firma still die Kurse eines
+    Universum (Wikipedia-Abruf des Betriebs am 16.11.2026, 22:18: eine Zeile mehr, ab Stelle 120 alles um eins verschoben),
+    bekäme eine Firma still die Kurse eines
     anderen Symbols. Deshalb muss für jede genutzte Zeile, die in kursstatus.csv steht, der Ticker übereinstimmen; sonst
     lauter Abbruch. Behebung der Ursache (Zuordnung über den Schlüssel, eingefrorener Stand) folgt mit eigenem Plan."""
     if "ticker" not in status.columns or "ticker" not in relevant.columns:

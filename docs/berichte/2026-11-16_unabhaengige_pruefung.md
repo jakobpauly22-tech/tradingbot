@@ -315,10 +315,15 @@ Gefunden beim Testlauf vor dem ersten Commit (17.11.2026, etwa 10:45), nach Jako
 - **Stelle:** `daten/universum.py` (`lade_wikipedia`, `lade_universum`, `universum_aktualisieren`), Zuordnung über die
   Zeilennummer in `daten/sp500_nachbau.lade_firmendaten` und `engines/fundamental/aktuell.bewertung_am`.
 - **Befund:** Der Betrieb erneuert den Wikipedia-Cache wöchentlich, und diesen Cache lesen auch Backtest und c3. Der
-  Abruf vom 16.11.2026 um 22:18 (Probe) brachte 89 Zeilen mehr, fast alle vor 2012 beendet. Ab 2012 haben sich nur
-  sechs Zeilen inhaltlich geändert: XEC und IR (Datum um einen Tag), CDAY und DAY (andere Darstellung, CDAY jetzt
-  fälschlich ohne Ende) sowie ein echter Indexwechsel im Oktober 2026. Weil `kursstatus.csv` an der Zeilennummer hängt,
-  zeigen 653 von 813 Zuordnungen auf ein anderes Symbol.
+  Abruf vom 16.11.2026 um 22:18 (Probe) brachte eine Zeile mehr (896 → 897): DAY steht neu alphabetisch an Stelle 120,
+  ab dort rücken alle Zeilen um eins. Inhaltlich geändert haben sich ab 2012 nur XEC und IR (Datum um einen Tag), CDAY
+  und DAY (andere Darstellung, CDAY jetzt fälschlich ohne Ende) sowie KVUE durch den echten Indexwechsel vom 30.10.2026
+  (KVUE raus, OKTA neu). Weil `kursstatus.csv` an der Zeilennummer hängt, zeigen 653 von 813 Zuordnungen auf ein
+  anderes Symbol. Über den Schlüssel (Ticker, von, bis) nachgemessen: 649 Statuszeilen um eins verschoben (davon eine
+  zufällig mit gleichem Ticker an der neuen Stelle), 159 unverschoben, 5 ohne Treffer (XEC, IR, CDAY, DAY, KVUE).
+- **Korrektur (18.11.2026):** In der ersten Fassung dieses Befunds, in `docs/BETRIEB.md` und in der Commit-Nachricht
+  von bc97ac7 stand „89 Zeilen mehr, fast alle vor 2012 beendet“. Das war falsch: Diese Zeilen gab es schon vorher, sie
+  stehen nur nicht in `kursstatus.csv`. Die Commit-Nachricht bleibt unverändert (gepusht); maßgeblich ist dieser Befund.
 - **Wirkung:**
   - Der echte Lauf vom 16.11.2026 um 22:39 lief schon damit, weil die Probe das neue Universum für den Tag gespeichert
     hatte. Der einzige Einzelaktien-Vorschlag (P, fundamental_b) war nachweislich nicht betroffen: gleiche Zeile 893,
@@ -328,8 +333,10 @@ Gefunden beim Testlauf vor dem ersten Commit (17.11.2026, etwa 10:45), nach Jako
 - **Sofortmaßnahme (17.11.2026, bc97ac7):** Wächter `pruefe_zuordnung` in `lade_firmendaten` und vor dem Kursabruf der
   Fundamental-Bewertung, mit lautem Abbruch. Im Tageslauf setzen nur die Fundamental-Bücher aus.
 - **Behebung (Jakob 17.11.2026, Plan ab 18.11.2026, vor c3):**
-  - Den Wikipedia-Stand für Backtest und c3 auf den Stand von `kursstatus.csv` (02.11.2026) einfrieren. Abnahme:
-    813 Zeilen, alle Ticker passen, die betroffenen Fälle ab 2012 einzeln im Bericht.
+  - Den Wikipedia-Stand für Backtest und c3 auf den Stand von `kursstatus.csv` (02.11.2026) einfrieren. Abnahme
+    (freigegeben 17.11.2026): (a) 896 Zeilen, (b) alle 813 Statuszeilen passen über Zeilennummer und Schlüssel,
+    (c) jede CIK aus `scores_eq_offer` (13.11.2026, 33 Stichtage) ist am Stichtag Mitglied; die betroffenen Fälle ab
+    2012 einzeln im Bericht. *Korrektur 18.11.2026: Hier stand „813 Zeilen“; 813 ist die Zahl der Statuszeilen.*
   - Der Betrieb bekommt einen eigenen Wikipedia-Cache. Der Indexwechsel vom Oktober 2026 gehört nur in den
     Betriebsstand.
   - Zuordnung über den Schlüssel (Ticker, von, bis) in Betrieb **und** Backtest, zusätzlich zum eingefrorenen Stand.
@@ -360,7 +367,8 @@ Gefunden beim Testlauf vor dem ersten Commit (17.11.2026, etwa 10:45), nach Jako
 | 2 | behoben | 4622221 | Gegenläufige Orders über Bücher: Verkauf vor Kauf, bestehende Order hat Vorrang; Meldung, Ereignis, Sofortmeldung |
 | 9 (Rest) | behoben | dieser Commit | `tools/pruefe_rohkurse.py` nennt H ≠ 1 nur als Anzahl |
 | 8 (Rest) | offen | – | Lauf des begrenzten Einordnungswerkzeugs zurückgestellt, bis Befund 19 behoben ist (Checkliste c3, Schritt 1b) |
-| 19, 20 | offen | – | Plan am 18.11.2026 |
+| 19 (Zahl) | korrigiert | dieser Commit (18.11.2026) | „89 Zeilen mehr“ war falsch; richtig 896 → 897, nachgemessen am Cache vom 16.11.2026 22:18 |
+| 19, 20 | offen | – | Plan freigegeben (Jakob 17.11.2026), Umsetzung ab 18.11.2026 |
 
 Alle Commits vom 17.11.2026 mit der vollen Suite: alles grün außer dem bekannten roten Test aus Befund 19. Das Committen
 mit diesem Vermerk hat Jakob freigegeben.
