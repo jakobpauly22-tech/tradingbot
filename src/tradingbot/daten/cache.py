@@ -14,6 +14,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from tradingbot.daten.schicht import lesepfad, schreibpfad
+
 _META_FELD = b"tradingbot"
 
 
@@ -27,7 +29,7 @@ class ParquetCache:
 
     def lesen(self, bereich: str, schluessel: str) -> tuple[pd.DataFrame | None, dict]:
         """Gibt (Daten, Metadaten) zurück, oder (None, {}) wenn nichts im Cache liegt."""
-        pfad = self.pfad(bereich, schluessel)
+        pfad = lesepfad(self.pfad(bereich, schluessel))      # Probe: zuerst die Schicht (Befund 20)
         if not pfad.exists():
             return None, {}
         tabelle = pq.read_table(pfad)
@@ -38,7 +40,7 @@ class ParquetCache:
 
     def schreiben(self, bereich: str, schluessel: str, daten: pd.DataFrame, meta: dict) -> None:
         """Schreibt atomar (erst temporäre Datei, dann umbenennen), damit kein halber Cache entsteht."""
-        pfad = self.pfad(bereich, schluessel)
+        pfad = schreibpfad(self.pfad(bereich, schluessel))   # Probe: nur in die Schicht (Befund 20)
         pfad.parent.mkdir(parents=True, exist_ok=True)
         tabelle = pa.Table.from_pandas(daten)
         schema_meta = dict(tabelle.schema.metadata or {})

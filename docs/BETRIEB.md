@@ -533,7 +533,19 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   - `tools/kontrakte_pruefen.py` nutzt den Betriebsstand.
   - Probe im Ersatzbereich (Scratchpad, 18.11.2026): 503 heutige Mitglieder, `bewertung_am(17.11.2026)` mit 397 Firmen,
     OKTA enthalten, KVUE und CDAY nicht, keine Sperre.
-- **Offen:** Probelauf ohne jedes Schreiben von Betriebsdaten (Schritt 4).
+- **Schritt 4 (Befund 20, 18.11.2026, `daten/schicht.py`):** Eine Probe (`--probe`, `--kopie`, Probefenster) verändert
+  keine Betriebs- oder Entwicklungsdaten mehr.
+  - Der ganze Probe-Prozess läuft in einer Schicht unter `daten/betrieb/probe/cache/`. Gelesen wird zuerst dort, dann
+    das Original; geschrieben wird nur dort. Zu Beginn jeder Probe wird die Schicht geleert.
+  - Erfasst sind alle Cache-Stellen: Parquet (Kurse, Universum, SIC, SEC-Tabellen, Makro), SEC-JSON und
+    Einreichungsköpfe, Tiingo (Kurse, Metadaten, Stundenzähler, Liste), Wikipedia, SEC-Namen, Yahoo-Namen, die
+    Übernahmen des Betriebs und `kursstatus_neu.csv`. Journale, Berichte und `betriebsfreigaben.log` der Probe
+    bleiben wie bisher in ihren Probe-Pfaden.
+  - Grenze: Tiingo-Abfragen einer Probe zählen nur im Stundenzähler der Schicht. Der echte Lauf sieht sie nicht,
+    das Limit gilt aber je API-Schlüssel.
+  - Nachweis: Test byteweise über jede Schreibstelle (`tests/daten/test_schicht.py`). Gegenprobe am 18.11.2026 an
+    echten Daten: Universum des Betriebs und `bewertung_am` mit Kursabruf in der Schicht; 0 von 16.834 Dateien in
+    `daten/cache` und `daten/betrieb/cache` geändert, 477 Dateien in der Schicht.
 
 ## Zeitmessung im Tageslauf (Jakob 17.11.2026, nur Anzeige)
 

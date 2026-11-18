@@ -54,13 +54,17 @@ def _quelle() -> Path:
 def seiten_uebernehmen(quelle: Path, ziel: Path, *, jetzt: datetime | None = None) -> dict:
     """Einmalige Übernahme der Wikipedia-Seiten in den Bereich des Betriebs (Zeitstempel bleiben, also bleibt auch der
     Wochenrhythmus). Danach nie wieder; der Betrieb ruft Wikipedia nur noch in seinen eigenen Ordner ab."""
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    if lesepfad(ziel / MARKE).exists():                      # Probe: Marke aus Schicht oder Betrieb (Befund 20)
+        return {**json.loads(lesepfad(ziel / MARKE).read_text(encoding="utf-8")), "neu": False}
+    vorhanden = {name for name in SEITEN if lesepfad(ziel / name).exists()}
+    ziel = schreibpfad(ziel)                                 # Probe: Übernahme nur in die Schicht
     marke = ziel / MARKE
-    if marke.exists():
-        return {**json.loads(marke.read_text(encoding="utf-8")), "neu": False}
     ziel.mkdir(parents=True, exist_ok=True)
     kopiert = []
     for name in SEITEN:
-        if (quelle / name).exists() and not (ziel / name).exists():
+        if (quelle / name).exists() and name not in vorhanden:
             temporaer = ziel / (name + ".kopie")
             shutil.copy2(quelle / name, temporaer)
             os.replace(temporaer, ziel / name)
@@ -208,13 +212,17 @@ def kursstatus_betrieb(universum: pd.DataFrame, *, pruefen: bool = True) -> tupl
 
     neu = neue_mitglieder(universum, status.index)
     datei = ordner() / NEU_DATEI
-    bekannt = pd.read_csv(datei, dtype={"ticker": str}, keep_default_na=False) if datei.exists() else pd.DataFrame()
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    lesen = lesepfad(datei)                                  # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+    bekannt = pd.read_csv(lesen, dtype={"ticker": str}, keep_default_na=False) if lesen.exists() else pd.DataFrame()
     bekannt_schl = {(str(r["ticker"]), str(r["von"]), str(r["bis"])): r for _, r in bekannt.iterrows()} if len(bekannt) else {}
     s_neu = schluessel(neu)
     offen = neu[[k not in bekannt_schl for k in s_neu]]
     if len(offen) and pruefen:
         frisch = _pruefe_neu(offen)
         alle = pd.concat([bekannt, pd.DataFrame(frisch)], ignore_index=True) if len(bekannt) else pd.DataFrame(frisch)
+        datei = schreibpfad(datei)
         temporaer = datei.with_suffix(".tmp")
         alle.to_csv(temporaer, index=False)
         os.replace(temporaer, datei)

@@ -158,7 +158,9 @@ def yahoo_name(symbol: str, cache_datei=None) -> str | None:
     from tradingbot.konfiguration import PROJEKT_WURZEL
 
     datei = Path(cache_datei or PROJEKT_WURZEL / "daten" / "cache" / "namen" / "yahoo.json")
-    namen = json.loads(datei.read_text(encoding="utf-8")) if datei.exists() else {}
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    namen = json.loads(lesepfad(datei).read_text(encoding="utf-8")) if lesepfad(datei).exists() else {}   # Befund 20
     if symbol not in namen:
         import yfinance as yf
 
@@ -169,6 +171,7 @@ def yahoo_name(symbol: str, cache_datei=None) -> str | None:
             except Exception:  # Yahoo-Fehler: Name unbekannt, Prüfung schlägt dann fehl (markiert)
                 info = {}
         namen[symbol] = info.get("longName") or info.get("shortName")
+        datei = schreibpfad(datei)
         datei.parent.mkdir(parents=True, exist_ok=True)
         datei.write_text(json.dumps(namen, ensure_ascii=False, indent=0), encoding="utf-8")
     return namen[symbol]

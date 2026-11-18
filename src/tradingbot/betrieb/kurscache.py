@@ -46,9 +46,12 @@ def _wurzel() -> Path:
 def uebernehmen(quelle: Path, ziel: Path, *, jetzt: datetime | None = None) -> dict:
     """Kopiert einmalig alle Kursdateien (*.parquet) von `quelle` nach `ziel` und schreibt die Marke. Gibt den Inhalt der
     Marke zurück, mit `neu` = True, wenn in diesem Aufruf kopiert wurde."""
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    if lesepfad(ziel / MARKE).exists():                      # Probe: Marke aus Schicht oder Betrieb (Befund 20)
+        return {**json.loads(lesepfad(ziel / MARKE).read_text(encoding="utf-8")), "neu": False}
+    ziel = schreibpfad(ziel)                                 # Probe: Übernahme nur in die Schicht
     marke = ziel / MARKE
-    if marke.exists():
-        return {**json.loads(marke.read_text(encoding="utf-8")), "neu": False}
     ziel.mkdir(parents=True, exist_ok=True)
     dateien = sorted(quelle.glob("*.parquet")) if quelle.exists() else []
     for datei in dateien:

@@ -68,6 +68,9 @@ class SecClient:
 
     # --- Cache ------------------------------------------------------------------------------------
     def _cache_lesen(self, datei: Path) -> tuple[dict | None, datetime | None]:
+        from tradingbot.daten.schicht import lesepfad
+
+        datei = lesepfad(datei)                              # Probe: zuerst die Schicht (Befund 20)
         if not datei.exists():
             return None, None
         with gzip.open(datei, "rt", encoding="utf-8") as f:
@@ -75,6 +78,9 @@ class SecClient:
         return inhalt["daten"], datetime.fromisoformat(inhalt["abgerufen_um"])
 
     def _cache_schreiben(self, datei: Path, url: str, daten: dict, zeitpunkt: datetime) -> None:
+        from tradingbot.daten.schicht import schreibpfad
+
+        datei = schreibpfad(datei)                           # Probe: nur in die Schicht (Befund 20)
         datei.parent.mkdir(parents=True, exist_ok=True)
         temporaer = datei.with_suffix(".tmp")
         with gzip.open(temporaer, "wt", encoding="utf-8") as f:
@@ -153,9 +159,11 @@ class SecClient:
 
     def einreichungskopf(self, cik, accn: str) -> str:
         """Kopf (Header) einer Einreichung als Text; ändert sich nie, daher dauerhaft gecacht."""
+        from tradingbot.daten.schicht import lesepfad, schreibpfad
+
         datei = self.cache_wurzel / "koepfe" / f"{accn}.txt.gz"
-        if datei.exists():
-            with gzip.open(datei, "rt", encoding="utf-8") as f:
+        if lesepfad(datei).exists():                         # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+            with gzip.open(lesepfad(datei), "rt", encoding="utf-8") as f:
                 return f.read()
         ordner = f"{SEC_WWW}/Archives/edgar/data/{int(cik)}/{accn.replace('-', '')}/{accn}"
 
@@ -178,6 +186,7 @@ class SecClient:
             if isinstance(fehler, VoruebergehenderFehler):
                 raise
             text = self._wiederholt(lambda: einmal(ordner + "-index-headers.html"), f"SEC Kopf {accn}")
+        datei = schreibpfad(datei)
         datei.parent.mkdir(parents=True, exist_ok=True)
         with gzip.open(datei, "wt", encoding="utf-8") as f:
             f.write(text)

@@ -270,6 +270,18 @@ def main() -> int:
     a.add_argument("--neu", action="store_true", help="neue Oberfläche (10.11.2026); mit --kopie als Probe-Fenster auf einer Kopie")
     arg = a.parse_args()
     logging.basicConfig(level=logging.WARNING)
+    if arg.probe or arg.kopie:
+        # Befund 20 (Jakob 17.11.2026): eine Probe verändert keinerlei Betriebsdaten. Der ganze Probe-Prozess (Lauf,
+        # Bericht, Probe-Freigabe im Fenster) liest zuerst aus daten/betrieb/probe/cache und schreibt nur dorthin; die
+        # Schicht wird zu Beginn jeder Probe geleert (daten/schicht.py).
+        from tradingbot.daten.schicht import probe_schicht
+
+        with probe_schicht(leeren=True):
+            return _starten(arg)
+    return _starten(arg)
+
+
+def _starten(arg) -> int:
     if arg.neu:
         return fenster(probe=arg.probe or arg.kopie, neu=True, kopie=arg.kopie)
     if arg.kopie:

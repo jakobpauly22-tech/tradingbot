@@ -62,10 +62,13 @@ def _cache_pfad(name: str) -> Path:
 
 
 def _text_mit_cache(url: str, datei: Path, user_agent: str, max_alter: timedelta) -> tuple[str, datetime]:
-    if datei.exists():
-        abgerufen = datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc)
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    lesen = lesepfad(datei)                                  # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+    if lesen.exists():
+        abgerufen = datetime.fromtimestamp(lesen.stat().st_mtime, tz=timezone.utc)
         if datetime.now(timezone.utc) - abgerufen < max_alter:
-            with gzip.open(datei, "rt", encoding="utf-8") as f:
+            with gzip.open(lesen, "rt", encoding="utf-8") as f:
                 return f.read(), abgerufen
     try:
         antwort = requests.get(url, headers={"User-Agent": user_agent}, timeout=120)
@@ -74,6 +77,7 @@ def _text_mit_cache(url: str, datei: Path, user_agent: str, max_alter: timedelta
     if antwort.status_code != 200:
         raise DatenFehler(f"{url}: HTTP {antwort.status_code}")
     antwort.encoding = antwort.encoding or "utf-8"
+    datei = schreibpfad(datei)
     datei.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(datei, "wt", encoding="utf-8") as f:
         f.write(antwort.text)

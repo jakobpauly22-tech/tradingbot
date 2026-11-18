@@ -53,7 +53,9 @@ class TiingoClient:
     def _limit_abwarten(self) -> None:
         datei = self._protokoll()
         jetzt = self._uhr()
-        zeiten = json.loads(datei.read_text()) if datei.exists() else []
+        from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+        zeiten = json.loads(lesepfad(datei).read_text()) if lesepfad(datei).exists() else []
         zeiten = [z for z in zeiten if jetzt - z < 3600]
         if len(zeiten) >= self.anfragen_pro_stunde:
             warte = 3600 - (jetzt - min(zeiten)) + 1
@@ -64,6 +66,7 @@ class TiingoClient:
             jetzt = self._uhr()
             zeiten = [z for z in zeiten if jetzt - z < 3600]
         zeiten.append(jetzt)
+        datei = schreibpfad(datei)                           # Probe: nur in die Schicht (Befund 20)
         datei.parent.mkdir(parents=True, exist_ok=True)
         datei.write_text(json.dumps(zeiten))
 
@@ -85,13 +88,17 @@ class TiingoClient:
     # --- Kurse ---------------------------------------------------------------------------------
     def historie(self, ticker: str, *, max_alter: timedelta | None = None) -> pd.DataFrame:
         """Ganze Tageshistorie eines Tiingo-Tickers im Bot-Format (Cache; `max_alter` None = nie erneuern)."""
+        from tradingbot.daten.schicht import lesepfad, schreibpfad
+
         datei = self.cache_wurzel / "kurse" / f"{ticker.lower().replace('/', '_')}.json.gz"
-        if datei.exists():
-            alter = datetime.now(timezone.utc) - datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc)
+        lesen = lesepfad(datei)                              # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+        if lesen.exists():
+            alter = datetime.now(timezone.utc) - datetime.fromtimestamp(lesen.stat().st_mtime, tz=timezone.utc)
             if max_alter is None or alter < max_alter:
-                with gzip.open(datei, "rt", encoding="utf-8") as f:
+                with gzip.open(lesen, "rt", encoding="utf-8") as f:
                     return _begrenzt(normalisieren(json.load(f)))
         roh = self._holen(f"{TIINGO_API}/{ticker.lower()}/prices", {"startDate": "1990-01-01", "resampleFreq": "daily"})
+        datei = schreibpfad(datei)
         datei.parent.mkdir(parents=True, exist_ok=True)
         temporaer = datei.with_suffix(".tmp")
         with gzip.open(temporaer, "wt", encoding="utf-8") as f:
@@ -102,12 +109,16 @@ class TiingoClient:
 
     def metadaten(self, ticker: str, *, max_alter: timedelta = timedelta(days=30)) -> dict:
         """Name, Börse und Zeitraum des Tickers laut Tiingo (zählt gegen das Stundenlimit; gecacht)."""
+        from tradingbot.daten.schicht import lesepfad, schreibpfad
+
         datei = self.cache_wurzel / "meta" / f"{ticker.lower().replace('/', '_')}.json"
-        if datei.exists():
-            alter = datetime.now(timezone.utc) - datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc)
+        lesen = lesepfad(datei)                              # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+        if lesen.exists():
+            alter = datetime.now(timezone.utc) - datetime.fromtimestamp(lesen.stat().st_mtime, tz=timezone.utc)
             if alter < max_alter:
-                return json.loads(datei.read_text(encoding="utf-8"))
+                return json.loads(lesen.read_text(encoding="utf-8"))
         meta = self._holen(f"{TIINGO_API}/{ticker.lower()}", {})
+        datei = schreibpfad(datei)
         datei.parent.mkdir(parents=True, exist_ok=True)
         datei.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return meta
@@ -145,10 +156,15 @@ def lade_tiingo_liste(cache_wurzel: Path | None = None, max_alter: timedelta = t
     from tradingbot.konfiguration import PROJEKT_WURZEL
 
     datei = Path(cache_wurzel or PROJEKT_WURZEL / "daten" / "cache" / "tiingo") / "supported_tickers.zip"
+    from tradingbot.daten.schicht import lesepfad, schreibpfad
+
+    if lesepfad(datei).exists():                             # Probe: Schicht zuerst, schreiben nur dort (Befund 20)
+        datei = lesepfad(datei)
     if not datei.exists() or datetime.now(timezone.utc) - datetime.fromtimestamp(datei.stat().st_mtime, tz=timezone.utc) > max_alter:
         antwort = requests.get(TIINGO_LISTE, timeout=120)
         if antwort.status_code != 200:
             raise DatenFehler(f"Tiingo-Tickerliste: HTTP {antwort.status_code}")
+        datei = schreibpfad(datei)
         datei.parent.mkdir(parents=True, exist_ok=True)
         datei.write_bytes(antwort.content)
     liste = pd.read_csv(io.BytesIO(datei.read_bytes()), compression="zip")
