@@ -30,7 +30,7 @@ from tradingbot.engines.fundamental.gesamtscore import gesamtscore
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
 from tradingbot.engines.fundamental.multiples import marktwert_am, marktwert_korrigiert, multiples
 from tradingbot.engines.fundamental.scores import _w, accruals_quote, altman, beneish, piotroski
-from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
+from tradingbot.konfiguration import lade_konfiguration
 
 VARIANTEN = {"A": {"qualitaet": 0.5, "bewertung": 0.5}, "B": {"qualitaet": 1.0, "bewertung": 0.0}}
 
@@ -77,9 +77,8 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
     universum, _ = lade_universum(stand="betrieb")          # Betrieb: laufender Stand; Sperre bleibt bis Befund 19, Schritt 3
-    status =pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
-    from tradingbot.daten.sp500_nachbau import pruefe_zuordnung
-    pruefe_zuordnung(universum, status)                      # Wächter (17.11.2026): vor jedem Kursabruf, sonst falsche Symbole
+    from tradingbot.daten.kursstatus import lade_kursstatus
+    status = lade_kursstatus(universum)                      # über den Schlüssel, laut bei Abweichung (Befund 19), vor jedem Kursabruf
     aktiv = mitglieder_am(universum, tag)
     meldungen = []
     if aktualisieren:

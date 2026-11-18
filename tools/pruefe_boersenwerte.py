@@ -22,6 +22,7 @@ from tradingbot.daten.index_nachbau import aktien_splitbereinigt
 from tradingbot.daten.kursquellen import plausibel
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.daten.tiingo import TiingoClient
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.universum import lade_universum
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
@@ -57,7 +58,7 @@ def aktien_reihe(ciks: list[int], cache, splits: pd.Series) -> pd.Series:
 
 def main() -> int:
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv")
+    status = lade_kursstatus(universum).reset_index()   # Spalte index = Zeile im Universum, über den Schlüssel (Befund 19)
     gueltig = status[status["gueltig"].astype(bool)]
     cache, tiingo = standard_cache(), TiingoClient()
     schwelle = Fehlerschwelle("Börsenwert-Prüfung")

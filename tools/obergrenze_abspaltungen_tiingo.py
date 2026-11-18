@@ -25,6 +25,7 @@ from tradingbot.daten.kurse import in_euro, lade_kurse
 from tradingbot.daten.sp500_nachbau import ENDE, VORLAUF, baue_nachbau, lade_firmendaten
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.kennzahlen.performance import cagr
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
@@ -95,7 +96,7 @@ def main(argv=None) -> int:
                if arg.c3 else BERICHT)
     ereignisse = lies_ereignisse(QUELLE.read_text(encoding="utf-8"))
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), tiingo=TiingoClient(sitzung=OhneNetz()), rohkurse=arg.c3)
     alt = baue_nachbau(daten, marktwert_korrektur=arg.c3)
     mitglied = alt["mitglied"]

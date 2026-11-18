@@ -220,9 +220,9 @@ def schwelle_der_abnahme(abn: pd.DataFrame) -> str | None:
 def sperre_c3() -> list[str]:
     """Sperre für den gewerteten Neulauf c3 (leer = frei): Reihen ohne Abnahme der Rohkurse und, seit Befund 14, eine
     überschrittene Fehlerschwelle der Abnahme (erster Eintrag). Nur lokale Dateien."""
-    from tradingbot.konfiguration import PROJEKT_WURZEL
+    from tradingbot.daten.kursstatus import lies_kursstatus
 
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv")
+    status = lies_kursstatus()                      # nur Quelle und Symbol, keine Zuordnung zur Mitgliedschaft nötig
     abn = lade_abnahme()
     schwelle = schwelle_der_abnahme(abn)
     return ([schwelle] if schwelle else []) + fehlende_fuer_c3(status, abn, dauerhaft_nicht_verfuegbar())

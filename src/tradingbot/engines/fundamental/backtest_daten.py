@@ -11,19 +11,20 @@ import pandas as pd
 from tradingbot.backtest.marktdaten import Delisting
 from tradingbot.daten.delisting import delisting_grund_mit_korrektur, delisting_rendite, einreichungen
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM
 from tradingbot.daten.kurse import in_euro, lade_kurse
 from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
-from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
+from tradingbot.konfiguration import lade_konfiguration
 
 
 def lade_kurse_und_delistings(firmen, start, ende, konfig: dict) -> tuple[dict, dict, pd.Series, dict]:
     """Gibt (Kurse in EUR je „CIK<nr>“, Delistings je „CIK<nr>“, EURUSD-Kurs, Ticker-Namen je CIK) zurück."""
     start, ende = pd.Timestamp(start), pd.Timestamp(ende)
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                       # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0])
     namen = {int(z["cik"]): z["ticker"] for _, z in daten.relevant.sort_values("von", na_position="first").iterrows() if pd.notna(z["cik"])}
     von = start - pd.Timedelta(days=120)

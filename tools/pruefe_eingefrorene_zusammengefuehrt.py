@@ -22,6 +22,7 @@ from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.sp500_nachbau import ENDE, VORLAUF, firmen_schluessel, kursreihen_ende, kursreihen_ende_je_ticker
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
@@ -48,7 +49,7 @@ def uebernommen(teilreihen: list[tuple[str, pd.DataFrame]], index: int, tage: pd
 
 def main() -> int:
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > VORLAUF)) & (universum["von"].isna() | (universum["von"] <= ENDE))]
     cache, tiingo = standard_cache(), TiingoClient(sitzung=OhneNetz())
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()

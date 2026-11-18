@@ -20,6 +20,7 @@ from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM, STREUBESITZ_ANTEIL_
 from tradingbot.daten.kurse import lade_kurse
 from tradingbot.daten.sp500_nachbau import ENDE, VORLAUF, baue_nachbau, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
@@ -47,7 +48,7 @@ def main(argv=None) -> int:
     if arg.c3:
         LAUF, VORHERIGER, AENDERUNG = 5, 4, AENDERUNG_C3 + (" PROBE – zählt nicht als c3." if arg.probe else "")
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), rohkurse=arg.c3)
     ergebnis_nachbau = baue_nachbau(daten, marktwert_korrektur=arg.c3)
     nachbau, tage = ergebnis_nachbau["nachbau"], ergebnis_nachbau["tage"]

@@ -41,11 +41,12 @@ def sp500_symbole() -> list[str]:
     """Yahoo-Symbole der heutigen S&P-500-Mitglieder (Betriebsmodus: Daten nach dem Tresor-Stichtag)."""
     from tradingbot.backtest.tresor import betriebsmodus
     from tradingbot.daten.universum import lade_universum, mitglieder_am
+    from tradingbot.daten.kursstatus import lade_kursstatus
 
     with betriebsmodus("Kontraktprüfung S&P 500 (nur Mitgliederliste)"):
         universum, _ = lade_universum()
         aktiv = mitglieder_am(universum, pd.Timestamp(date.today()))
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     return sorted({str(status.loc[nr, "symbol"]) for nr in aktiv.index if nr in status.index and isinstance(status.loc[nr, "symbol"], str)})
 
 

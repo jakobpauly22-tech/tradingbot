@@ -18,6 +18,7 @@ from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM, marktwerte_aus_stre
 from tradingbot.daten.kurse import lade_kurse
 from tradingbot.daten.sp500_nachbau import BENCHMARK_SCHLUESSEL, ENDE, START, VORLAUF, baue_nachbau, finanzwert_maske, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
@@ -43,7 +44,7 @@ def main(argv=None) -> int:
         return laut_melden(RuntimeError(sperre))
     schluessel = BENCHMARK_SCHLUESSEL + ("_probe" if arg.c3 and arg.probe else "")
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), rohkurse=arg.c3)
     ohne = baue_nachbau(daten, ohne_finanzwerte=True, marktwert_korrektur=arg.c3)
     voll = baue_nachbau(daten, marktwert_korrektur=arg.c3)

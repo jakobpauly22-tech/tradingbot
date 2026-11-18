@@ -164,6 +164,7 @@ def _now_daten(rohkurse):
     from tradingbot.daten.sp500_nachbau import lade_firmendaten
     from tradingbot.daten.tiingo import TiingoClient
     from tradingbot.daten.universum import lade_sic_historien, lade_universum
+    from tradingbot.daten.kursstatus import lade_kursstatus
     from tradingbot.konfiguration import PROJEKT_WURZEL
 
     class _OhneNetz:
@@ -172,8 +173,8 @@ def _now_daten(rohkurse):
 
     warnings.simplefilter("ignore")
     u, _ = lade_universum()
+    status = lade_kursstatus(u)                         # über den Schlüssel (Befund 19, Schritt 2), am ganzen Universum
     u = u[u["cik"] == 1373715]
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
     return lade_firmendaten(u, status, lade_sic_historien(u), tiingo=TiingoClient("test", sitzung=_OhneNetz()), rohkurse=rohkurse)
 
 

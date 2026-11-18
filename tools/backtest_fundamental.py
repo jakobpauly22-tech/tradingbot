@@ -31,6 +31,7 @@ from tradingbot.daten.makro import lade_makro
 from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import lade_benchmark_sp500_ohne_finanzwerte, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.engines.fundamental.filter import anwenden as filter_anwenden
 from tradingbot.engines.fundamental.filter import piotroski_fuer_filter
 from tradingbot.engines.fundamental.gesamtscore import gesamtscore
@@ -121,7 +122,7 @@ def main(argv=None) -> int:
     print(f"{len(ranglisten)} Stichtage, {len(firmen)} Firmen in mindestens einer Rangliste")
 
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0])
     namen = {int(z["cik"]): z["ticker"] for _, z in daten.relevant.sort_values("von", na_position="first").iterrows() if pd.notna(z["cik"])}
 

@@ -20,6 +20,7 @@ from tradingbot.backtest.tresor import begrenze
 from tradingbot.daten.abdeckung import STREUBESITZ
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
+from tradingbot.daten.kursstatus import UniversumVerschoben  # noqa: F401  (hier bisher definiert; Tageslauf importiert von hier)
 from tradingbot.daten.index_nachbau import (ABNAHME_ZEITRAUM, aktien_splitbereinigt, handelstage, marktwert_index, nachbau_gewichte,
                                             marktwerte_aus_streubesitz, streubesitz_pruefen)
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
@@ -116,26 +117,27 @@ class DatenkorrekturPasstNicht(RuntimeError):
     """Eine konfigurierte Datenkorrektur passt nicht (mehr) zu den Daten; wird nie still übergangen."""
 
 
-class UniversumVerschoben(RuntimeError):
-    """Universum und daten/universum/kursstatus.csv passen über die Zeilennummer nicht mehr zusammen."""
-
-
 def pruefe_zuordnung(relevant: pd.DataFrame, status: pd.DataFrame) -> None:
-    """Wächter (Jakob 17.11.2026): kursstatus.csv ist über die Zeilennummer des Universums verknüpft. Ändert sich das
-    Universum (Wikipedia-Abruf des Betriebs am 16.11.2026, 22:18: eine Zeile mehr, ab Stelle 120 alles um eins verschoben),
-    bekäme eine Firma still die Kurse eines
-    anderen Symbols. Deshalb muss für jede genutzte Zeile, die in kursstatus.csv steht, der Ticker übereinstimmen; sonst
-    lauter Abbruch. Behebung der Ursache (Zuordnung über den Schlüssel, eingefrorener Stand) folgt mit eigenem Plan."""
+    """Wächter (Jakob 17.11.2026, seit Befund 19 Schritt 2 über den Schlüssel): Für jede genutzte Universumszeile, zu der
+    `status` eine Zeile führt, müssen Ticker, von und bis übereinstimmen; sonst lauter Abbruch. `status` kommt regulär aus
+    daten.kursstatus.lade_kursstatus (dort schon über den Schlüssel zugeordnet); der Wächter fängt zusätzlich einen
+    Status ab, der noch über die Zeilennummer gelesen wurde (Anlass: Wikipedia-Abruf vom 16.11.2026, 22:18, eine Zeile
+    mehr, ab Stelle 120 alles um eins verschoben). Ohne Spalten von/bis im Status wird nur der Ticker verglichen."""
+    from tradingbot.daten.kursstatus import tag_text
+
     if "ticker" not in status.columns or "ticker" not in relevant.columns:
         return
     gemeinsam = relevant.index.intersection(status.index)
-    a = relevant.loc[gemeinsam, "ticker"].astype(str)
-    b = status.loc[gemeinsam, "ticker"].astype(str)
-    falsch = a.index[a.to_numpy() != b.to_numpy()]
-    if len(falsch):
-        beispiele = ", ".join(f"Zeile {i}: {a[i]} ≠ {b[i]}" for i in falsch[:3])
+    spalten = [c for c in ("ticker", "von", "bis") if c in status.columns and c in relevant.columns]
+
+    def schl(t: pd.DataFrame, i) -> tuple:
+        return tuple(str(t.at[i, c]) if c == "ticker" else tag_text(t.at[i, c]) for c in spalten)
+
+    falsch = [i for i in gemeinsam if schl(relevant, i) != schl(status, i)]
+    if falsch:
+        beispiele = ", ".join(f"Zeile {i}: {schl(relevant, i)} ≠ {schl(status, i)}" for i in falsch[:3])
         raise UniversumVerschoben(f"Universum und kursstatus.csv verschoben: {len(falsch)} von {len(gemeinsam)} Zeilen mit anderem "
-                                  f"Ticker ({beispiele}) – keine Kurse zugeordnet")
+                                  f"Schlüssel ({beispiele}) – keine Kurse zugeordnet")
 
 
 def eingefrorene_kurse() -> dict:

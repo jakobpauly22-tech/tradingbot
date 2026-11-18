@@ -31,6 +31,7 @@ from tradingbot.backtest.tresor import begrenze, datengrenze, pruefe_kein_betrie
 from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.kapitalmassnahmen_historie import einordnen, sec_verhaeltnis
 from tradingbot.engines.fundamental.aktienzahl import aktienfakten
 from tradingbot.konfiguration import PROJEKT_WURZEL
@@ -101,7 +102,7 @@ def main() -> int:
     alt, nach_grenze = teile_nach_grenze(alt, grenze)
 
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0], bis=grenze)
     namen = {int(z["cik"]): z["ticker"] for _, z in daten.relevant.sort_values("von", na_position="first").iterrows() if pd.notna(z["cik"])}
     eintraege = []

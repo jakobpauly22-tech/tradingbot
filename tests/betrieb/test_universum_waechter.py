@@ -22,8 +22,17 @@ def test_stimmige_zuordnung_ok_und_fehlende_zeilen_erlaubt():
 def test_verschobene_zuordnung_bricht_laut_ab():
     u = _universum(["NEU", "AAA", "BBB"])                            # eine Zeile vorne eingefügt
     status = pd.DataFrame({"ticker": ["AAA", "BBB"]}, index=[0, 1])
-    with pytest.raises(UniversumVerschoben, match=r"2 von 2 Zeilen.*Zeile 0: NEU ≠ AAA"):
+    with pytest.raises(UniversumVerschoben, match=r"2 von 2 Zeilen.*Zeile 0: \('NEU',\) ≠ \('AAA',\)"):
         pruefe_zuordnung(u, status)
+
+
+def test_waechter_prueft_den_ganzen_schluessel():
+    """Befund 19, Schritt 2: gleicher Ticker, aber anderes von/bis (z. B. XEC 02.03. statt 03.03.2020) ist eine Abweichung."""
+    u = pd.DataFrame({"ticker": ["XEC"], "von": pd.to_datetime(["2014-06-20"]), "bis": pd.to_datetime(["2020-03-03"]), "cik": [1]})
+    status = pd.DataFrame({"ticker": ["XEC"], "von": ["2014-06-20"], "bis": ["2020-03-02"]}, index=[0])
+    with pytest.raises(UniversumVerschoben, match=r"1 von 1 Zeilen.*2020-03-03.*2020-03-02"):
+        pruefe_zuordnung(u, status)
+    pruefe_zuordnung(u, status.assign(bis="2020-03-03"))
 
 
 def test_lade_firmendaten_ordnet_nie_still_falsch_zu():

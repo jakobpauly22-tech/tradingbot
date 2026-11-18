@@ -99,7 +99,8 @@ def _anteil(gewicht: pd.Series, maske: pd.Series) -> float:
 def rueckfall_faelle(status: pd.DataFrame, gruende: dict) -> pd.DataFrame:
     """Gültige Reihen, die vor dem Ende der Daten aufhören (Delisting nach Indexabgang): je Jahr und Grund.
 
-    status: Spalten index, gueltig, letzter_kurs (aus kursstatus.csv); gruende: Mitgliedschafts-Nr. → Grund.
+    status: Spalten index, gueltig, letzter_kurs (daten.kursstatus.lade_kursstatus(universum).reset_index(), index = Zeile im
+    Universum über den Schlüssel, Befund 19); gruende: Mitgliedschafts-Nr. → Grund.
     """
     s = status[status["gueltig"].astype(bool)].copy()
     s["letzter_kurs"] = pd.to_datetime(s["letzter_kurs"])

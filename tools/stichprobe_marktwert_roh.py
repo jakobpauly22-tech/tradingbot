@@ -27,6 +27,7 @@ from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, lade_firmendaten
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, sic_am
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
 from tradingbot.engines.fundamental.aktienzahl import lade_aktienfakten
 from tradingbot.engines.fundamental.kennzahlen import zusammenlegen
@@ -115,7 +116,7 @@ def main(argv=None) -> int:
     arg = a.parse_args(argv)
     konfig = lade_konfiguration("fundamental")
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), tiingo=TiingoClient(sitzung=OhneNetz()), rohkurse=True)
 
     kandidaten = []

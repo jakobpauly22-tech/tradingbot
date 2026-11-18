@@ -31,6 +31,7 @@ from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.kennzahlen.rendite import simple_return
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
@@ -153,7 +154,7 @@ def ereignisse(r: pd.Series, kand: pd.Series) -> list[tuple[pd.Timestamp, pd.Tim
 
 def main() -> int:
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     stichtage = pd.DatetimeIndex(rebalancing_stichtage())
     client, tiingo = SecClient(), TiingoClient()
     treffer, unklar, grundmenge = [], [], 0

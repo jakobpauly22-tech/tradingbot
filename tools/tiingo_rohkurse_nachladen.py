@@ -16,11 +16,12 @@ import pandas as pd
 
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.tiingo_rohkurse import Nachlader, tiingo_ticker
-from tradingbot.konfiguration import PROJEKT_WURZEL
 
 
 def symbole_des_universums() -> list[str]:
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv")
+    from tradingbot.daten.kursstatus import lies_kursstatus
+
+    status = lies_kursstatus()                      # nur Symbole, keine Zuordnung zur Mitgliedschaft nötig
     s = status[status["gueltig"].astype(bool) & (status["quelle"] == "yfinance")]["symbol"]
     return sorted({tiingo_ticker(x) for x in s})
 

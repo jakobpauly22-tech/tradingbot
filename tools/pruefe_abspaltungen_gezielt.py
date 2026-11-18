@@ -29,6 +29,7 @@ from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import ENDE, VORLAUF, ciks_der_zeile, lade_firmendaten
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_sic_historien, lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
@@ -161,7 +162,7 @@ def main() -> int:
     ereignisse = lies_ereignisse(LAUF3.read_text(encoding="utf-8"))
     faelle = faelle_aus_obergrenze(OBERGRENZE.read_text(encoding="utf-8"), ereignisse)
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), tiingo=TiingoClient(sitzung=OhneNetz()))
     referenz = lade_kurse("^SP500TR", VORLAUF, ENDE)["close"].pct_change()
     client = SecClient()

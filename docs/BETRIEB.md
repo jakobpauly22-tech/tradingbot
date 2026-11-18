@@ -509,9 +509,12 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   genutzter Zeile denselben Ticker wie in `kursstatus.csv`, sonst `UniversumVerschoben`. Im Tageslauf setzen dann nur die
   Fundamental-Bücher aus (Sofortmeldung, Ereignis `fundamental_gesperrt`, Buchwert trotzdem gespeichert); alle anderen
   Bücher laufen normal. Backtest- und c3-Werkzeuge brechen laut ab.
-- **Offen (Plan ab 18.11.2026):** Zuordnung über den Schlüssel (Ticker, von, bis) in Betrieb und Backtest, eingefrorener
-  Wikipedia-Stand für Backtest und c3, eigener Wikipedia-Cache des Betriebs, Probelauf ohne jedes Schreiben von
-  Betriebsdaten (Kurse, Wikipedia, Universum, SEC).
+- **Stand 18.11.2026:** Backtest und c3 nutzen einen eingefrorenen Wikipedia-Stand (Schritt 1,
+  `docs/berichte/2026-11-18_universum_eingefroren.md`). `kursstatus.csv` wird in Betrieb und Backtest über den
+  Schlüssel (Ticker, von, bis) zugeordnet (Schritt 2, `daten/kursstatus.py`). Am Betriebsstand finden 5 Statuszeilen
+  ihre Mitgliedschaft nicht mehr (XEC, IR, CDAY, DAY, KVUE), daher bleibt die Sperre der Fundamental-Bücher.
+- **Offen:** eigener Wikipedia-Cache, eigenes Universum und eigener Kursstatus des Betriebs (Schritt 3); Probelauf ohne
+  jedes Schreiben von Betriebsdaten (Schritt 4).
 
 ## Zeitmessung im Tageslauf (Jakob 17.11.2026, nur Anzeige)
 

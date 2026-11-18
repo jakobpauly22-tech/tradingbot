@@ -147,7 +147,9 @@ def test_fehlerschwelle_der_abnahme():
 def test_sperre_c3_mit_fehlerschwelle(monkeypatch):
     monkeypatch.setattr(rm, "lade_abnahme", lambda: _abnahme(10, 100))
     monkeypatch.setattr(rm, "dauerhaft_nicht_verfuegbar", lambda: set())
-    monkeypatch.setattr(pd, "read_csv", lambda *a, **k: pd.DataFrame({"quelle": ["yfinance"], "symbol": ["S1"], "gueltig": [True]}))
+    import tradingbot.daten.kursstatus as ks                # Lesestelle seit Befund 19, Schritt 2
+
+    monkeypatch.setattr(ks, "lies_kursstatus", lambda *a, **k: pd.DataFrame({"quelle": ["yfinance"], "symbol": ["S1"], "gueltig": [True]}))
     gruende = rm.sperre_c3()
     assert gruende and gruende[0].startswith("Fehlerschwelle")
     assert "Fehlerschwelle der Abnahme überschritten" in sperrtext(gruende)

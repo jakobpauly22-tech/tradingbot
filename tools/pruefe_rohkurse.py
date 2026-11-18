@@ -26,6 +26,7 @@ from tradingbot.daten.rohkurse_marktwert import (SPALTEN_ABNAHME, abnahme, abnah
                                                  fehlende_fuer_c3, rohreihe, schwelle_der_abnahme, splitabgleich)
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile
 from tradingbot.daten.universum import lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
@@ -90,10 +91,10 @@ def ciks_je_reihe(status: pd.DataFrame, universum: pd.DataFrame) -> dict[tuple[s
 
 
 def main() -> int:
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    universum, _ = lade_universum()
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     gueltig = status[status["gueltig"].astype(bool)].drop_duplicates(["quelle", "symbol"])
     cache, tiingo = standard_cache(), TiingoClient(sitzung=OhneNetz())
-    universum, _ = lade_universum()
     ciks, ereignisse = ciks_je_reihe(status, universum), lade_ereignisse()
     zeilen, ohne_roh = [], []
     schwelle = Fehlerschwelle("Rohkurse: Abnahme", mindestens=10**9)      # nur am Ende prüfen (Befund 14)

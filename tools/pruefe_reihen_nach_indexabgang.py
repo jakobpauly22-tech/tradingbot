@@ -22,6 +22,7 @@ from tradingbot.daten.sec import SecClient
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile
 from tradingbot.daten.tiingo import TiingoClient
 from tradingbot.daten.universum import lade_universum
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 warnings.simplefilter("ignore")
@@ -72,7 +73,7 @@ def letzter_periodenbericht(client, ciks) -> str:
 def main() -> int:
     with betriebsmodus("Musterprüfung Kursreihen nach Indexabgang (nur lesend)"):
         universum, _ = lade_universum()
-        status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+        status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
         client, tiingo, cache = SecClient(), TiingoClient(), standard_cache()
         tickerliste = client.ticker_tabelle()
         inhaber = {symbol_normal(z["ticker"]): (int(z["cik"]), z["name"]) for _, z in tickerliste.iterrows()}

@@ -19,6 +19,7 @@ from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM, aktien_splitbereini
 from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.engines.fundamental.aktienzahl import lade_aktienfakten, signal_alt_neu, vergleich_fuer_abschluesse
 from tradingbot.engines.fundamental.kennzahlen import abschluesse_am, jahreswerte_firma, zusammenlegen
 from tradingbot.daten.kapitalmassnahmen_historie import lade_ereignisse
@@ -86,7 +87,7 @@ def main(argv=None) -> int:
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
     universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=ABNAHME_ZEITRAUM[0], rohkurse=mw_roh)
     stichtage = [t for t in rebalancing_stichtage() if t >= pd.Timestamp(ABNAHME_ZEITRAUM[0])]
     cache = standard_cache()

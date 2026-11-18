@@ -21,6 +21,7 @@ from tradingbot.daten.delisting import delisting_grund_mit_korrektur, einreichun
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
 from tradingbot.daten.sec import SecClient, cik10, kennzahl_jahreswerte
 from tradingbot.daten.sp500_nachbau import lade_firmendaten
+from tradingbot.daten.kursstatus import lade_kursstatus
 from tradingbot.daten.universum import ist_finanzwert, lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.konfiguration import PROJEKT_WURZEL, lade_konfiguration
 
@@ -47,7 +48,7 @@ def main(argumente) -> None:
 
     universum, _ = lade_universum()
     relevant = universum[universum["bis"].isna() | (universum["bis"] >= "2012-01-01")]
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv")
+    status = lade_kursstatus(universum).reset_index()   # Spalte index = Zeile im Universum, über den Schlüssel (Befund 19)
     gueltig = status.set_index("index")["gueltig"].astype(bool)
     sic = lade_sic_historien(universum)
 
