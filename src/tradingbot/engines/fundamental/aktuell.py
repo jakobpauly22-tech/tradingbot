@@ -76,9 +76,12 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
     kennzahlen, filt = konfig["kennzahlen"], konfig["filter"]
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
-    universum, _ = lade_universum(stand="betrieb")          # Betrieb: laufender Stand; Sperre bleibt bis Befund 19, Schritt 3
-    from tradingbot.daten.kursstatus import lade_kursstatus
-    status = lade_kursstatus(universum)                      # über den Schlüssel, laut bei Abweichung (Befund 19), vor jedem Kursabruf
+    universum, _ = lade_universum(stand="betrieb")          # eigener Stand des Betriebs (Befund 19, Schritt 3)
+    from tradingbot.betrieb.universum_betrieb import kursstatus_betrieb, pruefe_betriebsstand
+    # Kursstatus des Betriebs: Schlüssel, sonst Ticker und CIK, neue Mitglieder geprüft (laut bei Abweichung), vor jedem
+    # Kursabruf; Wächter: CIK am Tag doppelt Mitglied → UniversumVerschoben. Meldungen dazu schreibt der Tageslauf (S&P-500-Liste).
+    status, _ = kursstatus_betrieb(universum, pruefen=aktualisieren)
+    pruefe_betriebsstand(universum, status, tag)
     aktiv = mitglieder_am(universum, tag)
     meldungen = []
     if aktualisieren:

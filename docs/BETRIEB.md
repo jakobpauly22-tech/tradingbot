@@ -513,8 +513,27 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   `docs/berichte/2026-11-18_universum_eingefroren.md`). `kursstatus.csv` wird in Betrieb und Backtest über den
   Schlüssel (Ticker, von, bis) zugeordnet (Schritt 2, `daten/kursstatus.py`). Am Betriebsstand finden 5 Statuszeilen
   ihre Mitgliedschaft nicht mehr (XEC, IR, CDAY, DAY, KVUE), daher bleibt die Sperre der Fundamental-Bücher.
-- **Offen:** eigener Wikipedia-Cache, eigenes Universum und eigener Kursstatus des Betriebs (Schritt 3); Probelauf ohne
-  jedes Schreiben von Betriebsdaten (Schritt 4).
+- **Schritt 3 (18.11.2026, `betrieb/universum_betrieb.py`):** Der Betrieb hat einen eigenen Wikipedia-Cache, ein
+  eigenes Universum und einen eigenen Kursstatus in `daten/betrieb/cache/universum/`. Beim ersten Zugriff werden die
+  Seiten einmalig aus `daten/cache/universum` übernommen (Zeitstempel bleiben, Marke `UEBERNAHME.json`).
+  - Kursstatus: Statuszeilen aus `kursstatus.csv` werden über den Schlüssel zugeordnet, sonst über Ticker und CIK mit
+    überlappendem Zeitraum (genau ein Treffer, sonst laut; Jakob 18.11.2026). Heute betrifft das KVUE, IR, DAY und XEC
+    (eine Protokollzeile).
+  - Neue Mitglieder (heute OKTA) werden wie in `tools/kurse_universum.py` geprüft, einschließlich Namensabgleich
+    (`daten.kursquellen.pruefe_mitgliedschaft`), und in `kursstatus_neu.csv` festgehalten. Ohne gültige Reihe bleiben
+    sie außen vor (Meldung und Sofortmeldung).
+  - Betriebskorrektur (`betrieb_korrekturen` in `config/universum_korrekturen.yaml`): CDAY endet am 01.02.2024.
+    Greift sie nicht mehr, gibt es eine Sofortmeldung statt eines Fehlers.
+  - Wächter: Eine CIK, die am Stichtag mehrfach Mitglied ist, führt zu `UniversumVerschoben` (Fundamental-Bücher setzen
+    aus). Ausgenommen sind bekannte Aktiengattungen aus dem eingefrorenen Stand (GOOG/GOOGL, FOX/FOXA, NWSA/NWS). Ein
+    heutiges Mitglied ohne gültige Kursreihe führt zu einer Meldung.
+  - `lade_firmendaten` liest Kurse über `kurscache()`. Bis 18.11.2026 las die Fundamental-Bewertung des Betriebs hier
+    still `daten/cache/kurse`, das der Betrieb seit Befund 5 nicht mehr aktualisiert. Das hat sich nicht ausgewirkt,
+    weil die Sperre seit demselben Tag galt.
+  - `tools/kontrakte_pruefen.py` nutzt den Betriebsstand.
+  - Probe im Ersatzbereich (Scratchpad, 18.11.2026): 503 heutige Mitglieder, `bewertung_am(17.11.2026)` mit 397 Firmen,
+    OKTA enthalten, KVUE und CDAY nicht, keine Sperre.
+- **Offen:** Probelauf ohne jedes Schreiben von Betriebsdaten (Schritt 4).
 
 ## Zeitmessung im Tageslauf (Jakob 17.11.2026, nur Anzeige)
 

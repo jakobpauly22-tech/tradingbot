@@ -80,13 +80,17 @@ def _text_mit_cache(url: str, datei: Path, user_agent: str, max_alter: timedelta
     return antwort.text, datetime.now(timezone.utc)
 
 
-def lade_wikipedia(max_alter: timedelta = timedelta(days=7)) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
-    """(heutige Mitglieder, Änderungen, Stand) aus Wikipedia, im Cache höchstens `max_alter` alt."""
+def lade_wikipedia(max_alter: timedelta = timedelta(days=7), ordner: Path | None = None) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """(heutige Mitglieder, Änderungen, Stand) aus Wikipedia, im Cache höchstens `max_alter` alt.
+
+    `ordner`: Ablage der Seiten (Standard daten/cache/universum; der Betrieb nutzt seit Befund 19, Schritt 3, seinen
+    eigenen Ordner daten/betrieb/cache/universum)."""
     from tradingbot.konfiguration import geheimnis
 
     ua = "tradingbot-forschung " + geheimnis("SEC_USER_AGENT")
-    html_akt, stand_akt = _text_mit_cache(WIKI_AKTUELL, _cache_pfad("wikipedia_aktuell.html.gz"), ua, max_alter)
-    html_hist, stand_hist = _text_mit_cache(WIKI_HISTORIE, _cache_pfad("wikipedia_historie.html.gz"), ua, max_alter)
+    pfad = (lambda name: ordner / name) if ordner is not None else _cache_pfad
+    html_akt, stand_akt = _text_mit_cache(WIKI_AKTUELL, pfad("wikipedia_aktuell.html.gz"), ua, max_alter)
+    html_hist, stand_hist = _text_mit_cache(WIKI_HISTORIE, pfad("wikipedia_historie.html.gz"), ua, max_alter)
     aktuell = aktuelle_mitglieder(pd.read_html(io.StringIO(html_akt))[0])
     aenderungen = aenderungen_normalisieren(pd.read_html(io.StringIO(html_hist))[0])
     return aktuell, aenderungen, {"wikipedia_aktuell": stand_akt.isoformat(timespec="seconds"),
@@ -232,11 +236,33 @@ def korrekturen_anwenden(intervalle: pd.DataFrame, korrekturen: list[dict]) -> p
     return t.sort_values(["von", "ticker"], na_position="first").reset_index(drop=True)
 
 
-def lade_mitgliedschaften() -> tuple[pd.DataFrame, dict]:
-    """Rekonstruktion aus Wikipedia plus SEC-Namensabgleich plus Korrekturen. Gibt (Intervalle, Stand) zurück."""
+def betriebskorrekturen_anwenden(intervalle: pd.DataFrame, korrekturen: list[dict]) -> tuple[pd.DataFrame, list[str]]:
+    """Korrekturen nur für den Betriebsstand (`betrieb_korrekturen` in config/universum_korrekturen.yaml, Jakob 18.11.2026).
+
+    Bisher nur Aktion `beenden` (offene Mitgliedschaft mit Ticker und Name schließen). Anders als bei den festen
+    Korrekturen ist kein Treffer kein Fehler: Wikipedia kann den Fehler inzwischen selbst behoben haben. Dann gibt es eine
+    Meldung zur Prüfung; mehr als ein Treffer bricht laut ab. Gibt (Intervalle, Meldungen) zurück."""
+    t, meldungen = intervalle.copy(), []
+    for k in korrekturen:
+        if k["aktion"] != "beenden":
+            raise ValueError(f"Betriebskorrektur: Aktion {k['aktion']!r} nicht vorgesehen (nur beenden)")
+        maske = (t["ticker"] == k["ticker"]) & t["bis"].isna() & t["name"].eq(k["name"])
+        if maske.sum() > 1:
+            raise ValueError(f"Betriebskorrektur beenden {k['ticker']}/{k['name']}: {int(maske.sum())} Treffer statt 1")
+        if maske.sum() == 0:
+            meldungen.append(f"Betriebskorrektur {k['ticker']} ({k['name']}) greift nicht mehr – Wikipedia prüfen, Eintrag ggf. "
+                             "entfernen (config/universum_korrekturen.yaml, betrieb_korrekturen)")
+            continue
+        t.loc[maske, ["bis", "hinweis"]] = [pd.Timestamp(str(k["bis"])), f"Betriebskorrektur: {k['quelle']}"]
+    return t, meldungen
+
+
+def lade_mitgliedschaften(ordner: Path | None = None) -> tuple[pd.DataFrame, dict]:
+    """Rekonstruktion aus Wikipedia plus SEC-Namensabgleich plus Korrekturen. Gibt (Intervalle, Stand) zurück.
+    `ordner`: Ablage der Wikipedia-Seiten (siehe lade_wikipedia)."""
     from tradingbot.konfiguration import lade_konfiguration
 
-    aktuell, aenderungen, stand = lade_wikipedia()
+    aktuell, aenderungen, stand = lade_wikipedia(ordner=ordner)
     intervalle = mitgliedschaften(aktuell, aenderungen, lade_sec_namen())
     korrekturen = lade_konfiguration("universum_korrekturen").get("korrekturen", [])
     return korrekturen_anwenden(intervalle, korrekturen), {**stand, "korrekturen": len(korrekturen)}
@@ -521,23 +547,9 @@ def lade_universum(neu_berechnen: bool = False, stand: str = "eingefroren") -> t
         return lade_eingefrorenen_stand()
     if stand != "betrieb":
         raise ValueError(f"Unbekannter Universumsstand {stand!r} (erlaubt: eingefroren, betrieb)")
-    from tradingbot.daten.cache import standard_cache
-    from tradingbot.daten.sec import SecClient
-    from tradingbot.konfiguration import lade_konfiguration
+    from tradingbot.betrieb.universum_betrieb import lade_universum_betrieb
 
-    cache = standard_cache()
-    if not neu_berechnen:
-        t, meta = cache.lesen("universum", "sp500")
-        if t is not None and meta.get("berechnet_am", "")[:10] == datetime.now(timezone.utc).date().isoformat():
-            return t, meta
-    client = SecClient()
-    sec_namen = lade_sec_namen()
-    intervalle, stand = lade_mitgliedschaften()
-    t = vorgaenger_suchen(cik_zuordnen(intervalle, sec_namen, client), sec_namen, client)
-    t = cik_korrekturen_anwenden(t, lade_konfiguration("universum_korrekturen"), client)
-    meta = {**stand, "berechnet_am": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    cache.schreiben("universum", "sp500", t, meta)
-    return t, meta
+    return lade_universum_betrieb(neu_berechnen=neu_berechnen)
 
 
 # --- SIC point-in-time (Entscheidung 02.11.2026: Finanzwerte SIC 6000–6999 nach dem damaligen Code) -----------
@@ -652,14 +664,9 @@ def vorgaenger_fehlt(zehn_k: pd.DatetimeIndex, von, ab=pd.Timestamp("2011-01-01"
 
 def universum_aktualisieren(erzwingen: bool = False) -> dict:
     """S&P-500-Zusammensetzung für den Betrieb (Jakob 04.11.2026): wöchentlich (Wikipedia-Cache höchstens 7 Tage alt) und
-    an jedem Quartalsstichtag erzwungen neu (Cache höchstens 12 Stunden). Gibt den Stand zurück: Abruf der Liste,
-    letzte erfasste Änderung (Datum, Zugang, Abgang)."""
-    if erzwingen:
-        lade_wikipedia(max_alter=timedelta(hours=12))
-    else:
-        lade_wikipedia()
-    t, meta = lade_universum(neu_berechnen=erzwingen, stand="betrieb")
-    letzte = max(d for d in (t["von"].max(), t["bis"].max()) if pd.notna(d))
-    zugang = ", ".join(t.loc[t["von"] == letzte, "ticker"].astype(str))
-    abgang = ", ".join(t.loc[t["bis"] == letzte, "ticker"].astype(str))
-    return {**meta, "letzte_aenderung": str(pd.Timestamp(letzte).date()), "zugang": zugang, "abgang": abgang}
+    an jedem Quartalsstichtag erzwungen neu (Cache höchstens 12 Stunden). Seit Befund 19, Schritt 3, nur im eigenen
+    Bereich des Betriebs (betrieb/universum_betrieb.py). Gibt den Stand zurück: Abruf der Liste, letzte erfasste Änderung
+    (Datum, Zugang, Abgang), Meldungen (Betriebskorrekturen, neue Mitglieder, Wächter)."""
+    from tradingbot.betrieb.universum_betrieb import aktualisieren
+
+    return aktualisieren(erzwingen=erzwingen)

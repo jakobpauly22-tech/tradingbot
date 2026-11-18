@@ -66,17 +66,16 @@ def test_eingefrorener_stand_wird_nie_neu_berechnet():
 
 
 def test_betrieb_nutzt_den_laufenden_stand(monkeypatch):
-    """universum_aktualisieren (Tageslauf) liest weiter den Betriebsstand, nie den eingefrorenen (Sperre bis Schritt 3)."""
+    """universum_aktualisieren (Tageslauf) und lade_universum(stand="betrieb") gehen in den eigenen Bereich des Betriebs
+    (Befund 19, Schritt 3), nie an den eingefrorenen Stand."""
+    from tradingbot.betrieb import universum_betrieb as ub
+
     aufrufe = []
-    monkeypatch.setattr(u, "lade_wikipedia", lambda **kw: None)
-
-    def lade(neu_berechnen=False, stand="eingefroren"):
-        aufrufe.append(stand)
-        return pd.DataFrame({"ticker": ["A"], "von": pd.to_datetime(["2020-01-02"]), "bis": pd.to_datetime([None])}), {}
-
-    monkeypatch.setattr(u, "lade_universum", lade)
-    u.universum_aktualisieren()
-    assert aufrufe == ["betrieb"]
+    monkeypatch.setattr(ub, "aktualisieren", lambda erzwingen=False: aufrufe.append(("aktualisieren", erzwingen)) or {})
+    monkeypatch.setattr(ub, "lade_universum_betrieb", lambda neu_berechnen=False: aufrufe.append(("lade", neu_berechnen)) or (None, {}))
+    u.universum_aktualisieren(erzwingen=True)
+    u.lade_universum(stand="betrieb")
+    assert aufrufe == [("aktualisieren", True), ("lade", False)]
 
 
 def test_bewertung_des_betriebs_nutzt_den_laufenden_stand():

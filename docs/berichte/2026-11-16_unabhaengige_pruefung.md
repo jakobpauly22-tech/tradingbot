@@ -370,7 +370,8 @@ Gefunden beim Testlauf vor dem ersten Commit (17.11.2026, etwa 10:45), nach Jako
 | 19 (Zahl) | korrigiert | dieser Commit (18.11.2026) | „89 Zeilen mehr“ war falsch; richtig 896 → 897, nachgemessen am Cache vom 16.11.2026 22:18 |
 | 19, Schritt 1 | behoben (Backtest, c3) | 61ed4ec (Kriterien), dieser Commit | Eingefrorener Stand, Revision vom 29.10.2026 22:20 UTC, Abnahme (a)–(c) bestanden; `docs/berichte/2026-11-18_universum_eingefroren.md` |
 | 19, Schritt 2 | behoben | dieser Commit (18.11.2026) | `daten/kursstatus.py`: Zuordnung über (Ticker, von, bis), laut bei doppeltem Schlüssel oder Statuszeile ohne Mitgliedschaft; Wächter `pruefe_zuordnung` vergleicht den ganzen Schlüssel; 5 Module, 18 Werkzeuge. Am eingefrorenen Stand exakt gleiches Ergebnis wie bisher (813 Zeilen, Inhalt und Reihenfolge); am Betriebsstand laut (5 Statuszeilen ohne Mitgliedschaft: XEC, IR, CDAY, DAY, KVUE), Sperre der Fundamental-Bücher bleibt bis Schritt 3 |
-| 19 (Schritt 3), 20 | offen | – | Plan freigegeben (Jakob 17.11.2026), Umsetzung ab 18.11.2026 |
+| 19, Schritt 3 | behoben, Sperre aufgehoben | dieser Commit (18.11.2026) | Eigenes Universum und eigener Kursstatus des Betriebs (`betrieb/universum_betrieb.py`, `docs/BETRIEB.md`); Übernahme über Ticker und CIK (KVUE, IR, DAY, XEC), OKTA neu geprüft, Betriebskorrektur CDAY, Wächter; nebenbei: `lade_firmendaten` las im Betrieb still den Entwicklungs-Cache der Kurse (seit Befund 5 veraltet) |
+| 20 | offen | – | Schritt 4: Probe schreibt keine Betriebsdaten |
 
 Alle Commits vom 17.11.2026 mit der vollen Suite: alles grün außer dem bekannten roten Test aus Befund 19. Das Committen
 mit diesem Vermerk hat Jakob freigegeben.

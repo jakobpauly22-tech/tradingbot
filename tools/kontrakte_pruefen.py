@@ -40,13 +40,15 @@ def fonds() -> list[dict]:
 def sp500_symbole() -> list[str]:
     """Yahoo-Symbole der heutigen S&P-500-Mitglieder (Betriebsmodus: Daten nach dem Tresor-Stichtag)."""
     from tradingbot.backtest.tresor import betriebsmodus
+    from tradingbot.betrieb.universum_betrieb import kursstatus_betrieb
     from tradingbot.daten.universum import lade_universum, mitglieder_am
-    from tradingbot.daten.kursstatus import lade_kursstatus
 
+    # Betriebsstand mit Kursstatus des Betriebs (Befund 19, Schritt 3): heutige Mitglieder inklusive echter Indexwechsel.
+    # Nur lesend: neue, noch ungeprüfte Mitglieder haben kein Symbol (der Tageslauf prüft sie).
     with betriebsmodus("Kontraktprüfung S&P 500 (nur Mitgliederliste)"):
-        universum, _ = lade_universum()
+        universum, _ = lade_universum(stand="betrieb")
         aktiv = mitglieder_am(universum, pd.Timestamp(date.today()))
-    status = lade_kursstatus(universum)                 # über den Schlüssel (Befund 19, Schritt 2)
+        status, _ = kursstatus_betrieb(universum, pruefen=False)
     return sorted({str(status.loc[nr, "symbol"]) for nr in aktiv.index if nr in status.index and isinstance(status.loc[nr, "symbol"], str)})
 
 

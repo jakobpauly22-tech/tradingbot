@@ -22,10 +22,11 @@ class _Sec:
 
 
 def test_bekannte_namen_mit_vorgaengern_als_numpy_array():
-    w = _werkzeug("kurse_universum")
+    from tradingbot.daten.kursquellen import bekannte_namen   # seit 18.11.2026 dort (aus tools/kurse_universum.py)
+
     for vorgaenger in (np.array([1288776]), np.array([], dtype=np.int64), None, [1288776]):
         zeile = pd.Series({"name": "Alphabet Inc. (Class A)", "cik": 1652044, "vorgaenger_ciks": vorgaenger})
-        namen = w._bekannte_namen(zeile, _Sec())
+        namen = bekannte_namen(zeile, _Sec())
         assert "Alphabet Inc." in namen
         assert ("GOOGLE INC." in namen) == (vorgaenger is not None and len(vorgaenger) > 0)
 

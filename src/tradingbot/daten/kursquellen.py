@@ -194,3 +194,56 @@ def plausibel(kurse: pd.DataFrame, aktien: pd.Series, von, bis, *, min_usd=5e8, 
     if wert is not None and not (min_usd <= wert <= max_usd):
         return {"abdeckung": abdeckung, "boersenwert_median": wert, "ok": False, "grund": f"Börsenwert {wert/1e9:.2f} Mrd. USD unplausibel"}
     return {"abdeckung": abdeckung, "boersenwert_median": wert, "ok": True, "grund": None if wert is not None else "keine Aktienzahl zur Prüfung"}
+
+
+# --- Prüfung je Mitgliedschaft (aus tools/kurse_universum.py, seit 18.11.2026 auch für neue Mitglieder im Betrieb) ------
+def vorgaenger_ciks(zeile) -> list[int]:
+    """Vorgänger-CIKs; aus dem Parquet-Cache kommen sie als NumPy-Array (dessen Wahrheitswert ist mehrdeutig)."""
+    liste = zeile.get("vorgaenger_ciks") if hasattr(zeile, "get") else zeile["vorgaenger_ciks"]
+    return [] if liste is None or (not hasattr(liste, "__len__") and pd.isna(liste)) else [int(c) for c in list(liste)]
+
+
+def bekannte_namen(zeile, sec_client) -> list[str]:
+    """Indexname plus alle SEC-Namen der CIK und ihrer Vorgänger (für den Namensabgleich)."""
+    from tradingbot.daten.universum import sec_namen_einer_cik
+
+    namen = [zeile["name"]]
+    ciks = ([int(zeile["cik"])] if pd.notna(zeile["cik"]) else []) + vorgaenger_ciks(zeile)
+    for cik in ciks:
+        try:
+            namen += sec_namen_einer_cik(cik, sec_client)
+        except Exception:  # fehlende Submissions: dann nur der Indexname
+            pass
+    return [n for n in namen if isinstance(n, str) and n]
+
+
+def pruefe_mitgliedschaft(i, r, *, sec_client, tiingo, datenende, yahoo_namen_datei=None) -> dict:
+    """Statuseintrag einer Mitgliedschaft nach der Prüfregel (Jakob 02.11.2026, pruefe_kursreihe): Kurse laden, Abdeckung
+    des Mitgliedszeitraums, Firmenname aus den Metadaten. `r` enthält die Spalten aus kursquelle (quelle, symbol,
+    quelle_hinweis). Fehler beim Laden werden im Eintrag vermerkt (Feld `fehler`), nicht geworfen."""
+    from tradingbot.daten.kurse import lade_kurse
+
+    eintrag = {"index": i, "ticker": r["ticker"], "name": r["name"], "von": r["von"], "bis": r["bis"], "quelle": r["quelle"],
+               "symbol": r["symbol"], "quelle_hinweis": r["quelle_hinweis"], "erster_kurs": None, "letzter_kurs": None,
+               "name_meta": None, "gueltig": False, "grund": None, "fehler": None}
+    try:
+        if r["quelle"] == "yfinance":
+            k = lade_kurse(r["symbol"], "2011-01-01")
+        elif r["quelle"] == "tiingo":
+            k = tiingo.historie(r["symbol"])
+        else:
+            k = None
+        if k is not None and len(k):
+            eintrag["erster_kurs"], eintrag["letzter_kurs"] = k.index.min().date(), k.index.max().date()
+        abdeckung = pruefe_abdeckung(k, r["von"], r["bis"], datenende=datenende)
+        if not abdeckung["ok"]:
+            eintrag["grund"] = abdeckung["grund"] if r["quelle"] else r["quelle_hinweis"]
+        else:
+            meta_name = (yahoo_name(r["symbol"], yahoo_namen_datei) if r["quelle"] == "yfinance"
+                         else tiingo.metadaten(r["symbol"]).get("name"))
+            p = pruefe_kursreihe(k, meta_name, bekannte_namen(r, sec_client), r["von"], r["bis"], datenende=datenende)
+            eintrag.update({"name_meta": meta_name, "gueltig": bool(p["ok"]), "grund": p["grund"]})
+    except Exception as fehler:  # einzelne Fehler protokollieren, Lauf fortsetzen
+        eintrag["fehler"] = f"{type(fehler).__name__}: {str(fehler)[:120]}"
+        eintrag["grund"] = "Fehler beim Laden"
+    return eintrag

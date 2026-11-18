@@ -39,6 +39,16 @@ korrekturen:
     von: 2024-07-08
     quelle: "Aufnahmedatum der heutigen Wikipedia-Liste; Nachfolger von WestRock (WRK)"
 
+# Korrekturen nur für den Betriebsstand (Befund 19, Schritt 3, Jakob 18.11.2026): gelten nicht für den eingefrorenen
+# Stand von Backtest und c3. Kein Treffer ist kein Fehler (Wikipedia kann es selbst behoben haben), sondern eine Meldung
+# im Tageslauf; dann Eintrag prüfen und entfernen. Nur Aktion beenden.
+betrieb_korrekturen:
+  - aktion: beenden
+    ticker: CDAY
+    name: Ceridian
+    bis: 2024-02-01
+    quelle: "Wikipedia (Abruf 09./16.11.2026) führt CDAY ohne Ende; Umbenennung Ceridian → Dayforce (DAY) am 01.02.2024, wie im eingefrorenen Stand (Revision 1382710214)"
+
 # CIK-Korrekturen: die automatische Zuordnung (Name → CIK, geprüft an den 10-K im Zeitraum) lag falsch oder fand nichts.
 # `erwartet` muss im heutigen oder einem früheren SEC-Namen der CIK vorkommen; das prüft der Code bei jedem Lauf.
 # Alle Werte am 02.11.2026 gegen SEC-Submissions geprüft (Name und 10-K-Zeitraum).

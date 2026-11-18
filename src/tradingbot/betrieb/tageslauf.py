@@ -719,6 +719,10 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             erg.meldungen.append(f"S&P-500-Liste: Wikipedia, abgerufen {stand['wikipedia_aktuell'][:16].replace('T', ' ')} UTC"
                                  f"{' (Quartalsstichtag: neu abgerufen)' if quartalsstichtag(nyse) else ''}; letzte erfasste Änderung "
                                  f"{stand['letzte_aenderung']} (rein: {stand['zugang'] or '–'}, raus: {stand['abgang'] or '–'})")
+            for m in stand.get("meldungen", []):           # Befund 19, Schritt 3: Betriebsstand, neue Mitglieder, Wächter
+                erg.meldungen.append(f"S&P-500-Liste: {m}")
+                if "greift nicht mehr" in m or "außen vor" in m:
+                    erg.sofort.append(f"S&P-500-Liste: {m}")
         except Exception as f:  # noqa: BLE001
             erg.meldungen.append(f"S&P-500-Liste nicht aktualisiert ({type(f).__name__}: {f}) – Stand unverändert")
     if braucht:

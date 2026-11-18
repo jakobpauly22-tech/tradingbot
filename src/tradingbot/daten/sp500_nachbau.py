@@ -231,6 +231,9 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
     pruefe_zuordnung(relevant, status)                       # Wächter: keine still falsch zugeordneten Kurse (17.11.2026)
     cache, tiingo = standard_cache(), tiingo or TiingoClient()
+    from tradingbot.daten.kurse import kurscache
+
+    kurse_cache = kurscache()
     kappung, kappung_ticker = kursreihen_ende(), kursreihen_ende_je_ticker()
     abspaltungen = abspaltungen_tiingo()
     eingefroren = eingefrorene_kurse()
@@ -253,7 +256,9 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             continue
         fehler = None
         try:
-            k = cache.lesen("kurse", s["symbol"])[0] if s["quelle"] == "yfinance" else tiingo.historie(s["symbol"])
+            # Kurse über kurscache(): im Betriebsmodus der Cache des Betriebs (Befund 5), sonst daten/cache/kurse.
+            # Bis 18.11.2026 las der Betrieb hier still den Entwicklungs-Cache (Befund 19, Schritt 3).
+            k = kurse_cache.lesen("kurse", s["symbol"])[0] if s["quelle"] == "yfinance" else tiingo.historie(s["symbol"])
             k = begrenze(k)                                   # Tresor: Cache-Kurse nur bis zur Datumsgrenze
             if k is None or k.empty:
                 raise LookupError("Kurse nicht im Cache")
