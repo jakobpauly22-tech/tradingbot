@@ -76,8 +76,8 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
     kennzahlen, filt = konfig["kennzahlen"], konfig["filter"]
     aktualitaet = konfig["kennzahlen_regeln"]["aktualitaet_monate"]
     industrie_von, industrie_bis = filt["altman"]["industrie_sic"]
-    universum, _ = lade_universum()
-    status = pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
+    universum, _ = lade_universum(stand="betrieb")          # Betrieb: laufender Stand; Sperre bleibt bis Befund 19, Schritt 3
+    status =pd.read_csv(PROJEKT_WURZEL / "daten" / "universum" / "kursstatus.csv").set_index("index")
     from tradingbot.daten.sp500_nachbau import pruefe_zuordnung
     pruefe_zuordnung(universum, status)                      # Wächter (17.11.2026): vor jedem Kursabruf, sonst falsche Symbole
     aktiv = mitglieder_am(universum, tag)

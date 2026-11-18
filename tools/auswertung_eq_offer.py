@@ -88,7 +88,9 @@ def main() -> int:
     if scores is None:
         raise SystemExit("Cache fundamental/scores_eq_offer fehlt: tools/auswertung_scores.py --eq-offer-splitbereinigt")
     alt_cache, _ = cache.lesen("fundamental", "scores")
-    uni, _ = cache.lesen("universum", "sp500")
+    from tradingbot.daten.universum import lade_universum
+
+    uni, _ = lade_universum()                       # eingefrorener Stand (Befund 19), nicht der Betriebs-Cache
     namen = {int(z["cik"]): z["ticker"] for _, z in uni.sort_values("von", na_position="first").iterrows() if pd.notna(z["cik"])}
     name = lambda f: namen.get(int(f), f"CIK{int(f)}")  # noqa: E731
     s = scores[(scores["stichtag"] >= start) & (scores["stichtag"] <= ende) & ~scores["veraltet"].astype(bool)].copy()

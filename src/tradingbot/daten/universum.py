@@ -463,8 +463,64 @@ def cik_korrekturen_anwenden(t: pd.DataFrame, korrekturen: dict, client) -> pd.D
     return t
 
 
-def lade_universum(neu_berechnen: bool = False) -> tuple[pd.DataFrame, dict]:
-    """Komplettes Universum: Mitgliedschaften, CIK, Vorgänger, Korrekturen. Ergebnis im Parquet-Cache mit Stand."""
+def _eingefroren_ordner() -> Path:
+    from tradingbot.konfiguration import PROJEKT_WURZEL
+
+    return PROJEKT_WURZEL / "daten" / "universum" / "eingefroren"
+
+
+EINGEFROREN_ORDNER = _eingefroren_ordner()
+
+
+class StandPasstNicht(RuntimeError):
+    """Der eingefrorene Universumsstand fehlt oder weicht von config/universum_stand.yaml ab; wird nie still übergangen."""
+
+
+def lade_eingefrorenen_stand(ordner: Path | None = None, stand: dict | None = None) -> tuple[pd.DataFrame, dict]:
+    """Eingefrorenes Universum für Backtest und c3 (Befund 19, Jakob 17.11.2026).
+
+    Liest daten/universum/eingefroren/universum.parquet. Vorher wird jede in config/universum_stand.yaml genannte Datei
+    (beide Wikipedia-Seiten der gewählten Revision und das Universum) über SHA-256 geprüft; fehlt eine oder weicht sie ab,
+    StandPasstNicht. Erzeugt wird der Stand nur mit tools/universum_revision_suchen.py --einfrieren, Abnahme und Wahl der
+    Revision in docs/berichte/2026-11-18_universum_eingefroren.md.
+    """
+    import hashlib
+
+    from tradingbot.konfiguration import lade_konfiguration
+
+    ordner = ordner or EINGEFROREN_ORDNER
+    stand = stand or lade_konfiguration("universum_stand")["eingefroren"]
+    for teil in ("aktuell", "historie", "universum"):
+        datei = ordner / stand[teil]["datei"]
+        if not datei.exists():
+            raise StandPasstNicht(f"Eingefrorener Universumsstand: {datei} fehlt (Wiederherstellung über revid, "
+                                  "tools/universum_revision_suchen.py)")
+        ist = hashlib.sha256(datei.read_bytes()).hexdigest()
+        if ist != stand[teil]["sha256"]:
+            raise StandPasstNicht(f"Eingefrorener Universumsstand: SHA-256 von {datei.name} weicht ab "
+                                  f"({ist[:12]}… statt {str(stand[teil]['sha256'])[:12]}…)")
+    t = pd.read_parquet(ordner / stand["universum"]["datei"])
+    if len(t) != int(stand["universum"]["zeilen"]):
+        raise StandPasstNicht(f"Eingefrorenes Universum: {len(t)} Zeilen statt {stand['universum']['zeilen']}")
+    meta = {"stand": "eingefroren", "zeitpunkt_utc": str(stand["zeitpunkt_utc"]),
+            "revid_aktuell": stand["aktuell"]["revid"], "revid_historie": stand["historie"]["revid"]}
+    return t, meta
+
+
+def lade_universum(neu_berechnen: bool = False, stand: str = "eingefroren") -> tuple[pd.DataFrame, dict]:
+    """Komplettes Universum: Mitgliedschaften, CIK, Vorgänger, Korrekturen.
+
+    `stand` (Befund 19, Jakob 17.11.2026):
+    - "eingefroren" (Standard; Backtest, c3, alle Werkzeuge): fester, abgenommener Stand, siehe lade_eingefrorenen_stand.
+    - "betrieb" (nur Tageslauf und Fundamental-Bewertung des Betriebs): aus dem laufend erneuerten Wikipedia-Cache,
+      Ergebnis im Parquet-Cache mit Stand. Eigener Cache des Betriebs folgt in Schritt 3.
+    """
+    if stand == "eingefroren":
+        if neu_berechnen:
+            raise ValueError("Der eingefrorene Stand wird nicht neu berechnet (nur tools/universum_revision_suchen.py --einfrieren)")
+        return lade_eingefrorenen_stand()
+    if stand != "betrieb":
+        raise ValueError(f"Unbekannter Universumsstand {stand!r} (erlaubt: eingefroren, betrieb)")
     from tradingbot.daten.cache import standard_cache
     from tradingbot.daten.sec import SecClient
     from tradingbot.konfiguration import lade_konfiguration
@@ -602,7 +658,7 @@ def universum_aktualisieren(erzwingen: bool = False) -> dict:
         lade_wikipedia(max_alter=timedelta(hours=12))
     else:
         lade_wikipedia()
-    t, meta = lade_universum(neu_berechnen=erzwingen)
+    t, meta = lade_universum(neu_berechnen=erzwingen, stand="betrieb")
     letzte = max(d for d in (t["von"].max(), t["bis"].max()) if pd.notna(d))
     zugang = ", ".join(t.loc[t["von"] == letzte, "ticker"].astype(str))
     abgang = ", ".join(t.loc[t["bis"] == letzte, "ticker"].astype(str))

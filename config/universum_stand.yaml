@@ -1,0 +1,19 @@
+# Eingefrorener S&P-500-Stand für Backtest und c3 (Befund 19, Plan Jakob 17.11.2026, eingefroren 18.11.2026).
+# Abnahme und Wahl der Revision: docs/berichte/2026-11-18_universum_eingefroren.md
+# Dateien liegen in daten/universum/eingefroren/ (nicht in Git); wiederherstellbar über die revid mit
+# tools/universum_revision_suchen.py. Der Code prüft jede Datei über SHA-256 (daten/universum.lade_eingefrorenen_stand).
+# Nur mit Jakobs Zustimmung ändern.
+eingefroren:
+  zeitpunkt_utc: "2026-10-29T22:20:50+00:00"
+  aktuell:        # List of S&P 500 companies
+    revid: 1382178819
+    datei: wikipedia_aktuell_1382178819.html.gz
+    sha256: 9601e1f51ea892a708d7a856229ae03c2cb6697ed3a062f84c1e0f4c52cc6030
+  historie:       # Historical components of the S&P 500
+    revid: 1382710214
+    datei: wikipedia_historie_1382710214.html.gz
+    sha256: cf33cd9175482e909f783400bc26177b29cb96e47190cdcbd91cd73c1a6a3198
+  universum:      # daraus berechnet (SEC-Namensverzeichnis und universum_korrekturen.yaml vom 18.11.2026)
+    datei: universum.parquet
+    zeilen: 896
+    sha256: 67a8bf4fc9b2de836cefedd8d8bf3981c7119bcce9ea8bc669df04366b90a196
