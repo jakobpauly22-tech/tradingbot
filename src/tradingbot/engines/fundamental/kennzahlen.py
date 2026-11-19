@@ -19,6 +19,7 @@ import pandas as pd
 
 from tradingbot.daten.sec import erstmeldungen, kennzahl_jahreswerte
 
+JAHRESDAUER = (350, 380)                     # wie daten.sec.kennzahl_jahreswerte (Standard `jahresdauer`)
 DAUER_FUER_GJ = ("umsatz", "jahresueberschuss", "operativer_cashflow")   # aus diesen ergeben sich die Geschäftsjahre
 
 
@@ -37,19 +38,53 @@ def jahreswerte_firma(erst: pd.DataFrame, definitionen: dict) -> pd.DataFrame:
     abschluesse_am am Stichtag: der zuerst gemeldete unter den dann bekannten (Erstmeldungs-Regel), bei gleichem Datum der
     vorrangige Begriff. So zählt z.B. bei Walmart das Ergebnis vor Steuern 2019 aus dem 10-K vom März 2020, auch wenn ein
     vorrangiger Begriff erst im 10-K von 2022 auftaucht.
+
+    Rechenweg (Laufzeit, Jakob 19.11.2026): dasselbe Ergebnis wie je Kennzahl und Begriff
+    `daten.sec.kennzahl_jahreswerte(erst, {**d, "konzepte": [begriff]}, "2100-01-01")`, aber die Tabelle wird je Firma nur
+    einmal zerlegt: Masken „Jahreswert“ (Dauer 350–380 Tage) und „Stichtagswert an einem Geschäftsjahresende“ einmal für
+    alle Zeilen, Zeilen je (Taxonomie, Begriff, Einheit) einmal gruppiert. Je Geschäftsjahresende gilt wie dort die erste
+    Zeile in der Reihenfolge der Erstmeldungen (stabile Sortierung nach Ende). Gleichheit mit dem alten Weg prüft
+    tests/engines/test_jahreswerte_firma.py.
     """
+    import numpy as np
+
     from tradingbot.backtest.tresor import begrenze
 
     erst = begrenze(erst, "filed")               # Tresor: nur Einreichungen bis zur Datumsgrenze
+    spalten = ["kennzahl", "ende", "wert", "bekannt_ab", "konzept", "rang"]
     zeilen = []
+    if erst is None or len(erst) == 0:
+        return pd.DataFrame(zeilen, columns=spalten)
+    bekannt = erst[erst["verfuegbar_ab"] <= pd.Timestamp("2100-01-01")]
+    taxonomie, begriff = bekannt["taxonomie"].to_numpy(object), bekannt["konzept"].to_numpy(object)
+    einheit = bekannt["einheit"].to_numpy(object)
+    ende = bekannt["ende"].to_numpy()
+    wert, filed = bekannt["wert"].to_numpy(), bekannt["filed"].to_numpy()
+    mit_start = bekannt["start"].notna().to_numpy()
+    tage = (bekannt["ende"] - bekannt["start"]).dt.days
+    jahr = mit_start & tage.between(*JAHRESDAUER).to_numpy()                        # sec._ist_jahr
+    am_gj_ende = ~mit_start & np.isin(ende, np.unique(ende[jahr]))                    # sec.geschaeftsjahresenden
+    gruppen: dict[tuple, list[int]] = {}
+    for i, schluessel in enumerate(zip(taxonomie, begriff, einheit)):
+        gruppen.setdefault(schluessel, []).append(i)
     for name, d in definitionen.items():
-        if d["art"] == "letzter" or erst is None or len(erst) == 0:
+        art = d["art"]
+        if art == "letzter":
             continue
+        if art not in ("dauer", "stichtag"):
+            raise ValueError(f"Unbekannte Art {art!r}")
+        maske = jahr if art == "dauer" else am_gj_ende
         for rang, konzept in enumerate(d["konzepte"]):
-            w = kennzahl_jahreswerte(erst, {**d, "konzepte": [konzept]}, "2100-01-01")
-            for ende, r in w.iterrows():
-                zeilen.append((name, ende, float(r["wert"]), r["filed"] + pd.Timedelta(days=1), r["konzept"], rang))
-    return pd.DataFrame(zeilen, columns=["kennzahl", "ende", "wert", "bekannt_ab", "konzept", "rang"])
+            tax, _, kon = konzept.partition(":")
+            stellen = np.array([i for i in gruppen.get((tax, kon, d["einheit"]), ()) if maske[i]], dtype=int)
+            if not len(stellen):
+                continue
+            stellen = stellen[np.argsort(ende[stellen], kind="stable")]
+            _, erste = np.unique(ende[stellen], return_index=True)              # erste Zeile je Geschäftsjahresende
+            for i in stellen[np.sort(erste)]:
+                zeilen.append((name, pd.Timestamp(ende[i]), float(wert[i]), pd.Timestamp(filed[i]) + pd.Timedelta(days=1),
+                               begriff[i], rang))
+    return pd.DataFrame(zeilen, columns=spalten)
 
 
 def abschluesse_am(werte: pd.DataFrame, stichtag, *, jahre: int = 3, aktualitaet_monate: int = 15) -> tuple[pd.DataFrame, dict]:
