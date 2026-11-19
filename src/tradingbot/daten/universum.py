@@ -16,6 +16,7 @@ Rekonstruktion (Entscheidung Jakob 02.11.2026: historische Zusammensetzung statt
 from __future__ import annotations
 
 import gzip
+import hashlib
 import io
 import logging
 import re
@@ -299,11 +300,19 @@ def anzahl_je_stichtag(intervalle: pd.DataFrame, stichtage, *, vor_pruefzeitraum
 
 
 # --- CIK-Zuordnung -----------------------------------------------------------------------------
+_SEC_NAMEN: dict = {}                            # zuletzt normalisiertes SEC-Namensverzeichnis (Inhalt, Tabelle)
+
+
 def lade_sec_namen(max_alter: timedelta = timedelta(days=30)) -> pd.DataFrame:
     """SEC-Namensverzeichnis (Name, CIK), inklusive früherer Namen, normalisiert."""
     from tradingbot.konfiguration import geheimnis
 
     text, _ = _text_mit_cache(SEC_NAMEN, _cache_pfad("sec_cik_lookup.txt.gz"), geheimnis("SEC_USER_AGENT"), max_alter)
+    # Laufzeit (Jakob 19.11.2026, Stufe 5b): ~1 Mio. Namen werden je Prozess und Dateiinhalt nur einmal normalisiert
+    # (vorher zweimal je Aktualisierung der S&P-500-Liste); jeder Aufrufer bekommt eine eigene Kopie.
+    inhalt = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if _SEC_NAMEN.get("inhalt") == inhalt:
+        return _SEC_NAMEN["namen"].copy(deep=True)
     zeilen = []
     for zeile in text.splitlines():
         teile = zeile.rstrip(":").rsplit(":", 1)
@@ -311,6 +320,7 @@ def lade_sec_namen(max_alter: timedelta = timedelta(days=30)) -> pd.DataFrame:
             zeilen.append((teile[0], int(teile[1])))
     namen = pd.DataFrame(zeilen, columns=["name", "cik"])
     namen["norm"] = namen["name"].map(name_normalisieren)
+    _SEC_NAMEN.update(inhalt=inhalt, namen=namen.copy(deep=True))
     return namen
 
 

@@ -175,3 +175,26 @@ def test_zusammensetzung_erst_ab_2012_geprueft():
         mitglieder_am(iv, "2011-12-30")
     assert len(mitglieder_am(iv, "2011-12-30", vor_pruefzeitraum_erlaubt=True)) == 1
     assert len(mitglieder_am(iv, "2012-01-02")) == 1
+
+
+def test_sec_namen_je_inhalt_nur_einmal_normalisiert(monkeypatch):
+    """Laufzeit (19.11.2026, Stufe 5b): gleicher Dateiinhalt → gleiche Tabelle ohne zweite Normalisierung; jeder
+    Aufrufer bekommt eine eigene Kopie (cik_kandidaten ergänzt Spalten); anderer Inhalt wird neu normalisiert."""
+    from tradingbot.daten import universum as u
+
+    text = {"t": "APPLE INC:320193:\nMICROSOFT CORP /WA/:789019:\nKAPUTT\n"}
+    monkeypatch.setattr(u, "_text_mit_cache", lambda *a, **k: (text["t"], None))
+    monkeypatch.setattr("tradingbot.konfiguration.geheimnis", lambda name: "test")
+    monkeypatch.setattr(u, "_SEC_NAMEN", {})
+    aufrufe = []
+    original = u.name_normalisieren
+    monkeypatch.setattr(u, "name_normalisieren", lambda n: aufrufe.append(n) or original(n))
+    erste = u.lade_sec_namen()
+    assert list(erste["norm"]) == ["apple", "microsoft"] and len(aufrufe) == 2
+    erste["_kompakt"] = "x"
+    zweite = u.lade_sec_namen()
+    assert len(aufrufe) == 2 and "_kompakt" not in zweite
+    assert zweite.equals(erste.drop(columns="_kompakt"))
+    text["t"] += "ALPHABET INC.:1652044:\n"
+    dritte = u.lade_sec_namen()
+    assert list(dritte["norm"]) == ["apple", "microsoft", "alphabet"] and len(aufrufe) == 5
