@@ -44,6 +44,33 @@ def cik10(cik) -> str:
     return f"{int(cik):010d}"
 
 
+def sec_rohwurzel() -> Path:
+    """Ablage der SEC-Rohdaten (JSON, Köpfe): im Betriebsmodus der eigene SEC-Cache des Betriebs
+    (daten/betrieb/cache/sec, betrieb/seccache.py, Jakob 23.11.2026), sonst <Standard-Cache>/sec (daten/cache/sec)."""
+    from tradingbot.backtest.tresor import im_betriebsmodus
+    from tradingbot.daten.cache import standard_cache
+
+    if im_betriebsmodus():
+        from tradingbot.betrieb.seccache import betriebs_secwurzel
+
+        return betriebs_secwurzel()
+    return standard_cache().wurzel / "sec"
+
+
+def sec_cache():
+    """Parquet-Cache der SEC-Tabellen (sec_erstmeldungen, sec_aktienfakten(_quartale), universum/sic_historie): im
+    Betriebsmodus der eigene Cache des Betriebs (daten/betrieb/cache), sonst der Standard-Cache. So kann ein Betriebslauf
+    die Entwicklungsdaten nie verändern (Jakob 23.11.2026)."""
+    from tradingbot.backtest.tresor import im_betriebsmodus
+    from tradingbot.daten.cache import standard_cache
+
+    if im_betriebsmodus():
+        from tradingbot.betrieb.seccache import betriebs_seccache
+
+        return betriebs_seccache()
+    return standard_cache()
+
+
 class SecClient:
     """HTTP-Zugriff auf EDGAR mit Drosselung, Wiederholung und Datei-Cache (gzip-JSON).
 
@@ -59,10 +86,12 @@ class SecClient:
 
         konfig = lade_konfiguration("fundamental")["sec"]
         self.user_agent = user_agent or geheimnis("SEC_USER_AGENT")
-        self.cache_wurzel = Path(cache_wurzel or PROJEKT_WURZEL / "daten" / "cache" / "sec")
+        self.cache_wurzel = Path(cache_wurzel or sec_rohwurzel())   # Betrieb: eigener SEC-Cache (23.11.2026)
         self.sitzung = sitzung or requests.Session()
         self.drossel = drossel or Drossel(min_abstand_s=1.0 / float(konfig["max_anfragen_pro_sekunde"]))
-        self.max_alter = max_alter or timedelta(days=float(konfig["cache_max_alter_tage"]))
+        # Kein automatisches Nachladen (Zusage Jakob 23.11.2026): ohne `max_alter` gilt, was im Cache liegt; geladen wird
+        # nur, was fehlt. Nachladen nach Alter nur, wenn ein Aufrufer `max_alter` ausdrücklich übergibt.
+        self.max_alter = max_alter
         self._jetzt = jetzt or (lambda: datetime.now(timezone.utc))
         self.pausen, self._schlafen = tuple(pausen), schlafen
 
@@ -126,9 +155,10 @@ class SecClient:
         return self._wiederholt(einmal, f"SEC {url}")
 
     def json_mit_cache(self, url: str, datei: Path) -> tuple[dict, datetime]:
-        """JSON aus dem Cache, wenn jünger als `max_alter`; sonst neu laden. Gibt (Daten, Abrufzeit) zurück."""
+        """JSON aus dem Cache; neu geladen wird nur, was fehlt, oder bei ausdrücklichem `max_alter`, was älter ist.
+        Gibt (Daten, Abrufzeit) zurück."""
         daten, zeitpunkt = self._cache_lesen(datei)
-        if daten is not None and self._jetzt() - zeitpunkt < self.max_alter:
+        if daten is not None and (self.max_alter is None or self._jetzt() - zeitpunkt < self.max_alter):
             return daten, zeitpunkt
         try:
             daten_neu = self._holen(url)
@@ -319,10 +349,8 @@ def letzter_wert(erst: pd.DataFrame, definition: dict, stichtag) -> float | None
 # --- Bequemer Zugang mit Cache der aufbereiteten Tabelle ----------------------------------------
 def lade_erstmeldungen(cik, *, client: SecClient | None = None, cache=None) -> pd.DataFrame:
     """Erstmeldungen eines Unternehmens; aufbereitete Tabelle im Parquet-Cache, solange die Rohdaten gleich sind."""
-    from tradingbot.daten.cache import standard_cache
-
     client = client or SecClient()
-    cache = cache or standard_cache()
+    cache = cache or sec_cache()                         # Betrieb: eigener SEC-Cache (23.11.2026)
     roh, abgerufen = client.companyfacts(cik)
     tabelle, meta = cache.lesen("sec_erstmeldungen", cik10(cik))
     if tabelle is not None and meta.get("roh_abgerufen_um") == abgerufen.isoformat(timespec="seconds"):

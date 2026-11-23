@@ -92,3 +92,22 @@ def test_wache_erfasst_direkte_lesezugriffe_und_sperrt_im_vergleich(daten):
             socket.getaddrinfo("example.org", 443)
     (daten / "cache" / "kurse" / "MDLZ.parquet").read_text()              # danach wieder frei
     assert socket.getaddrinfo is not None and bv._WACHE["modus"] is None
+
+
+def test_sec_abbildung_auf_den_betriebs_cache(tmp_path):
+    """Abnahme A (Jakob 23.11.2026): eingefrorene SEC-Dateien zusätzlich am Pfad des Betriebs, byteweise; Fehlende auch dort."""
+    lauf = tmp_path / "lauf"
+    for rel, inhalt in (("cache/sec_erstmeldungen/0000000001.parquet", b"e"), ("cache/sec/submissions/CIK1.json.gz", b"s"),
+                        ("cache/universum/sic_historie.parquet", b"h"), ("cache/universum/sec_cik_lookup.txt.gz", b"n"),
+                        ("cache/kurse/A.parquet", b"k")):
+        (lauf / rel).parent.mkdir(parents=True, exist_ok=True)
+        (lauf / rel).write_bytes(inhalt)
+    zahl, fehlend = bv.sec_abbilden(lauf, ["cache/sec_erstmeldungen/0000000009.parquet", "cache/kurse/B.parquet"])
+    assert zahl == 3 and fehlend == ["betrieb/cache/sec_erstmeldungen/0000000009.parquet"]
+    assert (lauf / "betrieb/cache/sec/submissions/CIK1.json.gz").read_bytes() == b"s"
+    assert (lauf / "betrieb/cache/universum/sic_historie.parquet").read_bytes() == b"h"
+    assert not (lauf / "betrieb/cache/universum/sec_cik_lookup.txt.gz").exists() and not (lauf / "betrieb/cache/kurse").exists()
+    assert (lauf / "betrieb/cache/sec/UEBERNAHME.json").exists()
+    (lauf / "betrieb/cache/sec/UEBERNAHME.json").unlink()
+    with pytest.raises(bv.Abbruch, match="nicht eindeutig"):
+        bv.sec_abbilden(lauf, [])

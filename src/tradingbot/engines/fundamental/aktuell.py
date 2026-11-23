@@ -16,11 +16,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
 from tradingbot.daten.index_nachbau import aktien_splitbereinigt
 from tradingbot.daten.kurse import lade_kurse
-from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
+from tradingbot.daten.sec import cik10, kennzahl_jahreswerte, sec_cache
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.daten.kapitalmassnahmen_historie import ereignisse_mit_flex, lade_ereignisse
@@ -139,7 +138,7 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                           and status.loc[nr, "quelle"] == "yfinance"})
         meldungen += [f"Kurs nicht aktualisiert: {m}" for m in kurse_aktualisieren(symbole, tag.date())]
     daten = lade_firmendaten(universum, status, lade_sic_historien(universum), mitglied_ab=tag, bis=tag)
-    cache = standard_cache()
+    cache = sec_cache()                          # SEC-Tabellen: im Betrieb der eigene SEC-Cache (23.11.2026)
     mitglieder = mitglieder_am(daten.relevant, tag)
     symbol_je_firma = {}
     for nr, z in mitglieder.iterrows():

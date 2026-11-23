@@ -637,11 +637,10 @@ def ist_finanzwert(sic: int | None, bereich=(6000, 6999)) -> bool | None:
 
 def lade_sic_historien(universum: pd.DataFrame, client=None) -> dict[int, list]:
     """SIC-Historie für alle CIKs (inklusive Vorgänger) der ab 2012 relevanten Mitgliedschaften; im Cache."""
-    from tradingbot.daten.cache import standard_cache
-    from tradingbot.daten.sec import SecClient
+    from tradingbot.daten.sec import SecClient, sec_cache
 
     client = client or SecClient()
-    cache = standard_cache()
+    cache = sec_cache()                                  # Betrieb: eigener SEC-Cache (23.11.2026)
     relevant = universum[universum["bis"].isna() | (universum["bis"] >= "2012-01-01")]
     ciks = {int(c) for c in relevant["cik"].dropna()} | {int(c) for liste in relevant["vorgaenger_ciks"] if liste is not None for c in list(liste)}
     tabelle, _ = cache.lesen("universum", "sic_historie")

@@ -135,8 +135,8 @@ def test_probe_laesst_alle_betriebsdaten_byteweise_unveraendert(daten, monkeypat
                                  (betrieb_cache, "universum", "sp500"), (betrieb_cache, "makro", "UNRATE")):
             c.schreiben(bereich, schl, reihe.assign(close=9.0), {"quelle": "probe"})
             assert c.lesen(bereich, schl)[1]["quelle"] == "probe"            # Probe liest ihre eigene Schicht
-        # SEC: veraltete Submissions neu, Einreichungskopf neu
-        sec = SecClient("test", cache_wurzel=daten / "cache" / "sec", schlafen=lambda s: None,
+        # SEC: veraltete Submissions neu (Nachladen ausdrücklich angefordert, seit 23.11.2026 kein automatisches), Kopf neu
+        sec = SecClient("test", cache_wurzel=daten / "cache" / "sec", schlafen=lambda s: None, max_alter=timedelta(days=7),
                         sitzung=_Sitzung({"submissions": {"neu": True}, "hdr.sgml": "KOPF"}))
         assert sec.json_mit_cache("https://data.sec.gov/submissions/CIK0000000001.json", sec_datei)[0] == {"neu": True}
         assert sec.einreichungskopf(1, "0000000001-26-000001") == "KOPF"

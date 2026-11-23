@@ -230,7 +230,9 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
     mitglied_ab, bis = pd.Timestamp(mitglied_ab), pd.Timestamp(bis)
     relevant = universum[(universum["bis"].isna() | (universum["bis"] > mitglied_ab)) & (universum["von"].isna() | (universum["von"] <= bis))]
     pruefe_zuordnung(relevant, status)                       # Wächter: keine still falsch zugeordneten Kurse (17.11.2026)
-    cache, tiingo = standard_cache(), tiingo or TiingoClient()
+    from tradingbot.daten.sec import sec_cache
+
+    cache, tiingo = sec_cache(), tiingo or TiingoClient()   # nur sec_erstmeldungen; Betrieb: eigener SEC-Cache
     from tradingbot.daten.kurse import kurscache
 
     kurse_cache = kurscache()

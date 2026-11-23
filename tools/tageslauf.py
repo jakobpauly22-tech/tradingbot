@@ -130,6 +130,9 @@ def rechnen(probe: bool, kopie: bool = False):
         # eigener Kurs-Cache des Betriebs (Befund 5): einmalige Übernahme, auch im Probelauf (Jakob 17.11.2026)
         from tradingbot.betrieb import kurscache
         meldungen.append(kurscache.protokollzeile(kurscache.sicherstellen()))
+        # eigener SEC-Cache des Betriebs (SEC-Aktualisierung Schritt 1, Jakob 23.11.2026): einmalige Übernahme, auch in der Probe
+        from tradingbot.betrieb import seccache
+        meldungen.append(seccache.protokollzeile(seccache.sicherstellen()))
         broker = broker_oder_none(meldungen, nur_lesen=probe or kopie)
         erg = tageslauf(datetime.now(BERLIN), journal, broker=broker, sichern=not probe)
         gateway = getattr(broker, "gateway_meldungen", [])

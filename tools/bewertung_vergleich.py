@@ -17,6 +17,10 @@ Schicht las darauf durch und die Referenz war nicht mehr erreichbar):
   wie bei der Referenz, ein direkter Lesezugriff auf andere Dateien unter daten/ bricht ab. Das eingefrorene
   Betriebsuniversum gilt im Betrieb nur für seinen Kalendertag; in der Laufkopie wird deshalb nur sein Tagesstempel
   auf heute gesetzt (Inhalt byteweise gleich), damit es nicht aus Wikipedia neu berechnet wird.
+- **SEC-Cache des Betriebs (Jakob 23.11.2026, Abnahme A):** Seit Schritt 1 der SEC-Aktualisierung liest die Bewertung
+  SEC-Daten unter `betrieb/cache/` statt `cache/`. Die Laufkopie bildet deshalb jede eingefrorene Datei der SEC-Bereiche
+  (`betrieb/seccache.BEREICHE`) zusätzlich auf den Pfad des Betriebs ab (byteweise Kopie, SHA geprüft) und legt die Marke
+  der Übernahme an; als fehlend erfasste Pfade gelten auch am neuen Ort als fehlend. Die Referenz bleibt unverändert.
 
 Betriebs- und Entwicklungsdaten bleiben unverändert (alles Schreiben geht in die Schicht).
 
@@ -160,6 +164,35 @@ def laufkopie(schicht: Path, lauf: Path) -> str | None:
     return alt
 
 
+def sec_abbilden(lauf: Path, fehlend) -> tuple[int, list[str]]:
+    """Eingefrorene Dateien der SEC-Bereiche (`cache/<Bereich>`) zusätzlich unter `betrieb/cache/<Bereich>` ablegen,
+    byteweise mit SHA-Prüfung, und die Marke der Übernahme schreiben. Gibt (Zahl der Dateien, fehlende Pfade am neuen Ort)."""
+    from tradingbot.betrieb.seccache import BEREICHE, MARKE
+
+    def sec_pfad(rel: str) -> bool:
+        return any(rel == f"cache/{b}" or rel.startswith(f"cache/{b}/") for b in BEREICHE)
+
+    zahl = 0
+    for datei in sorted(p for p in (lauf / "cache").rglob("*") if p.is_file()) if (lauf / "cache").exists() else []:
+        rel = datei.relative_to(lauf).as_posix()
+        if not sec_pfad(rel):
+            continue
+        ziel = lauf / "betrieb" / rel
+        if ziel.exists():
+            raise Abbruch(f"{ziel.relative_to(lauf).as_posix()} liegt schon in den eingefrorenen Eingaben – Abbildung nicht eindeutig")
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(datei, ziel)
+        if sha256(ziel) != sha256(datei):
+            raise Abbruch(f"Abbildung {rel} nicht byteweise gleich")
+        zahl += 1
+    marke = lauf / "betrieb" / "cache" / MARKE
+    marke.parent.mkdir(parents=True, exist_ok=True)
+    marke.write_text(json.dumps({"uebernommen_am": datetime.now().isoformat(timespec="seconds"), "dateien": zahl,
+                                 "grund": "bewertung_vergleich: Abbildung der eingefrorenen SEC-Dateien (Abnahme A)"},
+                                ensure_ascii=False), encoding="utf-8")
+    return zahl, [f"betrieb/{rel}" for rel in fehlend if sec_pfad(rel)]
+
+
 def archivieren(ordner: Path, grund: str, heute: date) -> Path | None:
     """Vorhandene Referenz (alle Teile) nach `ersetzt_<Datum>[_n]/` verschieben, mit Vermerk; nichts wird gelöscht."""
     teile = [ordner / n for n in ("referenz.pkl", "referenz.json", "schicht", "eingefroren", "eingefroren.json", "lauf")]
@@ -247,6 +280,13 @@ def vergleichen(stichtag: str) -> int:
         print("ABBRUCH – eingefrorene Eingaben nicht mehr gleich:\n" + "\n".join(f"  {z}" for z in abweichend[:30]))
         return 2
     stempel = laufkopie(EINGEFROREN, LAUF)
+    try:
+        abgebildet, fehlend_neu = sec_abbilden(LAUF, verzeichnis["fehlend"])
+    except Abbruch as f:
+        print(f"ABBRUCH – {f}")
+        return 2
+    verzeichnis = {**verzeichnis, "fehlend": list(verzeichnis["fehlend"]) + fehlend_neu}
+    print(f"SEC-Dateien auf den Betriebs-Cache abgebildet: {abgebildet} (byteweise, SHA gleich)")
     print(f"Eingaben: {len(verzeichnis['dateien'])} eingefrorene Dateien, {len(verzeichnis['direkt'])} direkt gelesen (Prüfsumme gleich)"
           + (f"; Betriebsuniversum vom {stempel[:10]} (Tagesstempel in der Laufkopie auf heute)" if stempel else ""))
     try:

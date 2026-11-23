@@ -50,15 +50,14 @@ def lade_aktienfakten(ciks, *, definition: dict | None = None, cache=None, clien
     """Aktienfakten mehrerer CIKs (Firma und Vorgänger) aus dem Cache (`mit_quartalen`: auch 10-Q-Perioden, eigener Bereich). Fehlt der Eintrag oder passt er nicht zum Stand der
     Erstmeldungen (`roh_abgerufen_um`), wird er offline aus den gecachten companyfacts neu gebaut (kein Netzabruf).
     CIKs ohne gecachte companyfacts fehlen im Ergebnis (dann greift Weg B)."""
-    from tradingbot.daten.cache import standard_cache
-    from tradingbot.daten.sec import SecClient, cik10
+    from tradingbot.daten.sec import SecClient, cik10, sec_cache
     from tradingbot.konfiguration import lade_konfiguration
 
     konfig = lade_konfiguration("fundamental")
     definition = definition or konfig["kennzahlen"]["gewichtete_aktien"]
     jahresdauer = QUARTALSDAUER if mit_quartalen else tuple(konfig["sec"]["jahresdauer_tage"])
     bereich = BEREICH_QUARTALE if mit_quartalen else BEREICH
-    cache = cache or standard_cache()
+    cache = cache or sec_cache()                     # Betrieb: eigener SEC-Cache (23.11.2026)
     teile = []
     for cik in ciks:
         schluessel = cik10(cik)

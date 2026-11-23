@@ -691,6 +691,28 @@ Prüfung an den Dateien, ohne Netz (Zuordnung über den eingefrorenen Stand `lad
   älter als 7 Tage ist.
 - **A5:** volle Testsuite grün, einschließlich `tests/musterloesungen/test_uebungen.py`.
 
+### Stand Schritt 1 (23.11.2026, Branch `sec-betriebscache`)
+
+- `betrieb/seccache.py`: Übernahme und Wege. `daten/sec.py`: `sec_rohwurzel()` und `sec_cache()`, die im
+  Betriebsmodus auf den Betriebs-Cache zeigen. Umgestellt sind `SecClient`, `lade_erstmeldungen`,
+  `lade_aktienfakten`, `lade_sic_historien`, `lade_firmendaten` (nur Erstmeldungen) und `bewertung_am`.
+  `tools/tageslauf.py` schreibt die Protokollzeile zur Übernahme.
+- **Zusätzlich übernommen:** `sec/suche` und `sec/company_tickers.json.gz`. Beide liest der `SecClient` ebenfalls aus
+  seiner Wurzel; ohne Übernahme würde der Betrieb sie neu abfragen. `sec/volltext_*` (8-K-Texte der
+  Entwicklungswerkzeuge) wird nicht übernommen.
+- `SecClient` ohne `max_alter` lädt nie von selbst nach. `cache_max_alter_tage` in `config/fundamental.yaml` ist nur
+  noch ein Richtwert für ausdrückliches Nachladen.
+- **Abnahme A** (23.11.2026):
+  - **A1:** 6.907 Dateien übernommen (in der Probe-Schicht), 0 Abweichungen bei SHA-256.
+  - **A2:** versiegelt „identisch“ (397 Firmen, 3.376 SEC-Dateien abgebildet). Gegenprobe mit gelöschten Dateien am
+    alten Ort: ebenfalls identisch, also liest die Bewertung nur noch den Betriebspfad.
+  - **A3:** Bewertung am 18.11.2026 in der Probe: 0 von 16.841 Dateien in `daten/cache` und `daten/betrieb/cache`
+    geändert. Tests byteweise in `tests/betrieb/test_seccache.py`.
+  - **A4:** Test, dass der `SecClient` auch nach 30 Tagen ohne ausdrückliches `max_alter` nicht nachlädt.
+  - **A5:** volle Suite (siehe Commit).
+- Die echte Übernahme nach `daten/betrieb/cache` geschieht beim ersten Betriebslauf nach dem Merge, ohne Downloads,
+  mit Protokollzeile.
+
 ### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
 
 - **B1 Bestand:** Je CIK sind alle Erstmeldungen des Entwicklungs-Caches (Stand 02.11.2026) im Betriebs-Cache

@@ -3,7 +3,7 @@
 
 sec:
   max_anfragen_pro_sekunde: 8          # SEC-Grenze 10/s, mit Puffer
-  cache_max_alter_tage: 7              # danach werden companyfacts/submissions neu geladen
+  cache_max_alter_tage: 7              # nur noch Richtwert für ausdrückliches Nachladen; der SecClient lädt nie von selbst nach (Jakob 23.11.2026)
   verfuegbar_ab: handelstag_nach_filed # Point-in-Time: Werte erst ab dem Handelstag nach dem Einreichungsdatum
   restatements: erstmeldung            # bei Restatements gilt der zuerst gemeldete Wert
   jahresdauer_tage: [350, 380]         # Länge einer Geschäftsjahresperiode (52/53-Wochen-Jahre)
