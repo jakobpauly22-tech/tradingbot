@@ -56,20 +56,60 @@ def grenze_fuer(alt_abgerufen: datetime | None) -> pd.Timestamp | None:
     return pd.Timestamp(alt_abgerufen.date()) - pd.Timedelta(days=PUFFER_TAGE)
 
 
-def pruefe_erstmeldungen(alt: pd.DataFrame | None, neu: pd.DataFrame, grenze: pd.Timestamp | None) -> tuple[bool, str, list]:
-    """(bestanden, Text, neue Zeilen). Bisherige Zeilen müssen alle unverändert bleiben; neue nur mit filed ≥ grenze."""
+def pruefe_erstmeldungen(alt: pd.DataFrame | None, neu: pd.DataFrame, grenze: pd.Timestamp | None, *,
+                         alt_accn=frozenset(), einreichung=None) -> tuple[bool, str, list, list]:
+    """(bestanden, Text, neue Zeilen, Hinweise). Bisherige Zeilen müssen alle unverändert bleiben; neue nur mit
+    filed ≥ grenze.
+
+    Nachtrag 23.11.2026 (Jakob, docs/BETRIEB.md): eine neue Zeile vor der Grenze ist erlaubt, wenn (a) ihre accn in
+    `alt_accn` (alle accn des bisherigen Stands, nicht nur der Erstmeldungen) nicht vorkommt und (b) `einreichung(accn)`
+    (submissions der SEC: (filingDate, Formular) oder None) dasselbe Datum wie `filed` nennt. Hinweise: ein Eintrag je
+    nachgelieferter Einreichung {accn, form, filed, zeilen}."""
     a, n = _zeilen(alt), _zeilen(neu)
     weg = a - n
     neue = list((n - a).elements())
     if weg:
         beispiele = "; ".join(f"{z[1]} {z[4]} filed {z[6]} accn {z[7]}" for z in list(weg.elements())[:3])
-        return False, f"{sum(weg.values())} bisherige Erstmeldungen geändert oder entfernt (z. B. {beispiele})", neue
+        return False, f"{sum(weg.values())} bisherige Erstmeldungen geändert oder entfernt (z. B. {beispiele})", neue, []
+    hinweise: dict[str, dict] = {}
     if grenze is not None:
-        zu_alt = [z for z in neue if z[6] is not None and pd.Timestamp(z[6]) < grenze]
-        if zu_alt:
-            beispiele = "; ".join(f"{z[1]} {z[4]} filed {pd.Timestamp(z[6]).date()}" for z in zu_alt[:3])
-            return False, (f"{len(zu_alt)} neue Erstmeldungen mit filed vor {grenze.date()} (z. B. {beispiele})"), neue
-    return True, f"{len(neue)} neue Erstmeldungen", neue
+        verletzt = []
+        for z in (z for z in neue if z[6] is not None and pd.Timestamp(z[6]) < grenze):
+            accn, filed = z[7], pd.Timestamp(z[6])
+            beleg = einreichung(accn) if (einreichung is not None and accn and accn not in alt_accn) else None
+            if beleg is not None and pd.Timestamp(beleg[0]) == filed:
+                h = hinweise.setdefault(accn, {"accn": accn, "form": beleg[1], "filed": str(filed.date()), "zeilen": 0})
+                h["zeilen"] += 1
+            else:
+                verletzt.append(z)
+        if verletzt:
+            beispiele = "; ".join(f"{z[1]} {z[4]} filed {pd.Timestamp(z[6]).date()} accn {z[7]}" for z in verletzt[:3])
+            return False, (f"{len(verletzt)} neue Erstmeldungen mit filed vor {grenze.date()} ohne Beleg als nachgelieferte "
+                           f"Einreichung (z. B. {beispiele})"), neue, []
+    text = f"{len(neue)} neue Erstmeldungen"
+    if hinweise:
+        text += f", davon {sum(h['zeilen'] for h in hinweise.values())} aus {len(hinweise)} nachgelieferten Einreichungen"
+    return True, text, neue, list(hinweise.values())
+
+
+def einreichungen_aus_submissions(subs: dict, seite_laden=None):
+    """Nachschlagen accn → (filingDate, Formular) in den submissions einer CIK. Zusatzseiten (`filings.files`) werden
+    erst geladen, wenn eine accn in der Liste „recent“ fehlt (`seite_laden(name)` → Seite als dict)."""
+    tabelle: dict[str, tuple[str, str]] = {}
+
+    def aufnehmen(seite: dict) -> None:
+        for d, a, f in zip(seite.get("filingDate", []), seite.get("accessionNumber", []), seite.get("form", [])):
+            tabelle.setdefault(a, (d, f))
+
+    aufnehmen(subs.get("filings", {}).get("recent", {}))
+    offen = list(subs.get("filings", {}).get("files", []))
+
+    def nachschlagen(accn: str):
+        while accn not in tabelle and offen and seite_laden is not None:
+            aufnehmen(seite_laden(offen.pop(0)["name"]))
+        return tabelle.get(accn)
+
+    return nachschlagen
 
 
 def pruefe_sic(alt: list, neu: list) -> tuple[bool, str]:
@@ -116,6 +156,7 @@ class Ergebnis:
     erfolgreich: bool = False
     abbruch: str | None = None
     meldungen: list = field(default_factory=list)
+    hinweise: list = field(default_factory=list)       # nachgelieferte Einreichungen (Nachtrag 23.11.2026)
 
     def zaehlen(self) -> Counter:
         return Counter(e["stand"] for e in self.je_cik.values())
@@ -131,8 +172,9 @@ def ciks_betrieb(universum: pd.DataFrame, tag) -> list[int]:
     return sorted(ciks)
 
 
-def _fakten(cik: int, client, jetzt) -> dict:
-    """Schritt 1 für eine CIK (siehe Moduldoku); gibt den Eintrag für STAND.json zurück (ohne SIC)."""
+def _fakten(cik: int, client, jetzt, einreichung=None) -> dict:
+    """Schritt 1 für eine CIK (siehe Moduldoku); gibt den Eintrag für STAND.json zurück (ohne SIC).
+    `einreichung`: Nachschlagen in den frischen submissions (Nachtrag 23.11.2026)."""
     from tradingbot.daten.sec import lade_erstmeldungen
     from tradingbot.engines.fundamental.aktienzahl import lade_aktienfakten
 
@@ -143,11 +185,17 @@ def _fakten(cik: int, client, jetzt) -> dict:
         if alt_roh is None and "nicht gefunden" in str(f) and not isinstance(f, VoruebergehenderFehler):
             return {"stand": OHNE_DATEN, "text": "keine companyfacts bei der SEC (404), auch bisher nicht"}
         raise
-    alt = erstmeldungen(fakten_tabelle(alt_roh)) if alt_roh is not None else None
+    alt_fakten = fakten_tabelle(alt_roh) if alt_roh is not None else None
+    alt = erstmeldungen(alt_fakten) if alt_fakten is not None else None
+    alt_accn = frozenset(alt_fakten["accn"].dropna()) if alt_fakten is not None else frozenset()
     neu = erstmeldungen(fakten_tabelle(neu_roh))
-    ok, text, neue = pruefe_erstmeldungen(alt, neu, grenze_fuer(alt_abgerufen))
+    ok, text, neue, hinweise = pruefe_erstmeldungen(alt, neu, grenze_fuer(alt_abgerufen), alt_accn=alt_accn,
+                                                    einreichung=einreichung)
     eintrag = {"neue_zeilen": len(neue), "bisher_abgerufen_um": alt_abgerufen.isoformat(timespec="seconds") if alt_abgerufen else None,
-               "neueste_filed": max((str(pd.Timestamp(z[6]).date()) for z in neue if z[6] is not None), default=None)}
+               "neueste_filed": max((str(pd.Timestamp(z[6]).date()) for z in neue if z[6] is not None), default=None),
+               "firma": neu_roh.get("entityName")}
+    if hinweise:
+        eintrag["nachgeliefert"] = hinweise
     if not ok:
         return {**eintrag, "stand": ALTER_STAND, "text": text}
     zeitpunkt = jetzt()
@@ -158,11 +206,11 @@ def _fakten(cik: int, client, jetzt) -> dict:
     return {**eintrag, "stand": UEBERNOMMEN, "text": text, "abgerufen_um": zeitpunkt.isoformat(timespec="seconds")}
 
 
-def _sic(cik: int, client, client_frisch, bisher: list) -> tuple[dict, list | None]:
-    """Schritt 2 für eine CIK: (Eintrag, neue Historie oder None, wenn der alte Stand bleibt)."""
+def _sic(cik: int, client, bisher: list) -> tuple[dict, list | None]:
+    """Schritt 2 für eine CIK: (Eintrag, neue Historie oder None, wenn der alte Stand bleibt). Die submissions sind zu
+    diesem Zeitpunkt schon frisch geladen (`aktualisieren`)."""
     from tradingbot.daten.universum import sic_historie
 
-    client_frisch.submissions(cik)                               # submissions frisch (Zusatzseiten ändern sich nicht)
     neu = [(d, s) for d, s in sic_historie(cik, client) if s is not None]
     ok, text = pruefe_sic(bisher, neu)
     return ({"sic": UEBERNOMMEN if ok else ALTER_STAND, "sic_text": text, "sic_neu": len(neu) - len(bisher) if ok else 0},
@@ -185,9 +233,13 @@ def aktualisieren(ciks: list[int], *, client, client_frisch, sec_tabellen, jetzt
         for nr, cik in enumerate(ciks, 1):
             fehler = None
             try:
-                eintrag = _fakten(cik, client, jetzt)
+                subs, _ = client_frisch.submissions(cik)              # frisch: Beleg für Nachlieferungen und SIC
+                einreichung = einreichungen_aus_submissions(subs, lambda name: client.submissions_seite(name)[0])
+                eintrag = _fakten(cik, client, jetzt, einreichung)
                 eintrag["fakten"] = eintrag["stand"]                 # Stand der companyfacts getrennt vom SIC-Stand
-                sic_eintrag, neu = _sic(cik, client, client_frisch, sic.get(cik, []))   # auch ohne companyfacts
+                for h in eintrag.get("nachgeliefert", []):
+                    erg.hinweise.append({"cik": cik, "firma": eintrag.get("firma"), **h})
+                sic_eintrag, neu = _sic(cik, client, sic.get(cik, []))   # auch ohne companyfacts
                 eintrag.update(sic_eintrag)
                 if neu is not None and neu != sic.get(cik, []):
                     sic[cik], sic_geaendert = neu, True
@@ -254,7 +306,9 @@ def stand_schreiben(wurzel, erg: Ergebnis, *, ende: datetime, zusatz: dict | Non
         "letzter_erfolg": ende.isoformat(timespec="seconds") if erg.erfolgreich else bisher.get("letzter_erfolg"),
         "abbruch": erg.abbruch,
         "zusammenfassung": {"ciks": len(erg.je_cik), **{k: zahl.get(k, 0) for k in (UEBERNOMMEN, ALTER_STAND, FEHLER, OHNE_DATEN)},
-                            "neue_zeilen": sum(e.get("neue_zeilen", 0) for e in erg.je_cik.values())},
+                            "neue_zeilen": sum(e.get("neue_zeilen", 0) for e in erg.je_cik.values()),
+                            "hinweise": len(erg.hinweise)},
+        "hinweise": erg.hinweise,
         **(zusatz or {}),
         "je_cik": erg.je_cik,
     }

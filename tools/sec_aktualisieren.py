@@ -102,6 +102,9 @@ def main() -> int:
     print(f"Anfragen: {zusatz['anfragen_gesamt']} {zusatz['anfragen']}, Status {zusatz['status']}, höchste Rate {zusatz['hoechste_rate_je_s']}/s")
     print(f"Daten: {mb(zusatz['bytes_uebertragen'])} übertragen, {mb(zusatz['bytes_entpackt'])} entpackt")
     print(f"Dauer: Abruf {zusatz['dauer_s']} s, Übernahme vorher {zusatz['dauer_uebernahme_s']} s")
+    print(f"Hinweise (nachgelieferte Einreichungen vor der Grenze): {len(erg.hinweise)}")
+    for h in erg.hinweise:
+        print(f"  HINWEIS: {h['firma']} (CIK {h['cik']}), {h['accn']}, {h['form']}, filed {h['filed']}, {h['zeilen']} Erstmeldungen")
     for m in erg.meldungen:
         print("MELDUNG:", m)
     if erg.meldungen and not probe:

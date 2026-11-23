@@ -53,18 +53,19 @@ def test_grenze_ist_abrufdatum_minus_drei_tage():
 
 
 def test_pruefregel_nur_anhaengen_besteht():
-    ok, text, neue = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ANGEHAENGT), pd.Timestamp("2026-10-30"))
-    assert ok and len(neue) == 1 and "1 neue" in text
+    ok, text, neue, hinweise = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ANGEHAENGT), pd.Timestamp("2026-10-30"))
+    assert ok and len(neue) == 1 and "1 neue" in text and hinweise == []
 
 
 def test_pruefregel_geaenderte_erstmeldung_verletzt():
-    ok, text, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_RESTATEMENT_FRUEHER), pd.Timestamp("2026-10-30"))
+    ok, text, _, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_RESTATEMENT_FRUEHER), pd.Timestamp("2026-10-30"),
+                                             einreichung=lambda a: ("2024-02-01", "10-K"))   # Beleg hilft hier nie
     assert not ok and "geändert oder entfernt" in text and "accn 0000000001-24-000001" in text
 
 
 def test_pruefregel_neue_zeile_mit_altem_filed_verletzt():
-    ok, text, neue = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ALTES_FILED), pd.Timestamp("2026-10-30"))
-    assert not ok and "vor 2026-10-30" in text and len(neue) == 1
+    ok, text, neue, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ALTES_FILED), pd.Timestamp("2026-10-30"))
+    assert not ok and "vor 2026-10-30" in text and "ohne Beleg" in text and len(neue) == 1
     assert sa.pruefe_erstmeldungen(None, _erst(NEU_ALTES_FILED), None)[0]   # neue CIK ohne bisherigen Stand: alles erlaubt
 
 
@@ -92,6 +93,7 @@ class _Antwort:
         return self._daten
 
 
+ZUSATZ: dict = {}                      # weitere Einreichungen je CIK in den submissions: (Datum, accn, Formular)
 ZEHN_K = {1: [("2024-02-15", "0000000001-24-000001", 3711), ("2026-11-05", "0000000001-26-000009", 3711)],
           2: [("2025-03-01", "0000000002-25-000001", 7372)]}
 
@@ -113,9 +115,9 @@ class _SEC:
                 return _Antwort(400)
             return _Antwort(404) if cik in self.fehlt else _Antwort(200, self.facts[cik])
         if "/submissions/" in url:
-            liste = ZEHN_K.get(cik, [])
+            liste = [(d, a, "10-K") for d, a, _ in ZEHN_K.get(cik, [])] + ZUSATZ.get(cik, [])
             return _Antwort(200, {"filings": {"recent": {"filingDate": [d for d, _, _ in liste], "accessionNumber": [a for _, a, _ in liste],
-                                                         "form": ["10-K"] * len(liste)}, "files": []}})
+                                                         "form": [f for _, _, f in liste]}, "files": []}})
         if url.endswith(".hdr.sgml"):
             sic = next(s for liste in ZEHN_K.values() for _, a, s in liste if a in url)
             return _Antwort(200, text=f"STANDARD INDUSTRIAL CLASSIFICATION: X [{sic}]")
@@ -237,3 +239,62 @@ def test_geaenderte_sic_historie_behaelt_alten_sic_stand_fakten_getrennt(betrieb
         assert e["stand"] == "alter Stand" and e["fakten"] == "übernommen" and e["sic"] == "alter Stand"
         assert sec_cache().lesen("universum", "sic_historie")[0]["gueltig_ab"].tolist() == [pd.Timestamp("2024-02-15")]
         assert client.companyfacts_aus_cache(1)[0] == NEU_ANGEHAENGT
+
+
+# --- Nachtrag 23.11.2026: nachgelieferte Einreichungen ------------------------------------------------------------
+JULI = "0000000001-26-000005"
+NEU_NACHGELIEFERT = _facts(_fakt("2023-12-31", 100, "2024-02-15", "0000000001-24-000001"),
+                           _fakt("2026-06-30", 70, "2026-07-29", JULI, start="2026-04-01"),
+                           _fakt("2026-06-30", 71, "2026-07-29", JULI, start="2026-01-01"),
+                           _fakt("2026-09-30", 80, "2026-11-05", "0000000001-26-000009", start="2026-07-01"))
+
+
+def test_nachgelieferte_einreichung_mit_beleg_ist_hinweis():
+    beleg = {JULI: ("2026-07-29", "10-Q")}.get
+    ok, text, neue, hinweise = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_NACHGELIEFERT), pd.Timestamp("2026-10-30"),
+                                                       alt_accn=frozenset({"0000000001-24-000001"}), einreichung=beleg)
+    assert ok and len(neue) == 3 and "2 aus 1 nachgelieferten" in text
+    assert hinweise == [{"accn": JULI, "form": "10-Q", "filed": "2026-07-29", "zeilen": 2}]
+
+
+def test_nachlieferung_ohne_bedingung_a_oder_b_bleibt_verletzung():
+    grenze = pd.Timestamp("2026-10-30")
+    # (a) verletzt: die accn kommt im bisherigen Stand schon vor (etwa in einem Fakt, der keine Erstmeldung ist)
+    ok, text, _, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_NACHGELIEFERT), grenze,
+                                             alt_accn=frozenset({"0000000001-24-000001", JULI}),
+                                             einreichung={JULI: ("2026-07-29", "10-Q")}.get)
+    assert not ok and "ohne Beleg" in text
+    # (b) verletzt: anderes Datum in den submissions, oder gar nicht dort
+    for beleg in ({JULI: ("2026-07-30", "10-Q")}.get, {}.get, None):
+        ok, _, _, hinweise = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_NACHGELIEFERT), grenze,
+                                                     alt_accn=frozenset({"0000000001-24-000001"}), einreichung=beleg)
+        assert not ok and hinweise == []
+
+
+def test_einreichungen_aus_submissions_laedt_zusatzseiten_nur_bei_bedarf():
+    subs = {"filings": {"recent": {"filingDate": ["2026-07-29"], "accessionNumber": [JULI], "form": ["10-Q"]},
+                        "files": [{"name": "CIK0000000001-submissions-001.json"}]}}
+    geladen = []
+
+    def seite(name):
+        geladen.append(name)
+        return {"filingDate": ["2012-02-15"], "accessionNumber": ["0000000001-12-000001"], "form": ["10-K"]}
+
+    nachschlagen = sa.einreichungen_aus_submissions(subs, seite)
+    assert nachschlagen(JULI) == ("2026-07-29", "10-Q") and geladen == []
+    assert nachschlagen("0000000001-12-000001") == ("2012-02-15", "10-K") and len(geladen) == 1
+    assert nachschlagen("fehlt") is None and len(geladen) == 1
+
+
+def test_lauf_mit_nachgelieferter_einreichung_uebernimmt_und_meldet_hinweis(betrieb, monkeypatch):
+    _, log = betrieb
+    monkeypatch.setitem(ZUSATZ, 1, [("2026-07-29", JULI, "10-Q")])
+    jetzt = datetime(2026, 12, 5, 9, 0, tzinfo=timezone.utc)
+    with betriebsmodus("Test", protokoll=log):
+        client, frisch = _clients(_SEC({1: NEU_NACHGELIEFERT}))
+        erg = sa.aktualisieren([1], client=client, client_frisch=frisch, sec_tabellen=sec_cache(), jetzt=lambda: jetzt)
+        stand = sa.stand_schreiben(sec_rohwurzel(), erg, ende=jetzt)
+        assert erg.je_cik["1"]["stand"] == "übernommen" and not erg.meldungen
+        assert erg.hinweise == [{"cik": 1, "firma": "Beispiel AG", "accn": JULI, "form": "10-Q", "filed": "2026-07-29", "zeilen": 2}]
+        assert stand["hinweise"] == erg.hinweise and stand["zusammenfassung"]["hinweise"] == 1
+        assert client.companyfacts_aus_cache(1)[0] == NEU_NACHGELIEFERT

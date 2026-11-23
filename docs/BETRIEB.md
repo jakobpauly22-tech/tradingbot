@@ -792,7 +792,25 @@ gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder
   - **Google Inc. (1288776):** Die SIC-Historie beginnt neu am 12.02.2010 statt am 11.02.2016, der Code ist gleich
     (7370). Die SIC bleibt auf dem alten Stand, die Fakten (0 neue) wurden übernommen.
   - **Offene Entscheidung (Jakob):** Bleibt die Regel so, übernehmen diese 6 CIKs nie wieder neue Daten, denn die
-    Juli-Zeilen bleiben bei jedem Lauf „zu alt“. Es kommt jede Woche dieselbe Meldung.
+    Juli-Zeilen bleiben bei jedem Lauf „zu alt“. Es kommt jede Woche dieselbe Meldung. *Entschieden am 23.11.2026:
+    Nachtrag zur Prüfregel (nachgelieferte Einreichungen), siehe oben.*
+- **Zweiter Probelauf am 23.11.2026** (mit dem Nachtrag, nur Schicht):
+  - 515 CIKs: Gesamtstand 514 übernommen, 1 alter Stand, 0 Fehler. Die Fakten wurden bei allen 515 übernommen; die
+    SIC-Historie bei 514.
+  - Der alte Stand betrifft nur die SIC-Historie von Google Inc. (1288776), wie festgelegt.
+  - **6 Hinweise auf nachgelieferte Einreichungen**, jeweils mit Einreichungsnummer, Formular und `filed`, die in den
+    submissions mit demselben Datum stehen:
+    - Abbott: 0001628280-26-050134, 10-Q, 28.07., 164 Erstmeldungen
+    - Humana: 0000049071-26-000050, 10-Q, 29.07., 219 Erstmeldungen
+    - UDR: 0000074208-26-000073, 10-Q, 28.07., 220 Erstmeldungen
+    - Johnson Controls: 0000833444-26-000087, 10-Q, 29.07., 228 Erstmeldungen
+    - Visa: 0001403161-26-000104, 10-Q, 29.07., 170 Erstmeldungen
+    - Verisk: 0001437749-26-024749, 10-Q, 29.07., 249 Erstmeldungen
+  - 50.820 neue Erstmeldungen in 233 CIKs. Neueste `filed` liegt bei 232 CIKs im November 2026; bei Okta (neues
+    Mitglied ohne bisherigen Stand, also ohne Grenze) im August 2026.
+  - 1.054 Anfragen, alle mit Status 200, höchste Rate 5/s. 716 s Abruf, 16 s Übernahme vorher.
+  - Datenmenge: 2,06 GB entpackt. Die übertragene Menge schwankt zwischen den Läufen (1,18 GB bzw. 0,85 GB), weil
+    `Content-Length` nicht bei jeder Antwort mitkommt; sie ist nur ein Richtwert.
 
 ### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
 
