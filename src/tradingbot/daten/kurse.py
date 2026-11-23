@@ -51,12 +51,15 @@ Abrufer = Callable[[str, date, date], tuple[pd.DataFrame, str | None]]
 _yahoo_drossel = Drossel(min_abstand_s=0.5)
 
 
-def yfinance_abruf(ticker: str, start: date, ende: date) -> tuple[pd.DataFrame, str | None]:
-    """Holt Tageskerzen von Yahoo. `ende` ist inklusive (yfinance selbst behandelt `end` exklusiv)."""
+def yfinance_abruf(ticker: str, start: date, ende: date, *, drossel: Drossel | None = None) -> tuple[pd.DataFrame, str | None]:
+    """Holt Tageskerzen von Yahoo. `ende` ist inklusive (yfinance selbst behandelt `end` exklusiv).
+    `drossel`: eigene (thread-sichere) Drossel, sonst die gemeinsame mit 0,5 s Abstand."""
     import yfinance as yf
 
+    drossel = drossel or _yahoo_drossel
+
     def abruf():
-        _yahoo_drossel.warten()
+        drossel.warten()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             objekt = yf.Ticker(ticker)

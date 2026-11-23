@@ -9,8 +9,10 @@ Qualitätshälfte (Entscheidung Jakob 02.11.2026, docs/FUNDAMENTAL.md). Läuft i
 from __future__ import annotations
 
 import copy
+import time as _time
 import warnings
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -41,15 +43,63 @@ def konfig_variante(konfig: dict, variante: str) -> dict:
     return k
 
 
-def kurse_aktualisieren(symbole: list[str], bis: date) -> list[str]:
-    """Lädt die Kurse der Symbole bis `bis` in den Cache (inkrementell). Gibt Symbole mit Fehler zurück."""
-    fehler = []
-    for s in symbole:
+KURS_THREADS = 4                 # Laufzeit Schritt 3 (Jakob 23.11.2026)
+KURS_ABSTAND_S = 0.25            # Drossel global über alle Threads, nur für diese Kursaktualisierung (sonst 0,5 s)
+KURS_NACHLAUF_PAUSE_S = 10.0     # Wartezeit vor dem seriellen zweiten Durchgang
+
+
+def erwartete_sitzung(bis: date, jetzt: datetime | None = None) -> date:
+    """Letzte abgeschlossene NYSE-Sitzung bis einschließlich `bis` (heute erst nach Börsenschluss)."""
+    from tradingbot.betrieb.kalender import letzte_abgeschlossene_sitzung
+
+    jetzt = jetzt or datetime.now(timezone.utc)
+    grenze = datetime.combine(bis, time(23, 59), tzinfo=ZoneInfo("America/New_York"))
+    return letzte_abgeschlossene_sitzung("nyse", min(jetzt, grenze))
+
+
+def kurse_aktualisieren(symbole: list[str], bis: date, *, threads: int = KURS_THREADS, abstand_s: float = KURS_ABSTAND_S,
+                        cache=None, abrufer=None, erwartet: date | None = None, nachlauf_pause_s: float = KURS_NACHLAUF_PAUSE_S,
+                        schlafen=None) -> list[str]:
+    """Lädt die Kurse der Symbole bis `bis` in den Cache (inkrementell). Gibt die Fehlliste zurück („Symbol: Grund“).
+
+    Laufzeit Schritt 3 (Jakob 23.11.2026): `threads` parallele Abrufe mit einer gemeinsamen Drossel (`abstand_s` global,
+    thread-sicher). Jeder Auftrag läuft in einer Kopie des aufrufenden Kontexts (`copy_context`), damit Betriebsmodus
+    und Tresor-Freigabe gelten: im Betrieb der Betriebscache, in der Probe die prozessweite Schicht. Jeder Ticker
+    schreibt nur seine eigene Cache-Datei (atomar). Je Abruf wiederholt `yfinance_abruf` bei Fehlern mit Pause; danach
+    ein serieller zweiter Durchgang nach `nachlauf_pause_s` für alles mit Fehler oder ohne Kurs der erwarteten
+    NYSE-Sitzung. Was dann noch fehlt, steht in der Fehlliste – kein Ticker bleibt still ohne Kurs. Die Bewertung
+    verhält sich bei fehlendem Kurs wie bisher."""
+    from concurrent.futures import ThreadPoolExecutor
+    from contextvars import copy_context
+
+    from tradingbot.daten.abruf import Drossel
+    from tradingbot.daten.kurse import kurscache, yfinance_abruf
+
+    cache = cache or kurscache()           # einmal vor den Threads: Betriebscache samt einmaliger Übernahme (kein Wettlauf)
+    drossel = Drossel(abstand_s)
+    abrufer = abrufer or (lambda t, s, e: yfinance_abruf(t, s, e, drossel=drossel))
+    erwartet = erwartet or erwartete_sitzung(bis)
+
+    def eins(s: str) -> str | None:
         try:
-            lade_kurse(s, "2011-01-01", bis, heute=bis + timedelta(days=1))
+            k = lade_kurse(s, "2011-01-01", bis, heute=bis + timedelta(days=1), cache=cache, abrufer=abrufer)
         except Exception as f:  # noqa: BLE001 – Fehler werden gemeldet, nicht verschluckt
-            fehler.append(f"{s}: {type(f).__name__}")
-    return fehler
+            return type(f).__name__
+        letzter = k.index.max().date() if len(k) else None
+        return None if letzter is not None and letzter >= erwartet else f"letzter Kurs {letzter or 'keiner'} statt {erwartet}"
+
+    if threads > 1:
+        with ThreadPoolExecutor(max_workers=threads) as pool:
+            auftraege = [pool.submit(copy_context().run, eins, s) for s in symbole]
+            ergebnis = {s: a.result() for s, a in zip(symbole, auftraege)}
+    else:
+        ergebnis = {s: eins(s) for s in symbole}
+    offen = [s for s in symbole if ergebnis[s]]
+    if offen:                                            # zweiter Durchgang, seriell, nach Wartezeit
+        (schlafen or _time.sleep)(nachlauf_pause_s)
+        for s in offen:
+            ergebnis[s] = eins(s)
+    return [f"{s}: {ergebnis[s]}" for s in symbole if ergebnis[s]]
 
 
 def split_ereignisse_ergaenzen(kurse: pd.DataFrame, splits: list[tuple[str, float]]) -> pd.DataFrame:

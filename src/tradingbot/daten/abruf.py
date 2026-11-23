@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Callable, TypeVar
 
@@ -22,22 +23,26 @@ class VoruebergehenderFehler(DatenFehler):
 
 
 class Drossel:
-    """Hält einen Mindestabstand zwischen zwei Abrufen ein (Abruflimits der Quellen)."""
+    """Hält einen Mindestabstand zwischen zwei Abrufen ein (Abruflimits der Quellen).
+
+    Thread-sicher (Laufzeit Schritt 3, Jakob 23.11.2026): Jeder Aufruf reserviert unter einer Sperre seinen Zeitpunkt
+    (frühestens letzter Zeitpunkt + Abstand) und schläft außerhalb der Sperre bis dahin. Der Abstand gilt damit global
+    über alle Threads, die dieselbe Drossel nutzen, nicht je Thread."""
 
     def __init__(self, min_abstand_s: float, uhr=time.monotonic, schlafen=time.sleep):
         self.min_abstand_s = min_abstand_s
         self._uhr = uhr
         self._schlafen = schlafen
         self._letzter: float | None = None
+        self._sperre = threading.Lock()
 
     def warten(self) -> None:
-        jetzt = self._uhr()
-        if self._letzter is not None:
-            rest = self.min_abstand_s - (jetzt - self._letzter)
-            if rest > 0:
-                self._schlafen(rest)
-                jetzt = self._uhr()
-        self._letzter = jetzt
+        with self._sperre:
+            jetzt = self._uhr()
+            zeitpunkt = jetzt if self._letzter is None else max(jetzt, self._letzter + self.min_abstand_s)
+            self._letzter = zeitpunkt
+        if zeitpunkt > jetzt:
+            self._schlafen(zeitpunkt - jetzt)
 
 
 def mit_wiederholung(
