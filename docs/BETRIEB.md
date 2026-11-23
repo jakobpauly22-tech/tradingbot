@@ -603,6 +603,23 @@ im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
     - Für die SIC-Historie gilt dasselbe: bestehende Einträge bleiben, neue werden nur angehängt.
     - Ist die Regel verletzt, behält diese CIK ihren alten Stand vollständig, und es gibt eine Meldung im Protokoll des
       Werkzeugs und als Sofortmeldung. Spätere Korrekturen der SEC ersetzen so nie einen zuerst gemeldeten Wert.
+    - **Grenze für neue Zeilen:** Neue Zeilen brauchen `filed` am oder nach dem Abrufdatum des bisherigen Stands der
+      CIK minus 3 Tage. Für den Stand vom 02.11.2026 ist das der 30.10.2026. CIKs ohne bisherigen Stand haben keine
+      Grenze.
+    - **Nachtrag 23.11.2026 (Jakob): nachgelieferte Einreichungen.**
+      - **Grund:** Im ersten Probelauf fehlte bei 6 Firmen im Stand vom 02.11.2026 das ganze 10-Q von Ende Juli 2026
+        (siehe „Stand Schritt 2“ und „Datenstand des Entwicklungs-Caches“). Nach der bisherigen Regel hätten diese
+        Firmen nie wieder neue Daten übernommen.
+      - **Regel:** Neue Zeilen mit `filed` vor der Grenze sind erlaubt, wenn beides gilt:
+        - (a) Ihre Einreichungsnummer (accn) kommt im bisherigen Stand der CIK nirgends vor, in keinem Fakt.
+        - (b) Dieselbe Einreichungsnummer steht in den submissions der SEC für diese CIK mit demselben Datum
+          (`filingDate` = `filed`).
+      - **Meldung:** Solche Zeilen sind ein Hinweis, keine Verletzung. Der Hinweis nennt je Einreichung Firma,
+        Einreichungsnummer, Formular und `filed`; er steht in `STAND.json` (`hinweise`) und im Protokoll des Werkzeugs.
+      - **Unverändert gilt:** Geänderte oder entfernte bisherige Erstmeldungen bleiben eine Verletzung, ebenso jede
+        Zeile vor der Grenze, die (a) oder (b) nicht erfüllt. Die SIC-Historie bleibt bei der alten Regel (nur
+        anhängen), auch für Google Inc.
+      - Festgehalten vor der Umsetzung im Code.
   - **Übernahme in den Betriebsstand:** jede Datei atomar. Am Ende schreibt das Werkzeug `STAND.json`:
     - Zeitpunkt des Laufs und `erfolgreich` (ja/nein),
     - je CIK Stand „übernommen“, „alter Stand“ (Prüfregel verletzt) oder „Fehler“, mit Abrufzeit und Text,
@@ -676,6 +693,46 @@ Prüfung an den Dateien, ohne Netz (Zuordnung über den eingefrorenen Stand `lad
 - **Übrige submissions:** 2.027 Dateien vom 17.11.2026 um 10 Uhr (Werkzeuge zu Befund 19 in der Entwicklung, Nachladen
   nach 7 Tagen) sowie einzelne vom 13., 15. und 16.11. (Entwicklung). submissions gehen nur über die 10-K-Liste in die
   SIC-Historie ein, und die bleibt für bekannte CIKs unverändert (siehe oben).
+
+#### Fehlende Einreichungen in den companyfacts (geprüft 23.11.2026, nur gelesen)
+
+**Zusage:** Die companyfacts im Entwicklungs-Cache wurden laut Inhalt (`abgerufen_um`) am 02.11.2026 abgerufen,
+16 davon am 01.11.2026 ab 23:26 UTC; keine ist älter. Dass einzelnen Firmen Einreichungen fehlen, liegt an der
+SEC-API zum Zeitpunkt des Abrufs bzw. an gemeinsamen Einreichungen mehrerer Gesellschaften, nicht an einem alten
+Cache-Stand.
+
+**Fundamental-Bücher:** Für die 6 Firmen mit nachgelieferter Einreichung (unten, Gruppe A1) hat die
+Fundamental-Bewertung im Betrieb bis zum ersten SEC-Lauf mit dem Stand vor Juli 2026 gerechnet (letzte Meldung
+April/Mai 2026). Für die Firmen der Gruppe A2 gilt das auch nach dem SEC-Lauf, solange die SEC die Einreichungen nicht
+in den companyfacts führt.
+
+**Auswirkung auf Backtests:** Keine neue. Die Lücken bis 2024 (Gruppe B) sind Teil der Datenbasis, auf der alle Läufe
+gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder korrigiert.
+
+**Prüfung:**
+- Abgeglichen wurde jede der 806 CIKs im Entwicklungs-Cache: alle Einreichungen der Formulare 10-K, 10-Q, 10-K/A,
+  10-Q/A, 10-KT, 20-F und 40-F mit XBRL laut submissions (Liste „recent“) und `filingDate` von 2012 bis vor dem Abruf,
+  deren Einreichungsnummer in keinem Fakt der companyfacts vorkommt.
+- **Ergebnis:** 468 Einreichungen in 62 CIKs.
+- **A: nach dem neuesten `filed` im Stand** (Stand am Ende unvollständig): 221 Einreichungen in 35 CIKs.
+  - **A1, nachgeliefert (6 Firmen):** Abbott, Humana, UDR, Johnson Controls, Visa und Verisk, je das 10-Q vom
+    28./29.07.2026. Im Abruf vom 23.11.2026 (Probe) ist es enthalten.
+  - **A2, auch am 23.11.2026 nicht in den companyfacts (19 CIKs, Probe):** vor allem Versorger und REITs, die gemeinsam
+    mit Tochtergesellschaften einreichen: DTE, Southern, Sempra, Consolidated Edison, PPL, NextEra, PG&E Corp,
+    CenterPoint, AEP, FirstEnergy, Alliant, Dominion, Exelon, Regency, Essex, Kimco, Mid-America, Federal Realty und
+    Exxon Mobil (alte CIK 34088). Ihnen fehlen 10-Qs aus Juli bzw. Oktober 2026. Das ist ein offener Befund für die
+    Bewertung im Betrieb: Er zeigt sich ab Schritt 3 in der Liste „neueste Meldung > 120 Tage“; eine Abhilfe (andere
+    Quelle oder Regel) ist nicht Teil dieses Plans.
+  - **Übrige A (10 CIKs):** im Probelauf nicht enthalten, weil sie heute keine Mitglieder des Betriebsuniversums
+    oder Vorgänger sind. Das sind Gesellschaften, die nach Fusion oder Umbau nur noch als Mitanmelder einreichen
+    (Noble Finance, EIDP, Progress Energy, Xerox Corp, Pepco Holdings, Google Inc. mit dem 10-K vom 11.02.2016) und
+    einzelne 2026-Fälle (Qorvo, SL Green, American Airlines, Dow Chemical).
+- **B: Lücken mittendrin** (der Stand enthält spätere Einreichungen): 247 Einreichungen in 30 CIKs.
+  - Überwiegend Mitanmelder: PG&E Co, Apartment Income REIT L.P., Southern Co Gas, Dow Chemical, L3, Noble Finance.
+  - **Einzelfälle bis 2024:** CRH (20-F vom 16.03.2016), AMG (10-K/A vom 30.03.2016), Total System Services (10-K/A
+    vom 13.04.2016), Expedia (10-Q/A vom 04.06.2020) und Range Resources (10-Q vom 26.04.2021). Berichtigungen
+    berühren die Erstmeldungen nicht; bei Range Resources fehlt ein Quartal.
+  - Dazu 23 Einreichungen in 19 CIKs aus 2025/2026, nicht einzeln untersucht.
 
 ### Abnahme A (Schritt 1, vor dem Merge, ohne Download)
 

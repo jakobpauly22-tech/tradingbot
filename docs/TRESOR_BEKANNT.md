@@ -39,6 +39,7 @@ einschätzen können, wie unabhängig sie vom Tresorzeitraum sind.
 | 9 | `docs/BETRIEB.md` (Kontrakte, Universum) und `docs/berichte/2026-11-13_reihen_nach_indexabgang.md` | Indexwechsel, Übernahmen und Kursenden 2025/2026 | Betrieb und Prüfung der Kursreihen | Die Zusammensetzung des S&P 500 nach 2024 wird in Backtests nicht verwendet. |
 | 10 | `docs/berichte/2026-11-16_unabhaengige_pruefung.md` | Zusammenfassung von Nr. 1, 2, 5 | Prüfbericht | wie dort |
 | 11 | `docs/BETRIEB.md` (Wächter gegen ein verschobenes Universum), `docs/berichte/2026-11-16_unabhaengige_pruefung.md` (Befunde 19 und 20), Commit-Nachrichten vom 17.11.2026 | einzelne Indexwechsel 2026 und Kurs eines gehaltenen Titels am 16.11.2026 | Prüfung der Universums-Verschiebung nach dem Wikipedia-Abruf des Betriebs (17.11.2026) | Betrieb; die Zusammensetzung nach 2024 wird in Backtests nicht verwendet. |
+| 12 | `docs/BETRIEB.md`, Abschnitte „Stand Schritt 2“ und „Fehlende Einreichungen in den companyfacts“ (23.11.2026) | welche Firmen 2025/2026 Einreichungen (10-Q, 10-K) abgegeben haben, die in den companyfacts fehlen, und welche nachgeliefert wurden; Zahl neuer Erstmeldungen im Probelauf | SEC-Aktualisierung des Betriebs (Probelauf und Ursachenprüfung) | Betrieb; keine Werte, nur Vollständigkeit der Daten. Backtests sehen Einreichungen ab 2025 nicht. |
 
 ## Ausblick
 
