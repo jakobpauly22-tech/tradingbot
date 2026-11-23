@@ -1,0 +1,9 @@
+# Briefing-Archiv (Eingang der News-Engine), siehe docs/BOT_ANHANG.md
+# Das Werkzeug tools/briefing_uebernehmen.py liest nur aus `quelle` und schreibt nie dorthin.
+
+quelle: 'G:\Meine Ablage\TradingBot\Briefing-Archiv'   # Google Drive für Desktop (Streaming), nur lesen
+ablage: daten/briefings                                 # relativ zum Projektordner, nicht in Git
+schema_version: "1.1"
+
+# Die Aufgabe „Briefing-Export Bot-Anhang“ läuft täglich zu dieser Uhrzeit; erst danach gilt die Datei von heute als fällig.
+export_uhrzeit: "21:41"

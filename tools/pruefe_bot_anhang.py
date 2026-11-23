@@ -65,6 +65,58 @@ def pruefe(d):
     return fehler
 
 
+# Warnstufe (23.11.2026): Die Datei ist nutzbar, aber etwas fällt auf.
+BEKANNTE_QUELLE_BIS = dt.date(2026, 10, 30)   # bis dahin ist `quelle` bei Sammelmeldungen (item_key mit -b) teils falsch
+
+
+def warnungen(d):
+    """Auffälligkeiten einer gültigen Datei (Aufruf nur, wenn `pruefe` keine Fehler fand)."""
+    hinweise = []
+    tag = dt.date.fromisoformat(d["datum"])
+    spaet = (dt.datetime.fromisoformat(d["erstellt_um"]).date() - tag).days
+    if spaet > 1:
+        hinweise.append(f"nachgeholt: erstellt_um {spaet} Tage nach dem Datum (im Backtest erst ab erstellt_um nutzbar)")
+    if not d["nachrichten"]:
+        hinweise.append("keine Nachrichten")
+    if not d["makro_kalender"]:
+        hinweise.append("kein Makro-Kalender")
+    schluessel = [(n["block_id"], n["item_key"]) for n in d["nachrichten"]]   # item_key gilt nur innerhalb eines Blocks
+    doppelt = sorted({f"{b}/{k}" for b, k in schluessel if schluessel.count((b, k)) > 1})
+    if doppelt:
+        hinweise.append(f"doppelte item_key im selben Block: {', '.join(doppelt)}")
+    if tag <= BEKANNTE_QUELLE_BIS and any("-b" in n["item_key"] for n in d["nachrichten"]):
+        hinweise.append("bekannte Einschränkung: quelle bei Sammelmeldungen (-b) teils falsch")
+    return hinweise
+
+
+def pruefe_datei(pfad):
+    """Prüft eine Datei und liefert (status, gruende); status ist 'gültig', 'Warnung' oder 'ungültig'.
+
+    Ergänzt `pruefe` um alles, was nur mit dem Dateinamen oder mit der Datei als Ganzes prüfbar ist: lesbares JSON,
+    Dateiname JJJJ-MM-TT.json, Datum im Dateinamen = `datum` im Inhalt, `erstellt_um` nicht vor dem Datum."""
+    pfad = pathlib.Path(pfad)
+    try:
+        d = json.loads(pfad.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:   # ValueError umfasst JSONDecodeError und UnicodeDecodeError
+        return "ungültig", [f"nicht lesbar: {e}"]
+    if not isinstance(d, dict):
+        return "ungültig", ["Datei ist kein JSON-Objekt"]
+    try:
+        fehler = pruefe(d)
+    except (ValueError, TypeError, AttributeError, KeyError) as e:   # z. B. Datum oder Zeitstempel im falschen Format
+        return "ungültig", [f"Struktur nicht prüfbar: {type(e).__name__}: {e}"]
+    if not DATUM.match(pfad.stem):
+        fehler.append(f"Dateiname {pfad.name} ist nicht JJJJ-MM-TT.json")
+    elif d.get("datum") != pfad.stem:
+        fehler.append(f"Dateiname {pfad.stem} passt nicht zu datum {d.get('datum')!r} im Inhalt")
+    if not fehler and dt.datetime.fromisoformat(d["erstellt_um"]).date() < dt.date.fromisoformat(d["datum"]):
+        fehler.append("erstellt_um liegt vor dem Datum")
+    if fehler:
+        return "ungültig", fehler
+    hinweise = warnungen(d)
+    return ("Warnung", hinweise) if hinweise else ("gültig", [])
+
+
 def dateien(argumente):
     for a in argumente:
         p = pathlib.Path(a)
@@ -74,10 +126,15 @@ def dateien(argumente):
 if __name__ == "__main__":
     fehlerhaft = 0
     for pfad in dateien(sys.argv[1:] or ["daten/briefings"]):
-        d = json.loads(pfad.read_text(encoding="utf-8"))
-        fehler = pruefe(d)
-        fehlerhaft += bool(fehler)
-        print(f"{pfad.name}: {'OK' if not fehler else 'FEHLER'} · {len(d.get('nachrichten', []))} Nachrichten · {len(d.get('makro_kalender', []))} Termine")
-        for f in fehler:
-            print("   ", f)
+        status, gruende = pruefe_datei(pfad)
+        fehlerhaft += status == "ungültig"
+        try:
+            d = json.loads(pfad.read_text(encoding="utf-8"))
+            zaehlung = f" · {len(d.get('nachrichten', []))} Nachrichten · {len(d.get('makro_kalender', []))} Termine"
+        except (OSError, ValueError, AttributeError):
+            zaehlung = ""
+        marke = {"gültig": "OK", "Warnung": "WARNUNG", "ungültig": "FEHLER"}[status]
+        print(f"{pfad.name}: {marke}{zaehlung}")
+        for g in gruende:
+            print("   ", g)
     sys.exit(1 if fehlerhaft else 0)
