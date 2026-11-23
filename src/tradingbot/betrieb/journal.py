@@ -83,6 +83,10 @@ class Journal:
             self.db.execute("ALTER TABLE kapitalmassnahmen_posten ADD COLUMN art TEXT")
         if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
             self.db.execute("ALTER TABLE buchwerte ADD COLUMN wert_modell REAL")
+        k_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(kassenbuchungen)")}
+        for name in ("gutschrift", "satz_quelle"):        # Gutschriftstag (Flex reportDate) und Herkunft des Satzes (23.11.2026)
+            if name not in k_spalten:
+                self.db.execute(f"ALTER TABLE kassenbuchungen ADD COLUMN {name} TEXT")
         self.db.commit()
 
     def schliessen(self):

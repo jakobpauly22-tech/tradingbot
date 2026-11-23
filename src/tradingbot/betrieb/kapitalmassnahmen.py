@@ -229,7 +229,7 @@ EINHEITEN: dict[str, dict[str, str]] = {
     "dividenden": {"stueck": "historisch", **{s: "neutral" for s in ("buch", "ticker", "ex_tag", "betrag_eur")}},
     "kassenbuchungen": {"stueck": "historisch", "satz": "historisch",
                         **{s: "neutral" for s in ("beleg_id", "buch", "art", "ticker", "conid", "action_id", "ex_tag", "zahltag", "waehrung",
-                                                  "betrag", "betrag_eur", "steuer", "quelle", "gebucht")}},
+                                                  "betrag", "betrag_eur", "steuer", "quelle", "gebucht", "gutschrift", "satz_quelle")}},
     "kapitalmassnahmen_posten": {"stueck": "historisch",
                                  **{s: "neutral" for s in ("beleg_id", "buch", "nr", "ticker", "conid", "symbol", "isin", "waehrung", "betrag",
                                                            "betrag_eur", "einstand", "einstand_eur", "angeschafft", "art")}},

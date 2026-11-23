@@ -51,8 +51,13 @@ def ko_bestand(j):
     kauf(j, "b", "KO", 4, "2026-11-14")
 
 
-def buchen(j, zeilen):
-    return dv.verbuchen(j, ["a", "b"], dv.belege_aus_flex(zeilen), ticker_je_conid=TICKER, fx=FX, toleranz=TOL, quelle="Flex Test")
+def ohne_yahoo(ticker, ex_tag):
+    raise AssertionError("Yahoo darf nur ohne Satz in der Flex-Beschreibung gefragt werden")
+
+
+def buchen(j, zeilen, satz_quelle=ohne_yahoo):
+    return dv.verbuchen(j, ["a", "b"], dv.belege_aus_flex(zeilen), ticker_je_conid=TICKER, fx=FX, toleranz=TOL, quelle="Flex Test",
+                        satz_quelle=satz_quelle)
 
 
 def summe(j, buch, waehrung="USD"):
@@ -96,7 +101,7 @@ def test_probe_stimmt_nicht_keine_buchung_und_stopp(journal):
     ko_bestand(journal)
     v = buchen(journal, [zeile("T1", "Dividends", 9.00), zeile("T2", "Withholding Tax", -1.35)])
     assert journal.kassenbuchungen() == []
-    assert any("Probe stimmt nicht" in s and "16 Stück × 0.51 = 8.16" in s for s in v.stopp)
+    assert any("Probe stimmt nicht" in s and "16 Stück × 0.51 (Flex-Beschreibung) = 8.16" in s for s in v.stopp)
     assert any("ohne gebuchte Dividende" in s for s in v.stopp)
     text = dv.stopptext(dv.Klaerung(), v.stopp)
     assert bn.stopp_kurz(text) == "Dividendenbeleg nicht verbuchbar; betroffen: KO"
