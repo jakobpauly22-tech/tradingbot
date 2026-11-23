@@ -566,14 +566,9 @@ im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
   `lade_aktienfakten` und `lade_sic_historien`. Alle 806 companyfacts stammen vom 02.11.2026. Firmen mit zu altem
   Abschluss fallen über `veraltet` still heraus.
 - Ohne Aktualisierung fehlen der Bewertung zum Quartalswechsel am 04.01.2027 alle Einreichungen ab dem 02.11.2026.
-- **Befund beim Lesen (23.11.2026):** Der Betrieb hat den Entwicklungs-Cache schon verändert.
-  - `daten/cache/universum/sic_historie.parquet` wurde am 19.11.2026 um 22:37 geschrieben, also im Tageslauf. Der
-    Stand hat jetzt 807 CIKs: `lade_sic_historien` lädt neue CIKs des Betriebsuniversums nach (vermutlich OKTA) und
-    schreibt in den Standard-Cache.
-  - `daten/cache/sec/submissions` wurde am 16.11.2026 um 22 Uhr geschrieben (3 Dateien, Probe/Tageslauf).
-    `SecClient` lädt nach 7 Tagen von selbst neu.
-  - companyfacts und `sec_erstmeldungen` sind unverändert (Stand 02.11.2026).
-  - Schritt 1 schließt diesen Weg. Der veränderte Stand wird nicht zurückgedreht; ob das nötig ist, entscheidet Jakob.
+- **Befund beim Lesen (23.11.2026):** Betrieb und Probe haben in den Entwicklungs-Cache geschrieben. Geprüft und
+  festgehalten im Abschnitt „Datenstand des Entwicklungs-Caches“ unten. Schritt 1 schließt diesen Weg; nichts wird
+  zurückgedreht (Jakob 23.11.2026).
 
 ### Regeln
 
@@ -645,6 +640,42 @@ im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
   aktualisiert wurde und mit welchem Stand der Lauf rechnet. Eine Aktualisierung zwischen zwei Läufen, die verglichen
   werden, braucht Jakobs Zustimmung.
 - Umsetzung in Schritt 1, zusammen mit dem eigenen Cache des Betriebs.
+
+### Datenstand des Entwicklungs-Caches (geprüft 23.11.2026)
+
+**Zusage:** Der Entwicklungs-Cache wurde seit dem 16./19.11.2026 vom Betrieb verändert, schon ab dem 09.11.2026 durch
+einen Lauf außerhalb der Entwicklung. Verändert wurden die submissions von 3 CIKs, zwei Einreichungsköpfe und der
+Eintrag für OKTA in der SIC-Historie; companyfacts und Erstmeldungen sind unverändert. **Auswirkung auf Backtests:
+keine.** Keine der betroffenen CIKs hat vor 2025 eine SIC-Zeile, die ein Backtest liest; die SIC-Zeilen aller
+Mitglieder des eingefrorenen Universums stammen aus den Köpfen vom 02.11.2026. Der Stand wird nicht zurückgedreht.
+
+Prüfung an den Dateien, ohne Netz (Zuordnung über den eingefrorenen Stand `lade_universum()` und den Betriebsstand):
+
+- **`sic_historie.parquet`** (zuletzt geschrieben 19.11.2026, 22:37, Tageslauf)
+  - Meta 807 CIKs, 860 Zeilen mit 804 CIKs. Die 3 übrigen CIKs haben eine leere Historie, also keine Zeile.
+  - Drei CIKs mit Zeilen gehören nicht zum eingefrorenen Universum, auch nicht als Vorgänger:
+    - **1660134 Okta** (SIC 7372 ab 12.03.2018). Im eingefrorenen Universum nie Mitglied, also auch nicht vor 2025;
+      im Betriebsuniversum Mitglied ab 30.10.2026. Beide Köpfe (0001660134-18-000007, 0001660134-26-000020) wurden am
+      09.11.2026 um 09:43 geladen, vor Befund 20, während der Betriebsarbeit an 04f2ac4/915f827. Welcher Lauf das
+      war, lässt sich nicht mehr feststellen.
+    - **75488 Pacific Gas & Electric** und **1069996 FedNat**. In keinem der beiden Universen, Köpfe vom 02.11.2026,
+      also Altbestand aus dem ersten Aufbau und nicht vom Betrieb.
+  - Warum die Datei bei jedem Lauf neu geschrieben wird: `lade_sic_historien` merkt sich nur CIKs mit Zeilen. CIKs ohne
+    10-K gelten deshalb bei jedem Aufruf als neu, werden erneut abgefragt (submissions) und lösen das Schreiben aus. Das
+    gilt im Betrieb wie im Backtest. Der Zeitstempel vom 19.11. sagt deshalb nichts über eine inhaltliche Änderung.
+  - Inhaltlich ändern kann sich eine Zeile nur über einen neu geladenen Kopf. Außer den beiden OKTA-Köpfen sind alle
+    1.814 Köpfe vom 02.11.2026. Die Zeilen aller anderen CIKs entsprechen deshalb dem Stand vom 02.11.2026. Eine
+    ältere Kopie der Datei gibt es nicht; alle fünf Kopien unter `daten/` sind gleich (SHA a08f62b3…).
+- **submissions vom 16.11.2026, 22:22** (Probe vor Befund 20, dort als „drei SEC-Einreichungen“ gezählt):
+  - **2089271 Honeywell Aerospace (HONA):** im eingefrorenen Universum ab 29.06.2026, ohne 10-K.
+  - **2115436 ExxonMobil (XOM, neue CIK):** im eingefrorenen Universum durchgehend, mit Vorgänger 34088, ohne 10-K.
+  - **2128626 Vylor (VYLR):** im eingefrorenen Universum ab 01.10.2026, ohne 10-K.
+  - Die SIC-Historie aller drei ist leer, vorher wie nachher, weil es kein 10-K gibt. XOM bekommt seine SIC über die
+    Vorgänger-CIK 34088 (2911 ab 26.02.2010, Kopf vom 02.11.2026), unverändert. HONA und VYLR sind erst ab 2026
+    Mitglied und liegen außerhalb jedes Backtests.
+- **Übrige submissions:** 2.027 Dateien vom 17.11.2026 um 10 Uhr (Werkzeuge zu Befund 19 in der Entwicklung, Nachladen
+  nach 7 Tagen) sowie einzelne vom 13., 15. und 16.11. (Entwicklung). submissions gehen nur über die 10-K-Liste in die
+  SIC-Historie ein, und die bleibt für bekannte CIKs unverändert (siehe oben).
 
 ### Abnahme A (Schritt 1, vor dem Merge, ohne Download)
 
