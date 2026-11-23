@@ -255,7 +255,7 @@ def test_kurzfassung_ampel_und_sofortmeldung_zeigen_gestopptes_buch(umgebung):
         def melden(self, t):
             self.texte.append(t)
             return "gesendet"
-        def lebenszeichen(self):
+        def lebenszeichen(self, fehler=False):
             return "ping"
     m = Melder()
     nach_tageslauf(e, j, b, m)

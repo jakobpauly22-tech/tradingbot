@@ -129,7 +129,7 @@ benachrichtigung:
   # wenn an einem Xetra-Handelstag bis 22:25 kein Tageslauf lief (lokal tools/waechter.py, extern Healthchecks.io),
   # (c) Sofortmeldung bei Stopp oder Fehler. Probe und Kopie melden nie. Zugangsdaten nur in .env.
   telegram: true                       # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; der Bot sendet nur und liest nie Nachrichten
-  healthchecks: true                   # HEALTHCHECKS_PING_URL; Lebenszeichen nach jedem Lauf, an Xetra-Feiertagen vom Wächter
+  healthchecks: true                   # HEALTHCHECKS_PING_URL; Lebenszeichen nach jedem Lauf (gestoppt: …/fail), an Xetra-Feiertagen vom Wächter
   eurobetraege: true                   # false (Echtbetrieb): nur Prozente und Status, keine Eurobeträge
   zeitlimit_s: 20                      # je Versuch, keine Wiederholung; Timeout = „Zustellung unklar“ (Jakob 23.11.2026)
 

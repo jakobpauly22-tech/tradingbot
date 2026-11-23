@@ -315,3 +315,18 @@ def test_zeitlimit_20_sekunden():
     m = bn.melder_aus_env({"benachrichtigung": {"telegram": True}}, umgebung={"TELEGRAM_BOT_TOKEN": "1:A", "TELEGRAM_CHAT_ID": "2"})
     assert m.zeitlimit == 20 and m.kanaele[0].zeitlimit == 20
 
+
+def test_gestoppter_lauf_pingt_fail_buchstopp_nicht(journal):
+    urls = []
+
+    def oeffnen(anfrage, timeout):
+        urls.append(anfrage.full_url)
+        return Antwort()
+
+    melder = bn.Melder([SimpleNamespace(senden=lambda t: None)], lebenszeichen_url="https://hc-ping.com/uuid", oeffnen=oeffnen)
+    zeilen = bn.nach_tageslauf(ergebnis(abgleich="gestoppt", gestoppt="Dividendenbeleg nicht verbuchbar – Tageslauf gestoppt: X"),
+                               journal, BETRIEB, melder)
+    assert urls == ["https://hc-ping.com/uuid/fail"] and zeilen[-1] == "Lebenszeichen an Healthchecks gesendet (Fehler)"
+    urls.clear()
+    bn.nach_tageslauf(ergebnis(abgleich="teilweise", buchstopps={"fundamental_a": {}}), journal, BETRIEB, melder)
+    assert urls == ["https://hc-ping.com/uuid"]

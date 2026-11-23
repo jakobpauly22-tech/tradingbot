@@ -20,6 +20,8 @@ Sicherheit:
 - Zeitüberschreitung beim Warten auf die Antwort: „Zustellung unklar (Timeout)“ statt „fehlgeschlagen“, denn die
   Nachricht kann trotzdem angekommen sein (Fall 20.11.2026). Keine automatische Wiederholung (sonst doppelte
   Nachrichten); Zeitlimit `benachrichtigung.zeitlimit_s` (20 s, Jakob 23.11.2026).
+- Lebenszeichen: Ein gestoppter Lauf (ganzer Lauf, nicht ein einzelner Buchstopp) meldet sich bei Healthchecks mit
+  …/fail statt mit einem normalen Lebenszeichen (Jakob 23.11.2026); Ausnahmen taten das schon (tools/tageslauf.py).
 """
 from __future__ import annotations
 
@@ -329,7 +331,8 @@ def verbindungstest(melder: Melder) -> list[str]:
 
 # --- Abläufe ------------------------------------------------------------------------------------------------------
 def nach_tageslauf(erg, journal, betrieb: dict, melder: Melder) -> list[str]:
-    """Nach jedem echten Tageslauf: Kurzfassung (bei Stopp als Sofortmeldung) und Lebenszeichen. Gibt Protokollzeilen zurück."""
+    """Nach jedem echten Tageslauf: Kurzfassung (bei Stopp als Sofortmeldung) und Lebenszeichen, bei Stopp des ganzen
+    Laufs als …/fail (Jakob 23.11.2026). Gibt Protokollzeilen zurück."""
     try:
         text = kurzfassung(erg, journal, betrieb, eurobetraege=melder.eurobetraege, seit=vorheriger_lauf(journal, erg.jetzt))
         zeilen = [melder.melden(text)]
@@ -338,7 +341,7 @@ def nach_tageslauf(erg, journal, betrieb: dict, melder: Melder) -> list[str]:
     sofort = getattr(erg, "sofort", None) or []
     if sofort:                                       # A1: Buchstopp, Stop gerissen im gestoppten Buch, Aufhebung
         zeilen.append(melder.melden("⛔ Sofortmeldung\n" + "\n".join(sofort[:15])))
-    zeilen.append(melder.lebenszeichen())
+    zeilen.append(melder.lebenszeichen(fehler=bool(getattr(erg, "gestoppt", None))))
     try:
         journal.ereignis("benachrichtigung", "; ".join(zeilen))
     except Exception:  # noqa: BLE001
