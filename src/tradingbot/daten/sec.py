@@ -44,6 +44,10 @@ def cik10(cik) -> str:
     return f"{int(cik):010d}"
 
 
+class SecGesperrt(DatenFehler):
+    """HTTP 403: die SEC verweigert den Zugriff (meist User-Agent oder Abrufrate). Nie wiederholen, Lauf laut abbrechen."""
+
+
 def sec_rohwurzel() -> Path:
     """Ablage der SEC-Rohdaten (JSON, Köpfe): im Betriebsmodus der eigene SEC-Cache des Betriebs
     (daten/betrieb/cache/sec, betrieb/seccache.py, Jakob 23.11.2026), sonst <Standard-Cache>/sec (daten/cache/sec)."""
@@ -128,6 +132,8 @@ class SecClient:
                 return antwort.json()
             if antwort.status_code in (429, 500, 502, 503, 504):
                 raise VoruebergehenderFehler(f"SEC HTTP {antwort.status_code} für {url}")
+            if antwort.status_code == 403:
+                raise SecGesperrt(f"SEC HTTP 403 für {url} – Zugriff gesperrt (User-Agent, Abrufrate?); keine weiteren Anfragen")
             if antwort.status_code == 404:
                 raise DatenFehler(f"SEC: nicht gefunden ({url})")
             raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
@@ -150,6 +156,8 @@ class SecClient:
                 return antwort.text
             if antwort.status_code in (429, 500, 502, 503, 504):
                 raise VoruebergehenderFehler(f"SEC HTTP {antwort.status_code} für {url}")
+            if antwort.status_code == 403:
+                raise SecGesperrt(f"SEC HTTP 403 für {url} – Zugriff gesperrt (User-Agent, Abrufrate?); keine weiteren Anfragen")
             raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
 
         return self._wiederholt(einmal, f"SEC {url}")
@@ -174,6 +182,16 @@ class SecClient:
     def companyfacts_aus_cache(self, cik) -> tuple[dict | None, datetime | None]:
         """companyfacts nur aus dem lokalen Cache, ohne Netzabruf (None, None, wenn nichts gecacht ist)."""
         return self._cache_lesen(self.cache_wurzel / "companyfacts" / f"CIK{cik10(cik)}.json.gz")
+
+    def companyfacts_holen(self, cik) -> dict:
+        """companyfacts frisch von der SEC, ohne den Cache zu lesen oder zu schreiben (SEC-Aktualisierung: erst prüfen,
+        dann mit `companyfacts_speichern` übernehmen)."""
+        return self._holen(f"{SEC_DATA}/api/xbrl/companyfacts/CIK{cik10(cik)}.json")
+
+    def companyfacts_speichern(self, cik, daten: dict, zeitpunkt: datetime) -> None:
+        """Geprüfte companyfacts in den Cache übernehmen (atomar, Probe: nur in die Schicht)."""
+        self._cache_schreiben(self.cache_wurzel / "companyfacts" / f"CIK{cik10(cik)}.json.gz",
+                              f"{SEC_DATA}/api/xbrl/companyfacts/CIK{cik10(cik)}.json", daten, zeitpunkt)
 
     def companyfacts(self, cik) -> tuple[dict, datetime]:
         return self.json_mit_cache(f"{SEC_DATA}/api/xbrl/companyfacts/CIK{cik10(cik)}.json",
@@ -207,13 +225,15 @@ class SecClient:
                 return antwort.text
             if antwort.status_code in (429, 500, 502, 503, 504):
                 raise VoruebergehenderFehler(f"SEC HTTP {antwort.status_code} für {url}")
+            if antwort.status_code == 403:
+                raise SecGesperrt(f"SEC HTTP 403 für {url} – Zugriff gesperrt (User-Agent, Abrufrate?); keine weiteren Anfragen")
             raise DatenFehler(f"SEC HTTP {antwort.status_code} für {url}")
 
         # .hdr.sgml gibt es für alle Jahrgänge (klein); -index-headers.html nur für neuere Einreichungen
         try:
             text = self._wiederholt(lambda: einmal(ordner + ".hdr.sgml"), f"SEC Kopf {accn}")
         except DatenFehler as fehler:
-            if isinstance(fehler, VoruebergehenderFehler):
+            if isinstance(fehler, (VoruebergehenderFehler, SecGesperrt)):   # 403: kein Ausweichen auf den zweiten Weg
                 raise
             text = self._wiederholt(lambda: einmal(ordner + "-index-headers.html"), f"SEC Kopf {accn}")
         datei = schreibpfad(datei)

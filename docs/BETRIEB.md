@@ -713,6 +713,30 @@ Prüfung an den Dateien, ohne Netz (Zuordnung über den eingefrorenen Stand `lad
 - Die echte Übernahme nach `daten/betrieb/cache` geschieht beim ersten Betriebslauf nach dem Merge, ohne Downloads,
   mit Protokollzeile.
 
+### Stand Schritt 2 (23.11.2026, Branch `sec-betriebscache`)
+
+- `betrieb/secaktualisierung.py` (Prüfregel, Lauf, `STAND.json`) und `tools/sec_aktualisieren.py` (`--probe`,
+  Laufsperre, eine gemeinsame Drossel von 8/s für alle Abrufe, Messung).
+- In `daten/sec.py`: `SecGesperrt` für HTTP 403 (auch beim Einreichungskopf kein Ausweichen auf den zweiten Weg) sowie
+  `companyfacts_holen` und `companyfacts_speichern` (erst prüfen, dann speichern).
+- **Grenze für neue Zeilen:** Abrufdatum des bisherigen Stands der CIK minus 3 Tage. Für den Stand vom 02.11.2026 ist
+  das der 30.10.2026. CIKs ohne bisherigen Stand haben keine Grenze.
+- **`STAND.json` je CIK:** `stand` ist der Gesamtstand; `fakten` und `sic` nennen den Teil, der den alten Stand behält.
+- **Erster Probelauf am 23.11.2026** (nur Schicht, echte SEC-Abrufe):
+  - 515 CIKs, davon 508 übernommen, 7 mit altem Stand, 0 Fehler.
+  - 50.820 neue Erstmeldungen in 233 CIKs, neueste `filed` 23.11.2026.
+  - 1.054 Anfragen (515 companyfacts, 517 submissions, 22 Köpfe), alle mit Status 200, höchste Rate 5/s.
+  - Datenmenge: 1,18 GB übertragen, 2,06 GB entpackt.
+  - Dauer: 683 s Abruf, 12,5 s Übernahme vorher.
+  - **6 CIKs haben die Prüfregel „filed vor der Grenze“ verletzt:** Abbott (1800), Humana (49071), UDR (74208),
+    Johnson Controls (833444), Visa (1403161) und Verisk (1442145). Ihnen fehlte im Abruf vom 02.11.2026 jeweils das
+    **ganze** 10-Q von Ende Juli 2026 (Einreichung vom 28./29.07.; keine einzige accn ab Juli im alten Stand). Die
+    SEC-API war für sie am 02.11. unvollständig. Bisherige Erstmeldungen sind nicht geändert.
+  - **Google Inc. (1288776):** Die SIC-Historie beginnt neu am 12.02.2010 statt am 11.02.2016, der Code ist gleich
+    (7370). Die SIC bleibt auf dem alten Stand, die Fakten (0 neue) wurden übernommen.
+  - **Offene Entscheidung (Jakob):** Bleibt die Regel so, übernehmen diese 6 CIKs nie wieder neue Daten, denn die
+    Juli-Zeilen bleiben bei jedem Lauf „zu alt“. Es kommt jede Woche dieselbe Meldung.
+
 ### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
 
 - **B1 Bestand:** Je CIK sind alle Erstmeldungen des Entwicklungs-Caches (Stand 02.11.2026) im Betriebs-Cache
