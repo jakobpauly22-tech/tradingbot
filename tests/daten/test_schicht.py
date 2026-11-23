@@ -199,3 +199,28 @@ def test_werkzeug_startet_jede_probe_in_geleerter_schicht(monkeypatch):
     schichten = [s for _, _, s in gesehen]
     assert all(s == schicht.standard_wurzel() for s in schichten[:3])        # Probe, Kopie, Probefenster
     assert schichten[3:] == [None, None]                                     # echter Lauf: ohne Schicht
+
+
+# --- Erfassen und Versiegeln (tools/bewertung_vergleich.py, Jakob 23.11.2026) -------------------------------------------
+def test_erfassen_protokolliert_lesezugriffe_mit_existenz(daten):
+    (daten / "cache" / "kurse" / "A.parquet").write_text("a")
+    with schicht.probe_schicht(daten / "betrieb" / "probe" / "x"), schicht.erfassen() as protokoll:
+        schicht.lesepfad(daten / "cache" / "kurse" / "A.parquet")
+        schicht.lesepfad(daten / "cache" / "kurse" / "FEHLT.parquet")
+        schicht.lesepfad(daten.parent / "ausserhalb.txt")                    # außerhalb von daten/: nicht erfasst
+    assert protokoll == {"cache/kurse/A.parquet": True, "cache/kurse/FEHLT.parquet": False}
+    assert schicht.lesepfad(daten / "cache" / "kurse" / "A.parquet") == daten / "cache" / "kurse" / "A.parquet"
+
+
+def test_versiegelt_liest_nur_die_schicht_und_bricht_bei_luecke_ab(daten):
+    (daten / "cache" / "kurse" / "A.parquet").write_text("betrieb, inzwischen korrigiert")
+    (daten / "cache" / "kurse" / "B.parquet").write_text("betrieb")
+    s = daten / "betrieb" / "probe" / "versiegelt"
+    (s / "cache" / "kurse").mkdir(parents=True)
+    (s / "cache" / "kurse" / "A.parquet").write_text("eingefroren")
+    with schicht.probe_schicht(s), schicht.versiegelt({"cache/kurse/FEHLT.parquet"}):
+        assert schicht.lesepfad(daten / "cache" / "kurse" / "A.parquet").read_text() == "eingefroren"
+        assert not schicht.lesepfad(daten / "cache" / "kurse" / "FEHLT.parquet").exists()   # fehlte schon: bleibt fehlend
+        with pytest.raises(schicht.SchichtLuecke, match="cache/kurse/B.parquet fehlt"):
+            schicht.lesepfad(daten / "cache" / "kurse" / "B.parquet")                       # nie still vom Original
+    assert schicht.lesepfad(daten / "cache" / "kurse" / "B.parquet") == daten / "cache" / "kurse" / "B.parquet"

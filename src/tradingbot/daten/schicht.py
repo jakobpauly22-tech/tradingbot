@@ -10,6 +10,10 @@ Die Schicht liegt unter `daten/betrieb/probe/cache/` und wird zu Beginn jedes Pr
 Universum, SIC, SEC-Tabellen, Makro), daten/sec.py, daten/tiingo.py, daten/universum.py (Wikipedia, SEC-Namen),
 daten/kursquellen.py (Yahoo-Namen), betrieb/kurscache.py und betrieb/universum_betrieb.py. Ohne aktive Schicht sind
 beide Funktionen die Identität.
+
+Für tools/bewertung_vergleich.py (Jakob 23.11.2026) zwei zusätzliche Betriebsarten, sonst ohne Wirkung:
+`erfassen()` protokolliert jeden Lesezugriff über `lesepfad`; `versiegelt(fehlend)` liefert nur Dateien der Schicht und
+bricht bei einer fehlenden mit `SchichtLuecke` ab, statt still auf das Original durchzulesen.
 """
 from __future__ import annotations
 
@@ -67,9 +71,49 @@ def _in_schicht(pfad: Path) -> Path | None:
     return schicht / relativ
 
 
+class SchichtLuecke(RuntimeError):
+    """Versiegelte Schicht: eine gelesene Datei fehlt darin (wird nie still vom Original nachgeladen)."""
+
+
+# Erfassen und Versiegeln (tools/bewertung_vergleich.py, Jakob 23.11.2026): ohne diese Betriebsarten unverändert.
+_ERFASST: dict[str, bool] | None = None          # relativer Pfad unter daten/ → existierte beim ersten Lesen
+_FEHLEND: frozenset[str] | None = None           # versiegelt: Pfade, die schon bei der Referenz fehlten
+
+
+@contextmanager
+def erfassen():
+    """Jeden Lesezugriff über `lesepfad` (Pfad relativ zu daten/, existierte ja/nein) protokollieren; liefert das Protokoll."""
+    global _ERFASST
+    vorher, _ERFASST = _ERFASST, {}
+    try:
+        yield _ERFASST
+    finally:
+        _ERFASST = vorher
+
+
+@contextmanager
+def versiegelt(fehlend):
+    """`lesepfad` liefert nur Dateien der aktiven Schicht; fehlt eine, die nicht in `fehlend` steht → SchichtLuecke."""
+    global _FEHLEND
+    vorher, _FEHLEND = _FEHLEND, frozenset(fehlend)
+    try:
+        yield
+    finally:
+        _FEHLEND = vorher
+
+
 def lesepfad(pfad: Path) -> Path:
-    """Pfad zum Lesen: die Schicht-Datei, falls die Probe sie schon geschrieben hat, sonst das Original."""
+    """Pfad zum Lesen: die Schicht-Datei, falls die Probe sie schon geschrieben hat, sonst das Original.
+    Versiegelt: nur die Schicht-Datei (fehlt sie und war sie nicht als fehlend erfasst → SchichtLuecke)."""
     s = _in_schicht(pfad)
+    if s is not None and (_ERFASST is not None or _FEHLEND is not None):
+        rel = s.relative_to(_SCHICHT).as_posix()
+        if _ERFASST is not None:
+            _ERFASST.setdefault(rel, s.exists() or Path(pfad).exists())
+        if _FEHLEND is not None:
+            if s.exists() or rel in _FEHLEND:
+                return s
+            raise SchichtLuecke(f"{rel} fehlt in der versiegelten Schicht {_SCHICHT} – wird nicht vom Original nachgeladen")
     return s if s is not None and s.exists() else Path(pfad)
 
 

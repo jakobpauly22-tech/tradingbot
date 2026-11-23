@@ -1,23 +1,41 @@
 r"""Nachweis „gleiche Bewertung vorher/nachher“ für die Laufzeit-Arbeit an der Fundamental-Bewertung (Jakob 19.11.2026).
 
-Rechnet `engines/fundamental/aktuell.bewertung_am(stichtag, aktualisieren=False)` – ohne Kursabruf, also auf dem
-vorhandenen Kursstand – und vergleicht die Bewertungstabelle sowie die Ranglisten A und B exakt (Spalten, Datentypen,
-jeder Wert, Gründe und Signale) mit einer zuvor festgehaltenen Referenz.
+Rechnet `engines/fundamental/aktuell.bewertung_am(stichtag, aktualisieren=False)` – ohne Kursabruf – und vergleicht die
+Bewertungstabelle sowie die Ranglisten A und B exakt (Spalten, Datentypen, jeder Wert, Gründe und Signale) mit einer
+zuvor festgehaltenen Referenz.
 
-Läuft im Betriebsmodus in einer eigenen, nicht geleerten Probe-Schicht (`daten/betrieb/probe/bewertung_referenz/schicht`):
-Betriebs- und Entwicklungsdaten bleiben unverändert (daten/schicht.py), und das Universum des Betriebs wird je Kalendertag
-höchstens einmal in der Schicht gebaut.
+Eingefrorene Eingaben (Jakob 23.11.2026; Anlass: Yahoo korrigierte den MDLZ-Schluss vom 18.11. im Betriebscache, die alte
+Schicht las darauf durch und die Referenz war nicht mehr erreichbar):
+- **Referenz schreiben:** Die Bewertung läuft in einer leeren Schicht `eingefroren/` und protokolliert jeden Lesezugriff
+  über `lesepfad` (daten/schicht.py, `erfassen`). Danach werden alle gelesenen Dateien (Kurse, Universum, SEC-Caches,
+  SIC) in diese Schicht kopiert; `eingefroren.json` hält SHA-256 je Datei, die Pfade, die schon fehlten, und die
+  Dateien, die am Cache vorbei direkt gelesen werden (Audit-Hook auf `open`, etwa kursstatus.csv) mit Prüfsumme.
+  Anschließend ein versiegelter Selbstvergleich. Eine vorhandene Referenz wird nicht gelöscht, sondern mit Vermerk
+  (`--grund`) nach `ersetzt_<Datum>/` verschoben.
+- **Vergleichen:** nur aus einer Laufkopie der eingefrorenen Schicht, versiegelt (`versiegelt`: fehlt eine Datei →
+  Abbruch, nie still nachladen), ohne Netz (Socket gesperrt). Direkt gelesene Dateien müssen dieselbe Prüfsumme haben
+  wie bei der Referenz, ein direkter Lesezugriff auf andere Dateien unter daten/ bricht ab. Das eingefrorene
+  Betriebsuniversum gilt im Betrieb nur für seinen Kalendertag; in der Laufkopie wird deshalb nur sein Tagesstempel
+  auf heute gesetzt (Inhalt byteweise gleich), damit es nicht aus Wikipedia neu berechnet wird.
 
-  .venv\Scripts\python tools\bewertung_vergleich.py --referenz        Referenz schreiben (vor jeder Änderung)
-  .venv\Scripts\python tools\bewertung_vergleich.py                   mit der Referenz vergleichen; Ausgang 0 nur bei „identisch“
+Betriebs- und Entwicklungsdaten bleiben unverändert (alles Schreiben geht in die Schicht).
+
+  .venv\Scripts\python tools\bewertung_vergleich.py --referenz [--grund TEXT]   Referenz schreiben (vor jeder Änderung)
+  .venv\Scripts\python tools\bewertung_vergleich.py                             vergleichen; Ausgang 0 nur bei „identisch“
 """
 import argparse
+import hashlib
 import json
+import os
 import pickle
+import shutil
+import socket
 import subprocess
 import sys
 import time
-from datetime import datetime
+from contextlib import ExitStack, contextmanager
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -25,22 +43,164 @@ from dotenv import load_dotenv
 from tradingbot.konfiguration import PROJEKT_WURZEL
 
 STICHTAG = "2026-11-18"
-ORDNER = PROJEKT_WURZEL / "daten" / "betrieb" / "probe" / "bewertung_referenz"
+DATEN = PROJEKT_WURZEL / "daten"
+ORDNER = DATEN / "betrieb" / "probe" / "bewertung_referenz"
 REFERENZ = ORDNER / "referenz.pkl"
+EINGEFROREN = ORDNER / "eingefroren"
+VERZEICHNIS = ORDNER / "eingefroren.json"
+LAUF = ORDNER / "lauf"
+UNIVERSUM = Path("betrieb") / "cache" / "universum" / "sp500.parquet"
 
 
-def rechnen(stichtag: str) -> tuple[dict, float]:
+class Abbruch(RuntimeError):
+    """Vergleich nicht möglich (Eingaben geändert, Referenz ohne eingefrorene Eingaben, Netz gesperrt)."""
+
+
+def sha256(pfad: Path) -> str:
+    return hashlib.sha256(Path(pfad).read_bytes()).hexdigest()
+
+
+# --- Wache: direkte Lesezugriffe unter daten/ (am Cache vorbei) und Netz --------------------------------------------
+_WACHE: dict = {"modus": None, "daten": None, "gelesen": set(), "erlaubt": frozenset()}
+_HOOK = False
+
+
+def _hook(ereignis, args):
+    w = _WACHE
+    if ereignis != "open" or w["modus"] is None or not isinstance(args[0], (str, os.PathLike)):
+        return
+    schreibend = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND
+    if any(c in str(args[1] or "r") for c in "wax+") or (isinstance(args[2], int) and args[2] & schreibend):
+        return                                          # nur Lesen (z. B. Anhängen an betriebsfreigaben.log bleibt erlaubt)
+    from tradingbot.daten.schicht import SchichtLuecke, aktive_schicht
+
+    voll = Path(args[0]).resolve()
+    schicht = aktive_schicht()
+    if w["daten"] not in voll.parents or (schicht is not None and (voll == schicht or schicht in voll.parents)):
+        return
+    rel = voll.relative_to(w["daten"]).as_posix()
+    if w["modus"] == "erfassen":
+        w["gelesen"].add(rel)
+    elif rel not in w["erlaubt"]:
+        raise SchichtLuecke(f"direkter Lesezugriff auf daten/{rel} – nicht in den eingefrorenen Eingaben")
+
+
+@contextmanager
+def wache(modus: str, daten: Path, erlaubt=()):
+    """`erfassen`: direkte Lesezugriffe unter `daten` sammeln; `versiegelt`: nur `erlaubt` zulassen und Netz sperren."""
+    global _HOOK
+    if not _HOOK:
+        sys.addaudithook(_hook)                          # Audit-Hooks lassen sich nicht entfernen; ohne Modus wirkungslos
+        _HOOK = True
+    _WACHE.update(modus=modus, daten=Path(daten).resolve(), gelesen=set(), erlaubt=frozenset(erlaubt))
+    alt = socket.socket.connect, socket.getaddrinfo
+
+    def gesperrt(*a, **k):
+        raise Abbruch("Netzzugriff im versiegelten Vergleich – eine Eingabe würde nachgeladen")
+    if modus == "versiegelt":
+        socket.socket.connect, socket.getaddrinfo = gesperrt, gesperrt
+    try:
+        yield _WACHE["gelesen"]
+    finally:
+        socket.socket.connect, socket.getaddrinfo = alt
+        _WACHE.update(modus=None)
+
+
+# --- Einfrieren, Prüfen, Laufkopie ---------------------------------------------------------------------------------
+def einfrieren(protokoll: dict[str, bool], direkt: set[str], schicht: Path, daten: Path) -> dict:
+    """Gelesene Originale in die Schicht kopieren (was der Lauf selbst geschrieben hat, bleibt); Verzeichnis zurückgeben."""
+    for rel, existierte in sorted(protokoll.items()):
+        ziel = schicht / rel
+        if existierte and not ziel.exists():
+            quelle = daten / rel
+            if not quelle.exists():
+                raise Abbruch(f"daten/{rel} wurde gelesen, ist aber verschwunden")
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(quelle, ziel)
+    dateien = {p.relative_to(schicht).as_posix(): sha256(p) for p in sorted(schicht.rglob("*")) if p.is_file()}
+    fehlend = sorted(rel for rel in protokoll if rel not in dateien)
+    direkt = sorted(set(direkt) - set(protokoll))
+    return {"dateien": dateien, "fehlend": fehlend, "direkt": {rel: sha256(daten / rel) for rel in direkt}}
+
+
+def pruefen(verzeichnis: dict, schicht: Path, daten: Path) -> list[str]:
+    """Abweichungen der eingefrorenen Schicht und der direkt gelesenen Dateien gegenüber dem Verzeichnis."""
+    aus = []
+    for rel, soll in verzeichnis["dateien"].items():
+        p = schicht / rel
+        if not p.exists() or sha256(p) != soll:
+            aus.append(f"eingefroren/{rel}: {'fehlt' if not p.exists() else 'geändert'}")
+    vorhanden = {p.relative_to(schicht).as_posix() for p in schicht.rglob("*") if p.is_file()}
+    aus += [f"eingefroren/{rel}: nicht im Verzeichnis" for rel in sorted(vorhanden - set(verzeichnis["dateien"]))]
+    for rel, soll in verzeichnis["direkt"].items():
+        p = daten / rel
+        if not p.exists() or sha256(p) != soll:
+            aus.append(f"daten/{rel} (direkt gelesen): {'fehlt' if not p.exists() else 'geändert seit der Referenz'}")
+    return aus
+
+
+def laufkopie(schicht: Path, lauf: Path) -> str | None:
+    """Laufkopie der eingefrorenen Schicht; Tagesstempel des Betriebsuniversums auf heute (Inhalt unverändert).
+    Gibt den ursprünglichen Stempel zurück (None ohne eingefrorenes Universum)."""
+    import pyarrow.parquet as pq
+
+    if lauf.exists():
+        shutil.rmtree(lauf)
+    shutil.copytree(schicht, lauf)
+    datei = lauf / UNIVERSUM
+    if not datei.exists():
+        return None
+    tabelle = pq.read_table(datei)
+    schema_meta = dict(tabelle.schema.metadata or {})
+    meta = json.loads(schema_meta.get(b"tradingbot", b"{}"))
+    alt = meta.get("berechnet_am")
+    meta.update(berechnet_am=datetime.now(timezone.utc).isoformat(timespec="seconds"), eingefroren_berechnet_am=alt)
+    schema_meta[b"tradingbot"] = json.dumps(meta, default=str).encode()
+    pq.write_table(tabelle.replace_schema_metadata(schema_meta), datei)
+    return alt
+
+
+def archivieren(ordner: Path, grund: str, heute: date) -> Path | None:
+    """Vorhandene Referenz (alle Teile) nach `ersetzt_<Datum>[_n]/` verschieben, mit Vermerk; nichts wird gelöscht."""
+    teile = [ordner / n for n in ("referenz.pkl", "referenz.json", "schicht", "eingefroren", "eingefroren.json", "lauf")]
+    teile = [p for p in teile if p.exists()]
+    if not teile:
+        return None
+    ziel, n = ordner / f"ersetzt_{heute.isoformat()}", 1
+    while ziel.exists():
+        n += 1
+        ziel = ordner / f"ersetzt_{heute.isoformat()}_{n}"
+    ziel.mkdir(parents=True)
+    for p in teile:
+        shutil.move(str(p), str(ziel / p.name))
+    (ziel / "VERMERK.txt").write_text(f"ersetzt {heute:%d.%m.%Y}, Grund: {grund}\n", encoding="utf-8")
+    return ziel
+
+
+# --- Rechnen und Vergleichen ---------------------------------------------------------------------------------------
+def rechnen(stichtag: str, schicht: Path, *, modus: str, verzeichnis: dict | None = None) -> tuple[dict, float, dict, set]:
+    """Bewertung in der Schicht `schicht`. `erfassen`: Protokoll der Lesezugriffe; `versiegelt`: nur eingefrorene Eingaben."""
     from tradingbot.backtest.tresor import betriebsmodus
-    from tradingbot.daten.schicht import probe_schicht
+    from tradingbot.daten import schicht as sch
     from tradingbot.engines.fundamental.aktuell import bewertung_am, rangliste
 
-    with probe_schicht(ORDNER / "schicht"), betriebsmodus("Probe: Bewertungsvergleich (Laufzeit, nur Schicht)"):
+    with ExitStack() as stapel:
+        stapel.enter_context(sch.probe_schicht(schicht))
+        stapel.enter_context(betriebsmodus("Probe: Bewertungsvergleich (Laufzeit, nur Schicht)"))
+        if modus == "erfassen":
+            protokoll = stapel.enter_context(sch.erfassen())
+            direkt = stapel.enter_context(wache("erfassen", DATEN))
+        else:
+            protokoll, direkt = {}, set()
+            stapel.enter_context(sch.versiegelt(verzeichnis["fehlend"]))
+            stapel.enter_context(wache("versiegelt", DATEN, erlaubt=verzeichnis["direkt"]))
         beginn = time.perf_counter()
         bewertung, symbole, meldungen = bewertung_am(pd.Timestamp(stichtag), aktualisieren=False)
         dauer = time.perf_counter() - beginn
         ergebnis = {"bewertung": bewertung, "symbole": symbole, "meldungen": meldungen,
                     "rangliste_A": rangliste(bewertung, "A"), "rangliste_B": rangliste(bewertung, "B")}
-    return ergebnis, dauer
+        protokoll, direkt = dict(protokoll), set(direkt)
+    return ergebnis, dauer, protokoll, direkt
 
 
 def unterschiede(alt: pd.DataFrame, neu: pd.DataFrame, name: str) -> list[str]:
@@ -70,26 +230,29 @@ def git_stand() -> str:
     return r.stdout.strip()
 
 
-def main() -> int:
-    load_dotenv(PROJEKT_WURZEL / ".env")
-    a = argparse.ArgumentParser()
-    a.add_argument("--referenz", action="store_true", help="Referenz schreiben statt vergleichen")
-    a.add_argument("--stichtag", default=STICHTAG)
-    arg = a.parse_args()
-    ergebnis, dauer = rechnen(arg.stichtag)
-    stand = {"stichtag": arg.stichtag, "git": git_stand(), "gerechnet_um": datetime.now().isoformat(timespec="seconds"),
-             "dauer_s": round(dauer, 1), "firmen": len(ergebnis["bewertung"])}
-    if arg.referenz:
-        ORDNER.mkdir(parents=True, exist_ok=True)
-        with REFERENZ.open("wb") as f:
-            pickle.dump({**ergebnis, "stand": stand}, f)
-        (ORDNER / "referenz.json").write_text(json.dumps(stand, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"Referenz geschrieben: {stand}")
-        return 0
+def vergleichen(stichtag: str) -> int:
+    from tradingbot.daten.schicht import SchichtLuecke
+
+    if not VERZEICHNIS.exists() or not REFERENZ.exists():
+        print("Referenz ohne eingefrorene Eingaben (altes Format oder keine) – mit --referenz neu schreiben")
+        return 2
+    verzeichnis = json.loads(VERZEICHNIS.read_text(encoding="utf-8"))
     with REFERENZ.open("rb") as f:
         ref = pickle.load(f)
-    if ref["stand"]["stichtag"] != arg.stichtag:
-        print(f"Referenz gilt für {ref['stand']['stichtag']}, nicht {arg.stichtag}")
+    if ref["stand"]["stichtag"] != stichtag:
+        print(f"Referenz gilt für {ref['stand']['stichtag']}, nicht {stichtag}")
+        return 2
+    abweichend = pruefen(verzeichnis, EINGEFROREN, DATEN)
+    if abweichend:
+        print("ABBRUCH – eingefrorene Eingaben nicht mehr gleich:\n" + "\n".join(f"  {z}" for z in abweichend[:30]))
+        return 2
+    stempel = laufkopie(EINGEFROREN, LAUF)
+    print(f"Eingaben: {len(verzeichnis['dateien'])} eingefrorene Dateien, {len(verzeichnis['direkt'])} direkt gelesen (Prüfsumme gleich)"
+          + (f"; Betriebsuniversum vom {stempel[:10]} (Tagesstempel in der Laufkopie auf heute)" if stempel else ""))
+    try:
+        ergebnis, dauer, _, _ = rechnen(stichtag, LAUF, modus="versiegelt", verzeichnis=verzeichnis)
+    except (SchichtLuecke, Abbruch) as f:
+        print(f"ABBRUCH – {f}")
         return 2
     abw = []
     for teil in ("bewertung", "rangliste_A", "rangliste_B"):
@@ -98,13 +261,44 @@ def main() -> int:
         abw.append("Symbol je Firma verschieden")
     if list(ref["meldungen"]) != list(ergebnis["meldungen"]):
         abw.append(f"Meldungen verschieden: {ref['meldungen']} gegen {ergebnis['meldungen']}")
-    print(f"Referenz: Git {ref['stand']['git']}, {ref['stand']['dauer_s']} s; jetzt: Git {stand['git']}, {stand['dauer_s']} s")
+    print(f"Referenz: Git {ref['stand']['git']}, {ref['stand']['dauer_s']} s; jetzt: Git {git_stand()}, {round(dauer, 1)} s")
     if abw:
         print("NICHT identisch:")
         print("\n".join(f"  {z}" for z in abw))
         return 1
-    print(f"identisch ({stand['firmen']} Firmen, Bewertung und Ranglisten A und B)")
+    print(f"identisch ({len(ergebnis['bewertung'])} Firmen, Bewertung und Ranglisten A und B)")
     return 0
+
+
+def referenz_schreiben(stichtag: str, grund: str | None) -> int:
+    if any((ORDNER / n).exists() for n in ("referenz.pkl", "eingefroren")):
+        if not grund:
+            print("Es gibt schon eine Referenz – zum Ersetzen --grund angeben (sie wird mit Vermerk gesichert, nicht gelöscht)")
+            return 2
+        print(f"Alte Referenz gesichert: {archivieren(ORDNER, grund, date.today())}")
+    EINGEFROREN.mkdir(parents=True)
+    ergebnis, dauer, protokoll, direkt = rechnen(stichtag, EINGEFROREN, modus="erfassen")
+    verzeichnis = einfrieren(protokoll, direkt, EINGEFROREN, DATEN)
+    stand = {"stichtag": stichtag, "git": git_stand(), "gerechnet_um": datetime.now().isoformat(timespec="seconds"),
+             "dauer_s": round(dauer, 1), "firmen": len(ergebnis["bewertung"])}
+    VERZEICHNIS.write_text(json.dumps({**stand, **verzeichnis}, ensure_ascii=False, indent=1), encoding="utf-8")
+    with REFERENZ.open("wb") as f:
+        pickle.dump({**ergebnis, "stand": stand}, f)
+    (ORDNER / "referenz.json").write_text(json.dumps(stand, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"Referenz geschrieben: {stand}; {len(verzeichnis['dateien'])} Dateien eingefroren, {len(verzeichnis['fehlend'])} "
+          f"fehlten schon, direkt gelesen: {sorted(verzeichnis['direkt'])}")
+    print("Selbstvergleich (versiegelt):")
+    return vergleichen(stichtag)
+
+
+def main() -> int:
+    load_dotenv(PROJEKT_WURZEL / ".env")
+    a = argparse.ArgumentParser()
+    a.add_argument("--referenz", action="store_true", help="Referenz schreiben statt vergleichen")
+    a.add_argument("--grund", help="Grund für das Ersetzen einer vorhandenen Referenz (Vermerk)")
+    a.add_argument("--stichtag", default=STICHTAG)
+    arg = a.parse_args()
+    return referenz_schreiben(arg.stichtag, arg.grund) if arg.referenz else vergleichen(arg.stichtag)
 
 
 if __name__ == "__main__":
