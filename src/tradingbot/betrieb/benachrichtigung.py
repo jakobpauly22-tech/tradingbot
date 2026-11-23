@@ -17,12 +17,17 @@ Sicherheit:
   die Werte geheimer Variablen aus der .env.
 - `benachrichtigung.eurobetraege: false` (für den Echtbetrieb): nur Prozente und Status, keine Eurobeträge.
 - Ein Fehler beim Benachrichtigen bricht den Tageslauf nie ab; er steht nur im Protokoll. Probe und Kopie melden nie.
+- Zeitüberschreitung beim Warten auf die Antwort: „Zustellung unklar (Timeout)“ statt „fehlgeschlagen“, denn die
+  Nachricht kann trotzdem angekommen sein (Fall 20.11.2026). Keine automatische Wiederholung (sonst doppelte
+  Nachrichten); Zeitlimit `benachrichtigung.zeitlimit_s` (20 s, Jakob 23.11.2026).
 """
 from __future__ import annotations
 
 import os
 import re
+import socket
 import sqlite3
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -236,10 +241,21 @@ def erinnerung(tag: date) -> str:
 
 
 # --- Versand ------------------------------------------------------------------------------------------------------
+def ist_zeitueberschreitung(f: BaseException) -> bool:
+    """Zeitlimit beim Verbinden oder beim Warten auf die Antwort (TimeoutError/socket.timeout, auch in URLError verpackt)."""
+    return isinstance(f, (TimeoutError, socket.timeout)) or (
+        isinstance(f, urllib.error.URLError) and isinstance(getattr(f, "reason", None), (TimeoutError, socket.timeout)))
+
+
+def versandfehler(f: BaseException) -> str:
+    """Protokolltext eines Versandfehlers: bei Zeitüberschreitung „Zustellung unklar“, sonst „fehlgeschlagen“."""
+    return "Zustellung unklar (Timeout)" if ist_zeitueberschreitung(f) else f"fehlgeschlagen ({bereinigen(type(f).__name__)})"
+
+
 class Telegram:
     """Nur Senden (sendMessage). Ruft nie getUpdates auf: Nachrichten an den Bot werden nie gelesen."""
 
-    def __init__(self, token: str, chat_id: str, *, zeitlimit: float = 8.0, oeffnen=urllib.request.urlopen):
+    def __init__(self, token: str, chat_id: str, *, zeitlimit: float = 20.0, oeffnen=urllib.request.urlopen):
         self.token, self.chat_id, self.zeitlimit, self._oeffnen = token, chat_id, zeitlimit, oeffnen
 
     def senden(self, text: str) -> None:
@@ -256,7 +272,7 @@ class Melder:
     kanaele: list = field(default_factory=list)
     lebenszeichen_url: str | None = None
     eurobetraege: bool = True
-    zeitlimit: float = 8.0
+    zeitlimit: float = 20.0
     oeffnen: object = urllib.request.urlopen
 
     def melden(self, text: str) -> str:
@@ -268,8 +284,8 @@ class Melder:
             try:
                 k.senden(text)
                 ergebnis.append(f"{type(k).__name__} gesendet")
-            except Exception as f:  # noqa: BLE001 – Benachrichtigung bricht nie den Lauf ab
-                ergebnis.append(f"{type(k).__name__} fehlgeschlagen ({bereinigen(type(f).__name__)})")
+            except Exception as f:  # noqa: BLE001 – Benachrichtigung bricht nie den Lauf ab; keine Wiederholung
+                ergebnis.append(f"{type(k).__name__} {versandfehler(f)}")
         return "Benachrichtigung: " + ", ".join(ergebnis)
 
     def lebenszeichen(self, fehler: bool = False, *, nur_protokoll: bool = False) -> str:
@@ -287,14 +303,14 @@ class Melder:
             zusatz = " (Fehler)" if fehler else " (nur Protokoll)" if nur_protokoll else ""
             return "Lebenszeichen an Healthchecks gesendet" + zusatz
         except Exception as f:  # noqa: BLE001
-            return f"Lebenszeichen fehlgeschlagen ({type(f).__name__})"
+            return f"Lebenszeichen{' (Fehler)' if fehler else ''} {versandfehler(f)}"
 
 
 def melder_aus_env(betrieb: dict, umgebung: dict | None = None) -> Melder:
     """Melder laut config/betrieb.yaml (`benachrichtigung`) und .env; fehlende Variablen = Kanal aus."""
     umgebung = os.environ if umgebung is None else umgebung
     k = betrieb.get("benachrichtigung", {}) or {}
-    zeitlimit = float(k.get("zeitlimit_s", 8))
+    zeitlimit = float(k.get("zeitlimit_s", 20))
     kanaele = []
     token, chat = (umgebung.get("TELEGRAM_BOT_TOKEN") or "").strip(), (umgebung.get("TELEGRAM_CHAT_ID") or "").strip()
     if k.get("telegram", False) and token and chat:

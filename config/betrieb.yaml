@@ -131,7 +131,7 @@ benachrichtigung:
   telegram: true                       # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID; der Bot sendet nur und liest nie Nachrichten
   healthchecks: true                   # HEALTHCHECKS_PING_URL; Lebenszeichen nach jedem Lauf, an Xetra-Feiertagen vom Wächter
   eurobetraege: true                   # false (Echtbetrieb): nur Prozente und Status, keine Eurobeträge
-  zeitlimit_s: 8                       # je Versuch; ein Fehler beim Melden bricht den Tageslauf nie ab
+  zeitlimit_s: 20                      # je Versuch, keine Wiederholung; Timeout = „Zustellung unklar“ (Jakob 23.11.2026)
 
 dividenden:
   # A0, Jakob 12.11.2026 (tradingbot/betrieb/dividenden.py): Bardividenden und Quellensteuer nur mit Flex-Beleg, automatisch

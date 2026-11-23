@@ -277,3 +277,41 @@ def test_verbindungstest_fester_text_und_ping_ohne_statuswechsel():
 def test_verbindungstest_ohne_einrichtung_meldet_es():
     zeilen = bn.verbindungstest(bn.Melder())
     assert "kein Kanal eingerichtet" in zeilen[0] and "nicht eingerichtet" in zeilen[1]
+
+
+# --- Zeitüberschreitung und Stopp (Jakob 23.11.2026) --------------------------------------------------------------------
+def test_timeout_heisst_zustellung_unklar_ohne_wiederholung():
+    import socket
+    import urllib.error
+    versuche = []
+
+    class Langsam:
+        def __init__(self, fehler):
+            self.fehler = fehler
+
+        def senden(self, text):
+            versuche.append(text)
+            raise self.fehler
+
+    for fehler in (TimeoutError("read"), socket.timeout("timed out"), urllib.error.URLError(TimeoutError("connect"))):
+        versuche.clear()
+        zeile = bn.Melder([Langsam(fehler)]).melden("Text")
+        assert zeile == "Benachrichtigung: Langsam Zustellung unklar (Timeout)" and len(versuche) == 1
+    assert "fehlgeschlagen (URLError)" in bn.Melder([Langsam(urllib.error.URLError("dns"))]).melden("Text")
+
+
+def test_lebenszeichen_timeout_zustellung_unklar():
+    def oeffnen(anfrage, timeout):
+        raise TimeoutError
+
+    assert bn.Melder(lebenszeichen_url="https://hc-ping.com/uuid", oeffnen=oeffnen).lebenszeichen(fehler=True) == \
+        "Lebenszeichen (Fehler) Zustellung unklar (Timeout)"
+
+
+def test_zeitlimit_20_sekunden():
+    from tradingbot.konfiguration import lade_konfiguration
+
+    assert lade_konfiguration("betrieb")["benachrichtigung"]["zeitlimit_s"] == 20
+    m = bn.melder_aus_env({"benachrichtigung": {"telegram": True}}, umgebung={"TELEGRAM_BOT_TOKEN": "1:A", "TELEGRAM_CHAT_ID": "2"})
+    assert m.zeitlimit == 20 and m.kanaele[0].zeitlimit == 20
+
