@@ -553,3 +553,130 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   Realbuch, Regime, Technik-Bücher, Fundamental-Bücher, S&P-500-Liste, Fundamental-Bewertung, Risk-Manager und Speichern,
   Sicherung), beim Senden „Dauer je Abschnitt (Senden): …“. Gespeichert in `Laufergebnis.dauer`; am Ablauf ändert sich
   nichts (`betrieb/zeitmessung.py`).
+
+## SEC-Aktualisierung im Betrieb (Festlegung Schritt 0, Jakob 23.11.2026)
+
+Festgelegt vor dem Code. Schwellen und Abnahmekriterien werden nach einem Lauf nicht geändert; eine Verfehlung bleibt
+im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
+
+### Anlass
+
+- Die Fundamental-Bewertung des Betriebs liest SEC-Daten nur aus dem Standard-Cache und lädt nie nach:
+  `sec_erstmeldungen` über `standard_cache()` (`engines/fundamental/aktuell.py`), dazu `lade_firmendaten`,
+  `lade_aktienfakten` und `lade_sic_historien`. Alle 806 companyfacts stammen vom 02.11.2026. Firmen mit zu altem
+  Abschluss fallen über `veraltet` still heraus.
+- Ohne Aktualisierung fehlen der Bewertung zum Quartalswechsel am 04.01.2027 alle Einreichungen ab dem 02.11.2026.
+- **Befund beim Lesen (23.11.2026):** Der Betrieb hat den Entwicklungs-Cache schon verändert.
+  - `daten/cache/universum/sic_historie.parquet` wurde am 19.11.2026 um 22:37 geschrieben, also im Tageslauf. Der
+    Stand hat jetzt 807 CIKs: `lade_sic_historien` lädt neue CIKs des Betriebsuniversums nach (vermutlich OKTA) und
+    schreibt in den Standard-Cache.
+  - `daten/cache/sec/submissions` wurde am 16.11.2026 um 22 Uhr geschrieben (3 Dateien, Probe/Tageslauf).
+    `SecClient` lädt nach 7 Tagen von selbst neu.
+  - companyfacts und `sec_erstmeldungen` sind unverändert (Stand 02.11.2026).
+  - Schritt 1 schließt diesen Weg. Der veränderte Stand wird nicht zurückgedreht; ob das nötig ist, entscheidet Jakob.
+
+### Regeln
+
+- **Eigener SEC-Cache des Betriebs.** Er liegt unter `daten/betrieb/cache/` und hat dieselben Bereiche wie der
+  Entwicklungs-Cache:
+  - `sec/companyfacts`, `sec/submissions`, `sec/koepfe`,
+  - `sec_erstmeldungen`, `sec_aktienfakten`, `sec_aktienfakten_quartale`,
+  - `universum/sic_historie`.
+- **Lesen und schreiben:** Im Betriebsmodus lesen und schreiben alle SEC-Wege nur dort, auch `SecClient`, die
+  abgeleiteten Tabellen und die SIC-Historie. Außerhalb des Betriebsmodus ändert sich nichts. `betriebspfad` sperrt den
+  Bereich für Backtest- und Auswertungswerkzeuge (Tresor-Trennung).
+- **Einmalige Übernahme** wie beim Kurs-Cache (Befund 5):
+  - Beim ersten Zugriff im Betriebsmodus werden alle Dateien der genannten Bereiche byteweise kopiert, ohne Downloads.
+  - Die Marke `UEBERNAHME.json` hält Zeitpunkt, Quelle und Dateizahl je Bereich fest. Danach wird nie wieder kopiert.
+  - Bricht die Übernahme ab, wiederholt der nächste Lauf sie vollständig.
+- **Der Tageslauf lädt keine SEC-Daten.** Er liest nur den Betriebs-Cache und `STAND.json`. Ausnahme: Neue Mitglieder
+  des Betriebsuniversums werden geprüft wie bisher (`betrieb/universum_betrieb.py`), ab jetzt mit dem Betriebs-Cache.
+- **Aktualisierung nur über das Werkzeug `tools/sec_aktualisieren.py`**, getrennt vom Abendlauf:
+  - **CIKs:** heutige Mitglieder des Betriebsuniversums plus Vorgänger-CIKs, etwa 550.
+  - **Je CIK:** companyfacts neu laden (erzwungen, unabhängig vom Alter). Danach `sec_erstmeldungen`,
+    `sec_aktienfakten` und `sec_aktienfakten_quartale` neu bauen.
+  - **SIC-Historie wird mit aktualisiert:** Je CIK werden die submissions geladen. Für jedes neue 10-K, dessen Kopf
+    noch nicht im Cache liegt, kommt der Einreichungskopf dazu; die SIC-Historie wird ergänzt.
+  - **Drosselung nach SEC-Regeln:**
+    - höchstens 8 Anfragen je Sekunde über die vorhandene `Drossel` (`config/fundamental.yaml`, SEC-Grenze 10/s),
+    - User-Agent aus `SEC_USER_AGENT` in `.env`, gzip,
+    - bei 429/503 Wiederholung mit Pause (`mit_wiederholung`),
+    - bei 403 lauter Abbruch ohne weitere Anfragen.
+  - **Prüfregel vor der Übernahme je CIK:**
+    - Alle bisherigen Erstmeldungen bleiben unverändert (taxonomie, konzept, einheit, start, ende, wert, filed, accn,
+      form); neu hinzukommen dürfen nur Zeilen.
+    - Für die SIC-Historie gilt dasselbe: bestehende Einträge bleiben, neue werden nur angehängt.
+    - Ist die Regel verletzt, behält diese CIK ihren alten Stand vollständig, und es gibt eine Meldung im Protokoll des
+      Werkzeugs und als Sofortmeldung. Spätere Korrekturen der SEC ersetzen so nie einen zuerst gemeldeten Wert.
+  - **Übernahme in den Betriebsstand:** jede Datei atomar. Am Ende schreibt das Werkzeug `STAND.json`:
+    - Zeitpunkt des Laufs und `erfolgreich` (ja/nein),
+    - je CIK Stand „übernommen“, „alter Stand“ (Prüfregel verletzt) oder „Fehler“, mit Abrufzeit und Text,
+    - `letzter_erfolg`: Zeitpunkt des letzten erfolgreichen Laufs. Nur ein erfolgreicher Lauf setzt ihn neu; sonst
+      wird er unverändert übernommen.
+  - **Schutz:**
+    - Es nimmt die Laufsperre (`betrieb/sperre.py`), läuft also nie neben einem Tageslauf.
+    - Es gilt die `Fehlerschwelle` wie in `tools/sec_fakten_universum.py`. Bei Überschreitung wird `STAND.json`
+      trotzdem geschrieben, mit `erfolgreich: false` und unverändertem `letzter_erfolg` (Jakob 23.11.2026). Bereits
+      geprüfte CIKs bleiben übernommen.
+  - **`--probe`:** läuft vollständig in der Probe-Schicht (`daten/schicht.py`), die zu Beginn geleert wird.
+    Betriebs- und Entwicklungsdaten bleiben byteweise unverändert.
+- **Zeitplan:**
+  - Windows-Aufgabenplanung, Samstag 10:00, verpasste Ausführung nachholen, auch im Akkubetrieb.
+  - Eigener Healthchecks-Check mit `HEALTHCHECKS_SEC_PING_URL` in `.env`: Erfolg pingt die URL, ein Fehlschlag
+    (Abbruch, Fehlerschwelle, 403) pingt `…/fail`.
+  - Erster echter Lauf am Samstag, 05.12.2026. Der Lauf am Samstag, 02.01.2027 liefert den Stand für den
+    Quartalswechsel am 04.01.2027.
+- **Meldungen im Tageslauf (nur Meldung, nie Stopp):**
+  - Das Protokoll nennt immer „SEC-Stand vom …“ (`letzter_erfolg` aus `STAND.json`) und, wenn der letzte Lauf nicht
+    erfolgreich war, auch diesen Lauf mit der Zahl der Fehler.
+  - Liegt `letzter_erfolg` mehr als **9 Tage** zurück, gibt es eine Sofortmeldung. Dasselbe gilt, wenn
+    `STAND.json` fehlt oder unlesbar ist; die Bewertung läuft dann mit dem vorhandenen Betriebs-Cache weiter.
+  - **Liste je Firma**, wenn die neueste Erstmeldung (`filed`) mehr als **120 Tage** vor dem Bewertungstag liegt:
+    Symbol und Alter in Tagen.
+  - **Immer:** die Zahl der Firmen, die wegen `veraltet` aus der Bewertung fallen (bisher still).
+
+### Entwicklungs-Cache: Aktualisierung nur ausdrücklich (Zusage, Jakob 23.11.2026)
+
+- Der `SecClient` lädt außerhalb des Betriebs nicht mehr von selbst neu; bisher geschah das nach 7 Tagen
+  (`cache_max_alter_tage`). Was im Cache liegt, gilt.
+- Nachgeladen wird nur, was fehlt, oder auf ausdrücklichen Schalter bzw. mit einem eigenen Werkzeug. Jede solche
+  Aktualisierung wird mit Datum und Anlass dokumentiert.
+- **Zusage:** Vor jedem Backtest-Neulauf wird festgehalten, ob der Entwicklungs-Cache seit dem letzten Lauf
+  aktualisiert wurde und mit welchem Stand der Lauf rechnet. Eine Aktualisierung zwischen zwei Läufen, die verglichen
+  werden, braucht Jakobs Zustimmung.
+- Umsetzung in Schritt 1, zusammen mit dem eigenen Cache des Betriebs.
+
+### Abnahme A (Schritt 1, vor dem Merge, ohne Download)
+
+- **A1 Übernahme:** Dateizahl je Bereich und SHA-256 jeder übernommenen Datei sind gleich der Quelle.
+- **A2 Bewertung:** `tools/bewertung_vergleich.py` meldet versiegelt „identisch“ gegen die Referenz vom 18.11.2026
+  (Git 6e4ff8a, eingefrorene Eingaben).
+  - Das Werkzeug bildet dafür die neuen Pfade (`betrieb/cache/<Bereich>`) auf die eingefrorenen Dateien
+    (`cache/<Bereich>`) ab, nur für die SEC-Bereiche und mit SHA-Prüfung.
+  - Diese Erweiterung bekommt einen eigenen Test. Die Referenz wird nicht ersetzt.
+- **A3 Trennung:** Test byteweise, dass Betriebs- und Probewege den Entwicklungs-Cache nicht verändern. Gegenprobe
+  an echten Daten mit einer Probe: 0 Dateien außerhalb der Schicht geändert.
+- **A4 Entwicklung:** Test, dass `SecClient` außerhalb des Betriebs ohne Schalter nicht nachlädt, auch wenn der Cache
+  älter als 7 Tage ist.
+- **A5:** volle Testsuite grün, einschließlich `tests/musterloesungen/test_uebungen.py`.
+
+### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
+
+- **B1 Bestand:** Je CIK sind alle Erstmeldungen des Entwicklungs-Caches (Stand 02.11.2026) im Betriebs-Cache
+  identisch (alle Spalten aus der Prüfregel). Kriterium: keine Abweichung. Abweichende CIKs bleiben nach der
+  Prüfregel auf dem alten Stand und stehen einzeln im Bericht.
+- **B2 Neue Zeilen:** Neue Erstmeldungen haben `filed` am oder nach dem 30.10.2026 (letzter Handelstag vor dem Abruf
+  am 02.11.2026 und ein Tag Puffer für die Verzögerung der SEC-API). Kriterium: keine neue Zeile mit früherem `filed`.
+  Jede gefundene Zeile steht einzeln im Bericht.
+- **B3 Bewertung, begrenzt:** Mit dem Betriebs-Cache, SEC-Zeilen begrenzt auf `filed` ≤ 01.11.2026, liefert
+  `bewertung_am(18.11.2026)` im versiegelten Vergleich „identisch“ gegen die Referenz. Dafür bekommt das Werkzeug die
+  Begrenzung als Schalter, mit Test.
+- **B4 Bewertung, voll:** Ohne Begrenzung weichen nur Firmen ab, die eine neue Erstmeldung mit `filed` ab dem
+  02.11.2026 haben. Jede Abweichung steht mit Firma, Einreichung und geänderten Kennzahlen im Bericht.
+- **B5 Trennung:** Der Entwicklungs-Cache ist vor und nach dem Lauf byteweise gleich (SHA-Liste).
+- **B6 Lauf:**
+  - Das Protokoll nennt Zahl der Anfragen, Dauer, gemessene höchste Rate (≤ 8/s), Fehler unter der Fehlerschwelle,
+    `STAND.json` und den Erfolgs-Ping.
+  - Die Probe davor (`--probe`) hat 0 Dateien außerhalb der Schicht geändert.
+- **B7 Tageslauf:** Der Tageslauf nach dem 05.12.2026 zeigt den SEC-Stand, die Liste über 120 Tage und die Zahl der
+  wegen `veraltet` herausfallenden Firmen.
