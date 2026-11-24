@@ -909,6 +909,29 @@ Festgehalten am 24.11.2026 um 14:27, **vor** jeder Codeänderung und vor dem Lau
   Bewertungsvergleich (`tools/bewertung_vergleich.py`), erwartet „identisch“.
 - **Zeit:** Code bis 17:30; kein Lauf parallel zum Tageslauf.
 
+**Ergebnis (24.11.2026, übernommen):**
+
+- **Erster Lauf (14:46):**
+  - SMCI, ANET, ETR, PANW und TSCO werden wie erwartet „unklar“ (kein Periodenbericht danach bis zur Grenze).
+  - Zusätzlich fehlten 7 Einträge im Kandidaten, darunter 3 geprüfte: FERG 2018, ECHO 2019, TTD 2021, FLEX 2024 und
+    WSM 2024 (Firmen erst ab 2025/2026 im Index) sowie DD (CIK 30554) 2019 ×2 (Kursreihe seit der vierten Datenkorrektur
+    am 31.08.2017 gekappt).
+  - Entscheidung Jakob 24.11.2026: Solche Einträge bleiben unverändert und werden eigens gezählt; die Abnahme zählt
+    gestrichene oder geänderte geprüfte Einträge als Verletzung.
+- **Belege und Freigabe:** 8-K-Belege in `daten/fundamental/einordnung/belege/`, alle Vollzugs-8-K (Item 5.03) mit
+  `filed` ≤ 31.12.2024. Jakob hat alle fünf einzeln als geprüften Split freigegeben (SMCI 10:1, ANET 4:1, ETR 2:1, PANW 2:1,
+  TSCO 5:1; Quelle mit accn und filed im Eintrag).
+- **Zweiter Lauf (15:11):**
+  - 266 Einträge wie vorher. Geändert sind nur die fünf (Art und Split-Faktor gleich, jetzt geprüft mit Quelle aus 2024)
+    und zwei Anzeigen GOOG → GOOGL (CIK 1652044).
+  - Abnahme: 0 Verletzungen, Versiegelung 0 von 16.194 Dateien, 0 Netzversuche.
+- **Gleichstand in `sec_verhaeltnis`:** In 112 von 206 Ereignissen gibt es einen Gleichstand; in 45 ändert sich r bei
+  umgekehrter Zeilenfolge, meist im Promille- oder Millionstel-Bereich (größter Fall AMZN 2022: 19,978 gegen 20,006).
+  Die Art ändert sich in keinem Fall. Keine Änderung (Jakob).
+- **Übernahme:** Die Liste wurde um 15:13 übernommen; die alte ist gesichert in
+  `daten/fundamental/sicherung/kapitalmassnahmen_historie_2026-11-24_151329.yaml`. Der versiegelte Bewertungsvergleich
+  meldet „identisch“ (398 Firmen, Bewertung und Ranglisten A und B). Bericht: `docs/berichte/2026-11-24_1511_split_ereignisse.md`.
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt

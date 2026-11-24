@@ -6,7 +6,7 @@
 # (kapitalmassnahmen_historie.korrektur geht von den Ereignissen der Kursreihe aus). Einträge ab 2025 stammen aus
 # Läufen im Betriebsmodus bis 13.11.2026 und dienen dem Betrieb; seit 16.11.2026 ordnet das Werkzeug nur bis zur
 # Tresorgrenze ein und übernimmt sie unverändert (docs/TRESOR_BEKANNT.md).
-stand: '2026-11-13T12:54:11'
+stand: '2026-11-24T15:11:00'
 ereignisse:
 - cik: 107263
   ticker: WMB
@@ -580,7 +580,7 @@ ereignisse:
   geprueft: false
   bemerkung: SEC-Verhältnis = Faktor
 - cik: 1652044
-  ticker: GOOG
+  ticker: GOOGL
   datum: '2014-03-27'
   faktor_kursreihe: 2.002
   sec_verhaeltnis: 2.0
@@ -836,7 +836,7 @@ ereignisse:
   geprueft: false
   bemerkung: SEC-Verhältnis = Faktor
 - cik: 1652044
-  ticker: GOOG
+  ticker: GOOGL
   datum: '2015-04-27'
   faktor_kursreihe: 1.002746
   sec_verhaeltnis: 1.0
@@ -2598,13 +2598,15 @@ ereignisse:
   ticker: SMCI
   datum: '2024-10-01'
   faktor_kursreihe: 10.0
-  sec_verhaeltnis: 10.000019
-  sec_einreichungen: 2024-02-02 → 2025-02-25
+  sec_verhaeltnis:
+  sec_einreichungen:
   art: split
   split_faktor: 10.0
-  quelle: SEC-Vergleich automatisch
-  geprueft: false
-  bemerkung: SEC-Verhältnis = Faktor
+  quelle: 'SEC 8-K 2024-09-30 (0001375365-24-000035): „every one (1) share … divided
+    into ten (10)“, wirksam 30.09.2024 17:00 ET, Handel split-bereinigt ab 01.10.2024;
+    Regel c3 Schritt 1b, Variante b (Jakob 24.11.2026), freigegeben Jakob 24.11.2026'
+  geprueft: true
+  bemerkung: kein Periodenbericht danach
 - cik: 707549
   ticker: LRCX
   datum: '2024-10-03'
@@ -2620,46 +2622,54 @@ ereignisse:
   ticker: ANET
   datum: '2024-12-04'
   faktor_kursreihe: 4.0
-  sec_verhaeltnis: 4.000003
-  sec_einreichungen: 2024-02-13 → 2025-02-19
+  sec_verhaeltnis:
+  sec_einreichungen:
   art: split
   split_faktor: 4.0
-  quelle: SEC-Vergleich automatisch
-  geprueft: false
-  bemerkung: SEC-Verhältnis = Faktor
+  quelle: 'SEC 8-K 2024-12-03 (0001596532-24-000402): „four-for-one forward stock
+    split“, wirksam 03.12.2024 16:30 ET; Regel c3 Schritt 1b, Variante b (Jakob 24.11.2026),
+    freigegeben Jakob 24.11.2026'
+  geprueft: true
+  bemerkung: kein Periodenbericht danach
 - cik: 65984
   ticker: ETR
   datum: '2024-12-13'
   faktor_kursreihe: 2.0
-  sec_verhaeltnis: 2.0
-  sec_einreichungen: 2024-02-23 → 2025-02-18
+  sec_verhaeltnis:
+  sec_einreichungen:
   art: split
   split_faktor: 2.0
-  quelle: SEC-Vergleich automatisch
-  geprueft: false
-  bemerkung: SEC-Verhältnis = Faktor
+  quelle: 'SEC 8-K 2024-12-12 (0000065984-24-000123): „2:1 stock split“, wirksam 12.12.2024
+    17:00 ET, Handel split-bereinigt ab 13.12.2024; Regel c3 Schritt 1b, Variante
+    b (Jakob 24.11.2026), freigegeben Jakob 24.11.2026'
+  geprueft: true
+  bemerkung: kein Periodenbericht danach
 - cik: 1327567
   ticker: PANW
   datum: '2024-12-16'
   faktor_kursreihe: 2.0
-  sec_verhaeltnis: 1.999682
-  sec_einreichungen: 2024-02-21 → 2025-02-14
+  sec_verhaeltnis:
+  sec_einreichungen:
   art: split
   split_faktor: 2.0
-  quelle: SEC-Vergleich automatisch
-  geprueft: false
-  bemerkung: SEC-Verhältnis = Faktor
+  quelle: 'SEC 8-K 2024-12-12 (0001193125-24-277082): „two-for-one stock split“, wirksam
+    12.12.2024 16:01 ET, Handel split-bereinigt ab 16.12.2024; Regel c3 Schritt 1b,
+    Variante b (Jakob 24.11.2026), freigegeben Jakob 24.11.2026'
+  geprueft: true
+  bemerkung: kein Periodenbericht danach
 - cik: 916365
   ticker: TSCO
   datum: '2024-12-20'
   faktor_kursreihe: 5.0
-  sec_verhaeltnis: 5.0
-  sec_einreichungen: 2024-02-23 → 2025-02-20
+  sec_verhaeltnis:
+  sec_einreichungen:
   art: split
   split_faktor: 5.0
-  quelle: SEC-Vergleich automatisch
-  geprueft: false
-  bemerkung: SEC-Verhältnis = Faktor
+  quelle: 'SEC 8-K 2024-12-20 (0000916365-24-000117): „5-for-1 forward split“, wirksam
+    19.12.2024 17:00 ET, Handel split-bereinigt ab 20.12.2024; Regel c3 Schritt 1b,
+    Variante b (Jakob 24.11.2026), freigegeben Jakob 24.11.2026'
+  geprueft: true
+  bemerkung: kein Periodenbericht danach
 - cik: 920760
   ticker: LEN
   datum: '2025-01-21'
@@ -2984,5 +2994,6 @@ ereignisse:
   split_faktor: 8.0
   quelle: 'SEC 8-K 29.10.2026 (0001628280-26-068243): Aktiensplit 8:1, wirksam 20.11.2026'
   geprueft: true
-  bemerkung: 'bestätigt Jakob 24.11.2026 (https://www.sec.gov/Archives/edgar/data/0002023554/000162828026068243/sndk-20261029.htm);
-    vorher im Betrieb „unklar“ (kein Periodenbericht nach dem Split)'
+  bemerkung: bestätigt Jakob 24.11.2026 
+    (https://www.sec.gov/Archives/edgar/data/0002023554/000162828026068243/sndk-20261029.htm);
+    vorher im Betrieb „unklar“ (kein Periodenbericht nach dem Split)
