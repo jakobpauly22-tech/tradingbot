@@ -158,3 +158,27 @@ journal:
 bedienung:
   start: Tageslauf.bat                 # Doppelklick, ohne Terminal: Tageslauf und Freigabe in einem Fenster
   gateway_pruefen_vor_senden: true     # nicht verbunden → sauber abbrechen, Vorschläge bleiben bis 24 Uhr freigebbar
+
+sec_meldungen:                         # SEC-Aktualisierung Schritt 3 (Festlegung Jakob 23.11.2026, docs/BETRIEB.md); nur Meldung, nie Stopp
+  stand_max_tage: 9                    # letzter_erfolg in STAND.json älter → Sofortmeldung (auch bei fehlender/unlesbarer Datei)
+  meldung_max_alter_tage: 120          # neueste Erstmeldung einer Firma älter → Liste im Protokoll (Bewertungstag)
+  bekannt:                             # eigene Gruppe „bekannt“ (Jakob 24.11.2026): Befund A2 vom 23.11.2026, Mitanmelder ohne 10-Q Juli/Okt. 2026 in den companyfacts
+    936340: DTE Energy
+    92122: Southern Company
+    1032208: Sempra
+    1047862: Consolidated Edison
+    922224: PPL Corporation
+    753308: NextEra Energy
+    1004980: PG&E Corporation
+    1130310: CenterPoint Energy
+    4904: American Electric Power
+    1031296: FirstEnergy
+    352541: Alliant Energy
+    715957: Dominion Energy
+    1109357: Exelon
+    910606: Regency Centers
+    920522: Essex Property Trust
+    879101: Kimco Realty
+    912595: Mid-America Apartment Communities
+    34903: Federal Realty Investment Trust
+    34088: Exxon Mobil (alte CIK)

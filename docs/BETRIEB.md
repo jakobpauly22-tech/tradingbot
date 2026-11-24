@@ -855,6 +855,26 @@ gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder
   - Datenmenge: 2,06 GB entpackt. Die übertragene Menge schwankt zwischen den Läufen (1,18 GB bzw. 0,85 GB), weil
     `Content-Length` nicht bei jeder Antwort mitkommt; sie ist nur ein Richtwert.
 
+### Stand Schritt 3 (24.11.2026): Meldungen im Tageslauf
+
+- `betrieb/secmeldungen.py`; Schwellen und die Gruppe „bekannt“ in `config/betrieb.yaml` (`sec_meldungen`).
+- **SEC-Stand:** Gleich zu Beginn jedes Tageslaufs (auch wenn er später stoppt) steht eine Zeile „SEC-Stand vom …“
+  bzw. „SEC-Stand unbekannt“ im Protokoll, bei nicht erfolgreichem letzten Lauf mit der Zahl der Fehler.
+  Sofortmeldung: `letzter_erfolg` mehr als 9 Tage alt, kein erfolgreicher Lauf, `STAND.json` fehlt oder ist unlesbar.
+- **Je Firma** (nur an Tagen mit Fundamental-Bewertung, Alter = Bewertungstag − neueste `filed`): Liste „älter als
+  120 Tage“ und getrennt die Gruppe **„bekannt“**. Sie umfasst die 19 CIKs aus Befund A2 (Jakob 24.11.2026): DTE,
+  Southern, Sempra, Consolidated Edison, PPL, NextEra, PG&E Corp, CenterPoint, AEP, FirstEnergy, Alliant, Dominion,
+  Exelon, Regency, Essex, Kimco, Mid-America, Federal Realty, Exxon Mobil (alte CIK 34088). Eine Firma gehört zur Gruppe,
+  wenn eine ihrer CIKs dabei ist. Die REITs darunter sind Finanzwerte und erscheinen nicht, weil sie nicht bewertet werden.
+- **Immer bei einer Bewertung:** Zahl (und Symbole) der Firmen, die wegen `veraltet` herausfallen.
+- **Telegram nur bei Sofortmeldung** (Jakob 24.11.2026); alle übrigen Zeilen stehen nur im Protokoll.
+- **Probe an echten Daten** (24.11.2026, Probe-Schicht, Betriebs-Cache aus der Übernahme, Stand 02.11.2026, Bewertungstag
+  23.11.2026, ohne Kursabruf): 397 Firmen bewertet.
+  - Älter als 120 Tage: 8 Firmen (OKTA ohne Meldung, ABT, V, VRSK 208 Tage, JCI 201 Tage, DHI 123, CHTR 122, TEL 122).
+  - Gruppe „bekannt“: 12 Firmen (LNT, EXC, ED, PPL, FE, SRE, SO, D, DTE, AEP, NEE, PCG; 123 bis 206 Tage).
+  - Veraltet: 3 (FERG, OKTA, SKYD).
+  - Ohne `STAND.json` (vor dem ersten Lauf am 05.12.) gibt es die Sofortmeldung „STAND.json fehlt“.
+
 ### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
 
 - **B1 Bestand:** Je CIK sind alle Erstmeldungen des Entwicklungs-Caches (Stand 02.11.2026) im Betriebs-Cache

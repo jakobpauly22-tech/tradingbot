@@ -462,11 +462,13 @@ def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None
 
 # --- Tageslauf --------------------------------------------------------------------------------------------------------
 def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundamental_bewertung=None, risk: RiskManager | None = None,
-              konfig: dict | None = None, sichern: bool = True, flex="env", regime_daten=None) -> Laufergebnis:
+              konfig: dict | None = None, sichern: bool = True, flex="env", regime_daten=None, sec_stand="auto") -> Laufergebnis:
     """Ein Tageslauf. `kurse_laden(ticker, bis, art) -> DataFrame` (EUR-Kurse) und `fundamental_bewertung(tag)` sind
     austauschbar (Tests); Standard sind Yahoo-Kurse und engines/fundamental/aktuell.py. `flex`: Beleg-Quelle für
     Ausführungen außerhalb des API-Zeitfensters („env“ = Flex-Abfrage aus .env, None = keine, sonst Funktion).
-    `regime_daten(tag, ticker) -> (Schlusskurse ab 2012, makro_laden)` für das Schattenbuch regime (betrieb/regimebuch.py)."""
+    `regime_daten(tag, ticker) -> (Schlusskurse ab 2012, makro_laden)` für das Schattenbuch regime (betrieb/regimebuch.py).
+    `sec_stand() -> dict` liest `STAND.json` der SEC-Aktualisierung (betrieb/secmeldungen.py); „auto“ = im Betriebsmodus aus
+    dem SEC-Cache des Betriebs, sonst keine SEC-Zeile; None = keine SEC-Zeile."""
     from tradingbot.konfiguration import lade_konfiguration
 
     konfig = konfig or {n: lade_konfiguration(n) for n in ("betrieb", "technik", "fundamental", "backtest")}
@@ -484,6 +486,23 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         return e
     xetra, nyse = letzte_abgeschlossene_sitzung("xetra", jetzt), letzte_abgeschlossene_sitzung("nyse", jetzt)
     erg.xetra, erg.nyse = xetra, nyse
+    # SEC-Stand (Schritt 3, Jakob 23.11.2026): immer eine Protokollzeile, Sofortmeldung bei altem/fehlendem Stand; nie Stopp
+    from tradingbot.betrieb import secmeldungen
+    if sec_stand == "auto":
+        from tradingbot.backtest.tresor import im_betriebsmodus
+        if im_betriebsmodus():
+            from tradingbot.daten.sec import sec_rohwurzel
+            sec_stand = lambda: secmeldungen.stand_lesen(sec_rohwurzel())  # noqa: E731
+        else:
+            sec_stand = None
+    sec_konfig = b.get("sec_meldungen") or {}
+    if sec_stand is not None:
+        try:
+            zeilen, sofort = secmeldungen.stand_meldungen(sec_stand, jetzt, sec_konfig)
+        except Exception as f:  # noqa: BLE001 – Meldung, nie Stopp
+            zeilen = sofort = [f"SEC-Stand nicht prüfbar ({type(f).__name__}: {f}) – Bewertung läuft mit dem vorhandenen Betriebs-Cache weiter"]
+        erg.meldungen += zeilen
+        erg.sofort += sofort
     tag = pd.Timestamp(xetra)
     aufschlag = float(b["orders"]["kauf"]["aufschlag_vortagesschluss"])
     max_sprung = float(b["datenpruefung"]["max_tagessprung"])
@@ -758,6 +777,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         if splits_flex:
             meldungen = [f"Aktienzahl mit Split-Verhältnis aus Flex (Quelle: Flex): {', '.join(sorted(splits_flex))}"] + list(meldungen)
         erg.meldungen += meldungen[:5]
+        erg.meldungen += secmeldungen.firmen_meldungen(bewertung.attrs.get("sec"), nyse, sec_konfig)
         erg.meldungen += datenkorrektur_vermerken(journal, bewertung, nyse, jetzt)
         bewertung, raus = nicht_handelbare_entfernen(bewertung, nyse)
         erg.meldungen += raus

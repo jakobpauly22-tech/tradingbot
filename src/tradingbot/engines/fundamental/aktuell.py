@@ -151,6 +151,7 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
     max_alter = (konfig.get("marktwert_korrektur") or {}).get("aktien_max_alter_monate", 15)
     ereignisse = lade_ereignisse()
     schwelle = Fehlerschwelle("Betrieb: Fundamental-Bewertung je Firma")
+    sec_info = {"firmen": [], "veraltet": []}            # SEC-Meldungen im Tageslauf (Schritt 3, betrieb/secmeldungen.py)
     for firma in sorted({firmen_schluessel(z, nr) for nr, z in mitglieder.iterrows()}):
         if isinstance(firma, str) or daten.kurse.get(firma) is None:
             continue
@@ -161,6 +162,9 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
         try:
             zeile = daten.relevant[daten.relevant["cik"] == firma].iloc[0]
             erst = zusammenlegen([cache.lesen("sec_erstmeldungen", cik10(c))[0] for c in ciks_der_zeile(zeile)])
+            from tradingbot.betrieb.secmeldungen import neueste_meldung
+            sec_info["firmen"].append({"firma": firma, "symbol": symbol_je_firma.get(firma), "ciks": [int(c) for c in ciks_der_zeile(zeile)],
+                                       "neueste": None if (nm := neueste_meldung(erst)) is None else str(nm.date())})
             werte = jahreswerte_firma(erst, kennzahlen)
             kurse = daten.kurse[firma]
             if splits_flex and symbol_je_firma.get(firma) in splits_flex:
@@ -170,6 +174,7 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
                       if len(a) else pd.Series(dtype=float))
             t, info = abschluesse_am(werte, tag, aktualitaet_monate=aktualitaet)
             if t.empty or info["veraltet"]:
+                sec_info["veraltet"].append(symbol_je_firma.get(firma) or firma)
                 schwelle.zaehle(None)
                 continue
             mw_alt, _ = marktwert_am(tag, kurse["close"], aktien, daten.streubesitz_gueltig.get(firma))
@@ -214,7 +219,9 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
             fehler = f"{firma}: {type(f).__name__} {str(f)[:60]}"
         schwelle.zaehle(fehler)
     schwelle.pruefe()
-    return pd.DataFrame(zeilen), symbol_je_firma, meldungen
+    ergebnis = pd.DataFrame(zeilen)
+    ergebnis.attrs["sec"] = sec_info
+    return ergebnis, symbol_je_firma, meldungen
 
 
 def rangliste(bewertung: pd.DataFrame, variante: str) -> pd.DataFrame:

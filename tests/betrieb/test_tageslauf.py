@@ -631,3 +631,35 @@ def test_wiederholter_signaltag_nach_ausfuehrung_keine_restkasse_momentum(umgebu
     erst = sorted(bv.vorschlag.ticker for bv, _ in e1.vorschlaege if bv.vorschlag.buch == "momentum")
     assert erst and erst == sorted(bv.vorschlag.ticker for bv, _ in e2.vorschlaege if bv.vorschlag.buch == "momentum")
     j2.schliessen()
+
+
+# --- SEC-Aktualisierung Schritt 3: Meldungen im Tageslauf (Jakob 23./24.11.2026) ------------------------------------
+def test_sec_stand_im_tageslauf_meldung_und_sofort(umgebung):
+    j, rm = umgebung
+
+    def fehlt():
+        raise FileNotFoundError("STAND.json")
+    e = lauf(j, rm, sec_stand=fehlt)
+    treffer = [m for m in e.meldungen if m.startswith("SEC-Stand unbekannt: STAND.json fehlt")]
+    assert len(treffer) == 1 and treffer == [s for s in e.sofort if s.startswith("SEC-Stand")]
+    e2 = lauf(j, rm, sec_stand=lambda: {"erfolgreich": True, "letzter_erfolg": "2026-11-01T10:00:00+01:00"})
+    assert "SEC-Stand vom 01.11.2026 10:00 (letzter erfolgreicher Lauf)" in e2.meldungen
+    assert not any(s.startswith("SEC-Stand") for s in e2.sofort)           # ABEND = 02.11.2026: einen Tag alt
+    e3 = lauf(j, rm, sec_stand=None)                                         # ohne Betriebsmodus: keine SEC-Zeile
+    assert not any(m.startswith("SEC") for m in e3.meldungen)
+
+
+def test_sec_firmen_aus_der_bewertung_nur_protokoll(umgebung):
+    j, rm = umgebung
+
+    def bewertung_mit_sec(tag):
+        b, s, m = bewertung_attrappe(tag)
+        b.attrs["sec"] = {"firmen": [{"firma": 0, "symbol": "US0", "ciks": [1], "neueste": pd.Timestamp(tag) - pd.Timedelta(days=200)},
+                                     {"firma": 1, "symbol": "DTE", "ciks": [936340], "neueste": pd.Timestamp(tag) - pd.Timedelta(days=150)}],
+                          "veraltet": ["ALT"]}
+        return b, s, m
+    e = tageslauf(ABEND, j, kurse_laden=kurse_attrappe(), fundamental_bewertung=bewertung_mit_sec, risk=rm, sichern=False, sec_stand=None)
+    assert any(m.startswith("SEC: 1 Firma(en) mit neuester Meldung älter als 120 Tage") and "US0 200 Tage" in m for m in e.meldungen)
+    assert any(m.startswith("SEC bekannt") and "DTE 150 Tage" in m for m in e.meldungen)
+    assert "SEC: 1 Firma(en) wegen veraltetem Abschluss nicht bewertet (ALT)" in e.meldungen
+    assert not any(s.startswith("SEC") for s in e.sofort)                    # Telegram nur bei Sofortmeldung
