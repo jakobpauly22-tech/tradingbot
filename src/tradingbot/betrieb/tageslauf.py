@@ -677,12 +677,21 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         verpasst = verpasste_handelstage("xetra", seit, tag)
         if verpasst and any(x > 0 for x in bestand.values()):
             erg.meldungen.append(f"{buch}: {len(verpasst)} Handelstag(e) ohne Lauf seit {pd.Timestamp(seit):%d.%m.%Y} geprüft "
-                                 f"({', '.join(f'{d:%d.%m.}' for d in verpasst)}): Ausstiege werden nachgeholt, Einstiege nur mit "
-                                 "Signal am aktuellen Tag")
+                                 f"({', '.join(f'{d:%d.%m.}' for d in verpasst)}): Ausstiege werden nachgeholt, wenn ihre "
+                                 "Bedingung am aktuellen Tag noch gilt; Einstiege nur mit Signal am aktuellen Tag")
+        verworfen: list[dict] = []
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
                            reserviert=journal.kasse(buch) - frei_buch,
-                           nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)), verpasste_tage=verpasst)
+                           nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)), verpasste_tage=verpasst,
+                           verworfen=verworfen)
+        for f in verworfen:                          # Jakob 23.11.2026: verpasster Ausstieg, Bedingung nicht mehr erfüllt
+            text = (f"{buch} {f['ticker']}: Ausstieg vom {pd.Timestamp(f['ausloese_tag']):%d.%m.%Y} verpasst, Bedingung am "
+                    f"{tag:%d.%m.%Y} nicht mehr erfüllt, Position bleibt (Abweichung vom Backtest)")
+            erg.meldungen.append(text)
+            if not journal.db.execute("SELECT 1 FROM ereignisse WHERE art='ausstieg_verpasst' AND buch=? AND text LIKE ?",
+                                      (buch, text + "%")).fetchone():
+                journal.ereignis("ausstieg_verpasst", f"{text}; Auslöser: {f['grund']}", buch)
         journal.zustand_nach_lauf(buch, tag, vor, z)
         roh += v
     erg.befunde.pop("technik", None)

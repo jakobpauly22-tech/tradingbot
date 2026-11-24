@@ -10,6 +10,7 @@ Ablauf am Abend: `docs/BETRIEB_ABEND.md`.
 | 04.11.2026 | **US-Käufe als Limit-On-Open** (tif OPG) | Ausführung zur Eröffnung, unabhängig von der Freigabezeit | Nimmt IBKR OPG für ein Papier nicht an, wird die Order abgelehnt gemeldet. Ein Ersatz-Ordertyp kommt nur mit Jakobs Zustimmung. Je Ausführung stehen Zeit, Handelsplatz und Eröffnungskurs des Heimatplatzes im Journal, die Abweichung im Protokoll. |
 | 04.11.2026 | **Nachkauf abgelehnter oder verfallener Käufe** | Restfall eines Aufbaus (Jakob) | Fundamental: bis zum nächsten Quartalsstichtag, mit dem Gewicht vom letzten Stichtag. Technik: solange das Signal gilt (Crossover SMA50 > SMA200, Momentum 12−1 > 0). Der Backtest kennt keine Ablehnungen. |
 | 03.11.2026 | **Stückzahl der Technik-Käufe zusätzlich durch die 1-%-Regel vom Limit begrenzt** | Risiko vom schlechtesten Einstieg (Jakob) | Der Backtest begrenzt über das Gewicht (Risiko vom Schluss, Ausführung zur Eröffnung); im Betrieb können es einzelne Stücke weniger sein. Zielgewichte, Reihenfolge nach Stärke und Restkasse kommen aus derselben Funktion `SatelliteStrategie.zielgewichte` wie im Backtest. |
+| 23.11.2026 | **Verpasste Ausstiege nur bei weiter erfüllter Bedingung nachgeholt** (Technikbücher) | Verpasster Lauf am 20.11.2026 (Tageslauf wegen nicht verbuchbarer Dividendenbelege gestoppt); am 23.11. wurden vier Stops vom 20.11. nachgeholt, obwohl die Kurse wieder über dem Stop lagen (Jakob) | Der Backtest verkauft zur nächsten Eröffnung nach dem Auslösetag. Im Betrieb entfällt ein verpasster Ausstieg, wenn seine Bedingung am aktuellen Signaltag nicht mehr gilt; die Position bleibt. Jeder Fall steht im Protokoll und im Journal (`ereignisse`, Art `ausstieg_verpasst`), damit sich die Abweichung zählen lässt. Abschnitt „Verpasste Ausstiege (Jakob 23.11.2026)“. |
 | 03.11.2026 | **Kauflimit auf die gültige Kursstufe abgerundet** (reqMarketRule, gemeinsame Stufe der Regeln von SMART und Xetra) | Fehler 110: SXR1 221,34 € verletzt die Stufe 0,05 € ab 200 € | Das Limit liegt höchstens eine Kursstufe unter Vortagesschluss + 2 %, die 2-%-Grenze bleibt eingehalten. Verkaufslimits (falls künftig) werden aufgerundet. |
 
 ## Gebühren (04.11.2026)
@@ -95,6 +96,40 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
 - **Probelauf auf einer Kopie des echten Journals:** `tools/tageslauf.py --kopie` (Gateway nur lesend, sendet nie, keine
   Sicherung).
 
+## Verpasste Ausstiege (Jakob 23.11.2026)
+
+**Anlass:** Am 20.11.2026 stoppte der Tageslauf, weil IBKR-Dividendenbelege ohne Ex-Tag und Satz je Stück nicht
+verbuchbar waren (Dividendenstopp). Der Lauf vom 23.11. holte die Stops vom 20.11. nach der Regel vom 09.11.2026 nach. Am
+23.11. lag der Schluss aber in allen vier Fällen wieder über dem Stop:
+
+| Buch | Titel | Stop | Schluss 20.11. | Schluss 23.11. |
+| --- | --- | --- | --- | --- |
+| crossover | IUSA.DE | 65,89 € | 64,06 € | 66,30 € |
+| crossover | IUSP.DE | 39,48 € | 39,42 € | 39,82 € |
+| momentum | EUNN.DE | 68,21 € | 67,03 € | 69,47 € |
+| momentum | IUSA.DE | 65,55 € | 64,06 € | 66,30 € |
+
+**Bewusste Nicht-Freigabe (Abweichung):** Jakob hat diese vier Verkäufe vom 23.11.2026 bewusst nicht freigegeben
+(`crossover-20261123-IUSA.DE-V`, `crossover-20261123-IUSP.DE-V`, `momentum-20261123-EUNN.DE-V`,
+`momentum-20261123-IUSA.DE-V`). Nach der damals geltenden Regel hätten sie verkauft werden müssen. Die Positionen bleiben
+also gegen die Regel vom 09.11.2026 im Buch; das ist eine Abweichung vom Backtest. Die neue Regel unten ersetzt die alte
+für alle Läufe ab dem 24.11.2026.
+
+**Regel:**
+- Ausstiege aus Handelstagen ohne Lauf werden nur vorgeschlagen, wenn ihre Bedingung am aktuellen Signaltag noch gilt
+  (`betrieb/buecher.ausstieg_gilt_noch`):
+  - Stop: Der Schluss liegt weiter auf oder unter dem Stop (dieselbe Grenze „≤“ wie der Stop der Strategie).
+  - Signalende Crossover: SMA50 liegt weiter unter SMA200.
+  - Signalende Momentum: 12−1 ist weiter ≤ 0.
+  - Bedingter Zeit-Stop (Crossover, Momentum): Das Signal ist weiter erloschen.
+- Gilt die Bedingung nicht mehr, gibt es keinen Vorschlag. Die Position bleibt mit Stop und Kauftag im Strategiezustand,
+  und die Strategie prüft sie ab dem aktuellen Tag normal weiter. Eine durch den verpassten Stop gesetzte Wiedereinstiegs-
+  sperre (Crossover) wird zurückgenommen.
+- Protokollzeile: „`<Buch> <Titel>`: Ausstieg vom `<Tag>` verpasst, Bedingung am `<Tag>` nicht mehr erfüllt, Position
+  bleibt (Abweichung vom Backtest)“. Journal: Ereignis `ausstieg_verpasst` mit derselben Zeile und dem Auslöser, je Fall
+  nur einmal (auch bei mehreren Läufen am selben Abend).
+- Einstiege bleiben wie bisher: Einstiege verpasster Tage werden verworfen, gekauft wird nur mit Signal am aktuellen Tag.
+
 ## Entscheidungen Jakob 09.11.2026 (nach dem Nachtrag)
 
 - **Verpasste Tage im Technikbuch:** Der Tageslauf prüft die Schlusskurse seit dem letzten Lauf der Reihe nach (Signaltag
@@ -102,6 +137,8 @@ dahin bekommt IUSM wie zuvor SXRM ein Veto „Kontrakt unbekannt“.
   wie im Backtest zur nächsten Gelegenheit nachgeholt; der Vorschlag nennt den Tag („Stop 69.04 gerissen am 06.11.,
   nachgeholt“). Einstiege verpasster Tage werden verworfen, gekauft wird nur, wenn das Signal am aktuellen Tag gilt (auch
   die Monatsprüfung von Momentum läuft am aktuellen Tag). Fundamental- und Realbuch haben keine Tagesausstiege.
+  **Geändert am 23.11.2026:** Nachgeholt wird nur noch, wenn die Bedingung am aktuellen Signaltag weiter gilt (Abschnitt
+  „Verpasste Ausstiege (Jakob 23.11.2026)“).
 - **Zinsen (Jakob 09.11., Zinsbilanz 10.11.2026):** Eine Kassenerhöhung ist eine belegte Zinsbuchung, wenn die
   aufgelaufenen Zinsen (`AccruedCash`) gesunken sind und die **Zinsbilanz** (Gutschrift + aktueller Zinsstand − letzter
   Zinsstand, also die seit dem letzten Lauf neu entstandenen Zinsen) zwischen −0,05 € und geschätztem Tageszins ×

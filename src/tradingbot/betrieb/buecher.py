@@ -166,6 +166,30 @@ def ausstiegsart(grund: str) -> str:
     return "stop" if grund.startswith("Stop") else ("zeit" if grund.startswith("Zeit-Stop") else "signal")
 
 
+def ausstieg_gilt_noch(regel, ticker: str, tag, grund: str, stop: float | None) -> bool:
+    """Gilt die Bedingung eines verpassten Ausstiegs am aktuellen Signaltag noch? (Jakob 23.11.2026)
+
+    - Stop: Schluss am aktuellen Tag weiterhin auf oder unter dem Stop (dieselbe Grenze ≤ wie der Stop in
+      `SatelliteStrategie.zielgewichte`).
+    - Signalende und Zeit-Stop (bei Crossover und Momentum bedingt, „Signal erloschen“): das Ausstiegssignal ist weiterhin
+      aktiv, also Momentum 12−1 ≤ 0 (`gilt_noch` falsch), Crossover SMA50 unter SMA200 (`ausstieg`).
+    Fehlt der Kurs des aktuellen Tags oder der Stop, gilt die Bedingung als erfüllt (Ausstieg wie bisher vorschlagen)."""
+    tag = pd.Timestamp(tag)
+    ind = regel.ind[ticker]
+    if tag not in ind.index:
+        return True
+    if ausstiegsart(grund) == "stop":
+        if stop is None:
+            try:
+                stop = float(grund.split()[1])
+            except (IndexError, ValueError):
+                return True
+        return bool(ind.loc[tag, "close"] <= stop)
+    if hasattr(regel, "gilt_noch"):
+        return not regel.gilt_noch(ticker, tag)
+    return regel.ausstieg(ticker, tag) is not None
+
+
 def verkauf_begruendung(regel: str, ind: pd.DataFrame, tag, ausloese_tag, grund: str,
                         stop: float | None) -> tuple[dict, list[str], list[str]]:
     """Kennzahlen, Zahlen und „Was dagegen spricht“ für einen Technik-Verkauf (Jakob 11.11.2026).
@@ -217,14 +241,20 @@ def verkauf_begruendung(regel: str, ind: pd.DataFrame, tag, ausloese_tag, grund:
 def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], orderkurs: dict[str, float], waehrung: dict[str, str],
                 fx: dict[str, float], kasse: float, bestand: dict[str, float], zustand: dict, konfig_technik: dict, aufschlag: float,
                 gebuehr, gesperrt_titel: set[str] = frozenset(), reserviert: float = 0.0,
-                nachkauf: set[str] = frozenset(), verpasste_tage=()) -> tuple[list[BuchVorschlag], dict]:
+                nachkauf: set[str] = frozenset(), verpasste_tage=(),
+                verworfen: list[dict] | None = None) -> tuple[list[BuchVorschlag], dict]:
     """`kasse` = freie Kasse (nach Orders unterwegs), `reserviert` = durch Orders unterwegs gebundene Kasse; der Buchwert
     für Zielgewichte und 1-%-Risiko enthält beides (Korrektur 03.11.2026: sonst halbe Stückzahlen bei Orders unterwegs).
 
     `verpasste_tage` (Jakob 09.11.2026): Handelstage ohne Lauf seit dem letzten Signaltag. Die Strategie prüft deren
     Schlusskurse der Reihe nach wie im Backtest; Ausstiege (Stop, Signalende, Zeit-Stop) werden zum heutigen Abend
     nachgeholt und im Vorschlag vermerkt („Stop … gerissen am 06.11., nachgeholt“). Einstiege verpasster Tage werden
-    verworfen; eingestiegen wird nur, wenn das Signal am aktuellen Tag gilt (Monatsprüfung Momentum am aktuellen Tag)."""
+    verworfen; eingestiegen wird nur, wenn das Signal am aktuellen Tag gilt (Monatsprüfung Momentum am aktuellen Tag).
+
+    Nachgeholte Ausstiege nur bei weiter erfüllter Bedingung (Jakob 23.11.2026, Anlass: verpasster Lauf 20.11.2026): Ein
+    Ausstieg aus einem verpassten Tag wird nur vorgeschlagen, wenn seine Bedingung am aktuellen Signaltag noch gilt
+    (`ausstieg_gilt_noch`). Sonst bleibt die Position (mit Stop und Kauftag) im Zustand, und der Fall wird an `verworfen`
+    angehängt ({"ticker", "ausloese_tag", "grund"}); Protokollzeile und Journal schreibt der Tageslauf."""
     from tradingbot.backtest.marktdaten import Marktdaten, Sicht
 
     tag = pd.Timestamp(tag)
@@ -239,6 +269,7 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
     nachgeholt: dict[str, tuple[pd.Timestamp, str]] = {}
     if gehalten and verpasste_tage:
         pruefmonate = {n: dict(r.pruefmonat) for n, r in s.regeln.items() if hasattr(r, "pruefmonat")}
+        sperren = {n: dict(r.gesperrt) for n, r in s.regeln.items() if hasattr(r, "gesperrt")}
         for d in sorted(pd.Timestamp(x) for x in verpasste_tage):
             if d >= tag or any(d not in s.ind[t].index for t in gehalten if t in s.ind):
                 continue
@@ -255,6 +286,19 @@ def technikbuch(buch: str, regel: str, tag, kurse_eur: dict[str, pd.DataFrame], 
                     del s.pos[t]
         for n, pm in pruefmonate.items():                  # Monatsprüfung (Einstiege) am aktuellen Tag
             s.regeln[n].pruefmonat = pm
+        # Bedingung am aktuellen Signaltag erneut prüfen (Jakob 23.11.2026); nicht mehr erfüllt → Position bleibt
+        for t, (d, g) in list(nachgeholt.items()):
+            p = s.pos.get(t)
+            if p is None or ausstieg_gilt_noch(s.regeln[p.regel], t, tag, g, p.stop):
+                continue
+            del nachgeholt[t]
+            for n, gs in sperren.items():                  # Sperre nach einem nicht ausgeführten Stop zurücknehmen
+                if t in gs:
+                    s.regeln[n].gesperrt[t] = gs[t]
+                else:
+                    s.regeln[n].gesperrt.pop(t, None)
+            if verworfen is not None:
+                verworfen.append({"ticker": t, "ausloese_tag": d, "grund": g})
     ziel = s.zielgewichte(tag, Sicht(m, tag, gehalten, kasse))
     vorschlaege = []
     wert = kasse + reserviert + sum(st * float(kurse_eur[t]["close"].loc[:tag].iloc[-1]) for t, st in bestand.items())

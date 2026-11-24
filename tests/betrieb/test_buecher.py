@@ -134,3 +134,62 @@ def test_technikbuch_verkauf_traegt_verkaufsdaten():
     d = v[0].daten
     assert d["aktion"] == "verkauf" and d["stop_kurs"] == 150.0 and d["bestand_wert"] == pytest.approx(900.0)
     assert "Auslöser:" in v[0].details
+
+
+def test_ausstieg_gilt_noch_stop_crossover_momentum():
+    """Jakob 23.11.2026: Bedingung eines verpassten Ausstiegs am aktuellen Signaltag."""
+    from tradingbot.betrieb.buecher import ausstieg_gilt_noch
+    from tradingbot.engines.technik.strategien import SatelliteStrategie
+    k = lade_konfiguration("technik")
+    steigend = {"A.DE": _kerzen(np.linspace(100, 160, 300))}
+    fallend = {"A.DE": _kerzen(np.linspace(160, 100, 300))}
+    for regel in ("crossover", "momentum"):
+        auf = SatelliteStrategie([regel], steigend, k).regeln[regel]
+        ab = SatelliteStrategie([regel], fallend, k).regeln[regel]
+        tag = steigend["A.DE"].index[-1]
+        # Stop: Schluss heute 160 → über 150 nicht mehr, unter 170 weiter erfüllt (≤ wie in der Strategie)
+        assert not ausstieg_gilt_noch(auf, "A.DE", tag, "Stop 150.00", 150.0)
+        assert ausstieg_gilt_noch(auf, "A.DE", tag, "Stop 170.00", None)
+        assert ausstieg_gilt_noch(auf, "A.DE", tag, "Stop 160.00", 160.0)
+        # Signalende und bedingter Zeit-Stop: Signal heute wieder an → nicht mehr erfüllt; weiter aus → erfüllt
+        for grund in ("SMA50 unter SMA200" if regel == "crossover" else "12−1 ≤ 0", "Zeit-Stop 63 Tage, Signal erloschen"):
+            assert not ausstieg_gilt_noch(auf, "A.DE", tag, grund, 90.0)
+            assert ausstieg_gilt_noch(ab, "A.DE", tag, grund, 90.0)
+    # Tag ohne Kurs: wie bisher vorschlagen
+    assert ausstieg_gilt_noch(auf, "A.DE", pd.Timestamp("2030-01-01"), "Stop 1.00", 1.0)
+
+
+def test_technikbuch_verpasster_signalausstieg_verworfen_wenn_trend_zurueck():
+    """Crossover: SMA50 an einem verpassten Tag unter SMA200, am aktuellen Tag wieder darüber → kein Verkauf, Eintrag in
+    `verworfen`, Position bleibt im Zustand. Ohne Erholung → Verkauf „…, nachgeholt“."""
+    from tradingbot.engines.technik.strategien import berechne_indikatoren
+    k = lade_konfiguration("technik")
+    schluss = np.r_[np.linspace(100, 160, 240), np.linspace(160, 60, 80)]
+    ind = berechne_indikatoren(_kerzen(schluss), k)
+    unter = ind.index[(ind["sma_schnell"] < ind["sma_langsam"])]
+    assert len(unter), "Testreihe braucht ein Kreuzen nach unten"
+    d = unter[0]
+    pos = ind.index.get_loc(d)
+    # Variante 1: nach dem Kreuzen kräftige Erholung, bis SMA50 wieder über SMA200 liegt
+    erholt = np.r_[schluss[:pos + 1], np.full(30, 400.0)]
+    ind_e = berechne_indikatoren(_kerzen(erholt), k)
+    tag = ind_e.index[-1]
+    assert ind_e.loc[tag, "sma_schnell"] > ind_e.loc[tag, "sma_langsam"]
+    kurse = {"A.DE": _kerzen(erholt)}
+    zustand = {"positionen": {"A.DE": {"regel": "crossover", "signal_tag": str(kurse["A.DE"].index[200].date()),
+                                       "kauf_tag": str(kurse["A.DE"].index[201].date()), "stop": 1.0, "atr_signal": 2.0}},
+               "vor_signaltag": str(kurse["A.DE"].index[pos - 1].date())}
+    verworfen = []
+    v, z = technikbuch("crossover", "crossover", tag, kurse, {"A.DE": 400.0}, {}, {}, 0.0, {"A.DE": 10}, zustand, k, 0.02, GEB,
+                       verpasste_tage=list(kurse["A.DE"].index[pos:-1]), verworfen=verworfen)
+    assert not [b for b in v if b.vorschlag.richtung < 0]
+    assert [(f["ticker"], f["ausloese_tag"], f["grund"]) for f in verworfen] == [("A.DE", d, "SMA50 unter SMA200")]
+    assert "A.DE" in z["positionen"]
+    # Variante 2: ohne Erholung → Verkauf nachgeholt, nichts verworfen
+    kurse2 = {"A.DE": _kerzen(schluss[:pos + 3])}
+    tag2 = kurse2["A.DE"].index[-1]
+    verworfen2 = []
+    v2, _ = technikbuch("crossover", "crossover", tag2, kurse2, {"A.DE": 100.0}, {}, {}, 0.0, {"A.DE": 10}, zustand, k, 0.02, GEB,
+                        verpasste_tage=list(kurse2["A.DE"].index[pos:-1]), verworfen=verworfen2)
+    assert verworfen2 == [] and [b.vorschlag.ticker for b in v2 if b.vorschlag.richtung < 0] == ["A.DE"]
+    assert "nachgeholt" in v2[0].kern

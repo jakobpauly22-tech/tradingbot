@@ -227,12 +227,15 @@ def test_zinsbuchung_mit_abnahme_der_aufgelaufenen_zinsen(umgebung):
 # --- Verpasste Tage im Technikbuch (Jakob 09.11.2026) ----------------------------------------------------------------
 def _mit_einbruch(ticker, tag, faktor):
     basis = kurse_attrappe()
+    tage = [pd.Timestamp(x) for x in ([tag] if isinstance(tag, str) else tag)]
 
     def laden(t, bis, art):
         k = basis(t, bis, art)
-        if t == ticker and pd.Timestamp(tag) in k.index:
+        if t == ticker:
             k = k.copy()
-            k.loc[pd.Timestamp(tag), ["low", "close"]] = k.loc[pd.Timestamp(tag), ["low", "close"]] * faktor
+            for d in tage:
+                if d in k.index:
+                    k.loc[d, ["low", "close"]] = k.loc[d, ["low", "close"]] * faktor
         return k
     return laden
 
@@ -255,16 +258,39 @@ FREITAG = datetime(2026, 11, 6, 23, 30, tzinfo=ZoneInfo("Europe/Berlin"))       
 
 
 def test_verpasste_tage_stop_wird_nachgeholt(umgebung):
+    """Stop am 04.11. gerissen, Schluss am 06.11. weiter unter dem Stop → Verkauf nachgeholt (Jakob 09. und 23.11.2026)."""
     j, rm = umgebung
     titel = _crossover_gekauft(j, rm)
     t = titel[0]
-    e = lauf(j, rm, jetzt=FREITAG, kurse=_mit_einbruch(t, "2026-11-04", 0.8))
+    e = lauf(j, rm, jetzt=FREITAG, kurse=_mit_einbruch(t, ["2026-11-04", "2026-11-05", "2026-11-06"], 0.8))
     assert any("Handelstag(e) ohne Lauf seit 02.11.2026" in m for m in e.meldungen)
+    assert not any("verpasst, Bedingung" in m for m in e.meldungen)
     verkauf = [bv for bv, u in e.vorschlaege if bv.vorschlag.buch == "crossover" and bv.vorschlag.richtung < 0]
     assert [bv.vorschlag.ticker for bv in verkauf] == [t]
     assert "gerissen am 04.11., nachgeholt" in verkauf[0].kern and verkauf[0].vorschlag.stueck == j.bestand("crossover")[t]
     # Einstiege verpasster Tage werden nicht nachgeholt; gehaltene Titel werden nicht erneut gekauft
     assert not any(bv.vorschlag.ticker in titel and bv.vorschlag.richtung > 0 for bv, _ in e.vorschlaege if bv.vorschlag.buch == "crossover")
+
+
+def test_verpasster_stop_ohne_bedingung_am_aktuellen_tag_kein_verkauf(umgebung):
+    """Jakob 23.11.2026: Stop am 04.11. gerissen, Schluss am 06.11. wieder über dem Stop → kein Verkauf, Protokollzeile und
+    Journal-Eintrag; die Position bleibt mit ihrem Stop im Zustand."""
+    j, rm = umgebung
+    titel = _crossover_gekauft(j, rm)
+    t = titel[0]
+    e = lauf(j, rm, jetzt=FREITAG, kurse=_mit_einbruch(t, "2026-11-04", 0.8))
+    assert not any(bv.vorschlag.buch == "crossover" and bv.vorschlag.richtung < 0 for bv, _ in e.vorschlaege)
+    zeile = (f"crossover {t}: Ausstieg vom 04.11.2026 verpasst, Bedingung am 06.11.2026 nicht mehr erfüllt, Position bleibt "
+             "(Abweichung vom Backtest)")
+    assert zeile in e.meldungen
+    ereig = j.db.execute("SELECT buch, text FROM ereignisse WHERE art='ausstieg_verpasst'").fetchall()
+    assert len(ereig) == 1 and ereig[0][0] == "crossover" and ereig[0][1].startswith(zeile + "; Auslöser: Stop ")
+    z = j.zustand_fuer_signaltag("crossover", "2026-11-09")
+    assert z["positionen"][t]["stop"] is not None and t not in z.get("gesperrt", {})
+    # zweiter Lauf am selben Abend: Protokollzeile wieder, Journal-Eintrag nur einmal
+    e2 = lauf(j, rm, jetzt=FREITAG, kurse=_mit_einbruch(t, "2026-11-04", 0.8))
+    assert zeile in e2.meldungen
+    assert j.db.execute("SELECT COUNT(*) FROM ereignisse WHERE art='ausstieg_verpasst'").fetchone()[0] == 1
 
 
 def test_verpasste_tage_ohne_ausstieg_kein_verkauf(umgebung):
