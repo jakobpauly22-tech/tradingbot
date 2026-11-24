@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from tradingbot.daten.sec import gleichstand_ordnen
 from tradingbot.kennzahlen.rendite import simple_return
 
 
@@ -29,6 +30,23 @@ STREUBESITZ_ANTEIL_MAX = 1.30        # höchstens 130 % (02.11.2026, vorher 105 
                                      # Aktienzahl (Deckblattdatum) haben verschiedene Stichtage; dazwischen Rückkäufe und Kursbewegungen
 STREUBESITZ_VERAENDERUNG_FAKTOR = 3.0  # ohne Aktienzahl: Veränderung zum Vorjahr höchstens Faktor 3 neben der Kursveränderung
 AKTIEN_ABSTAND_TAGE = 400            # Aktienzahl höchstens so weit vom Messtag entfernt
+
+
+def _aktien_je_messtag(aktien) -> pd.Series:
+    """Eine Aktienzahl je Messtag (gleiche Meldung bei Firma und Vorgänger-CIK). Sechste Datenkorrektur (24.11.2026):
+    `aktien` als Tabelle (Index Messtag, Spalten wert, filed, accn) → je Messtag gilt der letzte Eintrag nach
+    `gleichstand_ordnen` (späterer filed, dann größere accn, dann größerer Wert). Als Reihe (ohne filed/accn, ältere
+    Aufrufer): stabil sortiert, bei gleichem Messtag gilt der zuletzt übergebene."""
+    if isinstance(aktien, pd.DataFrame):
+        t = aktien.dropna(subset=["wert"])
+        if not len(t):
+            return pd.Series(dtype=float)
+        t = gleichstand_ordnen(t)
+        t = t.assign(_messtag=t.index).sort_values("_messtag", kind="mergesort")
+        t = t[~t["_messtag"].duplicated(keep="last")]
+        return pd.Series(t["wert"].to_numpy(dtype=float), index=pd.DatetimeIndex(t["_messtag"]))
+    aktien = aktien.dropna().sort_index(kind="mergesort")
+    return aktien[~aktien.index.duplicated(keep="last")]
 
 
 def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Series,
@@ -49,8 +67,7 @@ def streubesitz_pruefen(reihe: pd.DataFrame, schluss: pd.Series, aktien: pd.Seri
 
     gueltig, verworfen = [], []
     vorher = None                                           # (F, C) des letzten akzeptierten Werts
-    aktien = aktien.dropna().sort_index()
-    aktien = aktien[~aktien.index.duplicated(keep="last")]      # gleiche Meldung bei Firma und Vorgänger-CIK
+    aktien = _aktien_je_messtag(aktien)
     for e, zeile in reihe.sort_index().iterrows():
         f = float(zeile["wert"])
         kurse_bis = schluss.loc[:e].dropna()
@@ -116,7 +133,7 @@ def marktwerte_aus_streubesitz(schluss: pd.DataFrame, streubesitz: dict, korrekt
         reihe = streubesitz.get(firma)
         if reihe is None or len(reihe) == 0:
             continue
-        reihe = reihe[reihe["wert"].between(STREUBESITZ_MIN, STREUBESITZ_MAX)].sort_values("filed")
+        reihe = gleichstand_ordnen(reihe[reihe["wert"].between(STREUBESITZ_MIN, STREUBESITZ_MAX)])   # sechste Datenkorrektur
         c = schluss[firma]
         for i, (e, zeile) in enumerate(reihe.iterrows()):
             ab = zeile["filed"] + pd.Timedelta(days=1)

@@ -351,6 +351,13 @@ def vergleichen(stichtag: str, sec_betrieb: bool = False) -> int:
     if abw:
         print("NICHT identisch:")
         print("\n".join(f"  {z}" for z in abw))
+        firmen = firmen_abweichend(ref["bewertung"], ergebnis["bewertung"])        # Liste je Firma (24.11.2026)
+        with (ORDNER / "vergleich_letzter.pkl").open("wb") as f:
+            pickle.dump({"ergebnis": ergebnis, "firmen": firmen, "stand": {"stichtag": stichtag, "git": git_stand(),
+                         "gerechnet_um": datetime.now().isoformat(timespec="seconds")}}, f)
+        print(f"Abweichende Firmen: {len(firmen)} (Ergebnis in {ORDNER.name}/vergleich_letzter.pkl)")
+        for z in firmen.itertuples():
+            print(f"  {z.symbol or z.firma}: {z.art}" + (f" ({', '.join(z.spalten[:8])}{', …' if len(z.spalten) > 8 else ''})" if z.spalten else ""))
         return 1
     print(f"identisch ({len(ergebnis['bewertung'])} Firmen, Bewertung und Ranglisten A und B)")
     return 0

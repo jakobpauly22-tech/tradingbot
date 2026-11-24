@@ -304,7 +304,8 @@ def lade_firmendaten(universum: pd.DataFrame, status: pd.DataFrame, sic_historie
             if kurse[firma] is not None:
                 a = kennzahl_jahreswerte(erst, aktien_def, "2100-01-01")
                 if len(a):
-                    aktien.append(aktien_splitbereinigt(a["wert"], split_pruef))
+                    # mit filed und accn für die sechste Datenkorrektur (gleiche Messtage bei Firma und Vorgänger-CIK)
+                    aktien.append(a.assign(wert=aktien_splitbereinigt(a["wert"], split_pruef).reindex(a.index))[["wert", "filed", "accn"]])
         sic[firma] = sorted(sic.get(firma, []))
         if not reihen:
             continue

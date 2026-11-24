@@ -17,6 +17,7 @@ import pandas as pd
 
 from tradingbot.daten.abdeckung import STREUBESITZ_MAX, STREUBESITZ_MIN
 from tradingbot.daten.index_nachbau import STREUBESITZ_ANTEIL_MAX, STREUBESITZ_ANTEIL_MIN
+from tradingbot.daten.sec import gleichstand_ordnen
 
 SIC_DIVISIONEN = [((100, 999), "A"), ((1000, 1499), "B"), ((1500, 1799), "C"), ((2000, 3999), "D"), ((4000, 4999), "E"),
                   ((5000, 5199), "F"), ((5200, 5999), "G"), ((6000, 6799), "H"), ((7000, 8999), "I"), ((9100, 9999), "J")]
@@ -81,7 +82,7 @@ def aktienzahl_waehlen(tag, aktien: pd.DataFrame | None, ersatz_fakten: pd.DataF
     grenze = tag - pd.DateOffset(months=max_alter_monate)
     bekannt = aktien[(aktien["filed"] + pd.Timedelta(days=1)) <= tag].dropna(subset=["wert"]) if aktien is not None and len(aktien) else None
     if bekannt is not None and len(bekannt):
-        letzte = bekannt.sort_values("filed").iloc[-1]
+        letzte = gleichstand_ordnen(bekannt).iloc[-1]       # sechste Datenkorrektur (24.11.2026)
         if letzte["filed"] >= grenze:
             return (float(letzte["wert"]), pd.Timestamp(letzte.name), letzte["filed"], "Deckblatt"), None
     e = ersatz_aktienzahl(ersatz_fakten, tag)

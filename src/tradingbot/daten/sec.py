@@ -319,7 +319,8 @@ def kennzahl_jahreswerte(erst: pd.DataFrame, definition: dict, stichtag, jahresd
 
     `definition` aus config/fundamental.yaml (art, einheit, konzepte). Je Geschäftsjahresende gilt der erste
     Kandidat in `konzepte`, der einen Wert hat (Unternehmen wechseln über die Jahre die Begriffe).
-    Ergebnis: Index = Geschäftsjahresende, Spalten wert, konzept, filed.
+    Ergebnis: Index = Geschäftsjahresende, Spalten wert, konzept, filed, accn (accn seit der sechsten Datenkorrektur,
+    24.11.2026, für `gleichstand_ordnen`).
     """
     from tradingbot.backtest.tresor import begrenze
 
@@ -343,11 +344,41 @@ def kennzahl_jahreswerte(erst: pd.DataFrame, definition: dict, stichtag, jahresd
         teile.append(k.assign(_rang=rang))
     alle = pd.concat(teile) if teile else pd.DataFrame(columns=[*erst.columns, "_rang"])
     if alle.empty:
-        return pd.DataFrame(columns=["wert", "konzept", "filed"], index=pd.DatetimeIndex([], name="ende"))
+        return pd.DataFrame(columns=["wert", "konzept", "filed", "accn"], index=pd.DatetimeIndex([], name="ende"))
     alle = alle.sort_values(["ende", "_rang"]).drop_duplicates(subset="ende", keep="first")
-    ergebnis = alle.set_index("ende")[["wert", "konzept", "filed"]]
+    ergebnis = alle.set_index("ende")[["wert", "konzept", "filed", "accn"]]
     ergebnis.index.name = "ende"
     return ergebnis
+
+
+def gleichstand_ordnen(tabelle: pd.DataFrame) -> pd.DataFrame:
+    """Zeilen in der Reihenfolge, in der sie bekannt wurden; bei gleichem `filed` eindeutig (sechste Datenkorrektur,
+    Entscheidung Jakob 24.11.2026, docs/FUNDAMENTAL.md).
+
+    Sortierschlüssel: `filed`, dann Stichtag (`ende` als Spalte oder Index), dann `accn`, dann `wert`, aufsteigend und
+    stabil. Der letzte Eintrag je `filed` ist der gültige: späteres Stichtagsdatum, bei gleichem Stichtag die größere
+    Einreichungsnummer, danach der größere Wert. Fehlt `accn`, zählt sie als leer.
+
+    Anlass: Eine Einreichung meldet oft Deckblatt- und Bilanz-Aktienzahl mit demselben `filed`. `sort_index()` und
+    `sort_values("filed")` sind bei Gleichstand nicht stabil; die Wahl hing von Länge und Zeilenfolge der Datei ab (INTU,
+    Abnahme der SEC-Aktualisierung vom 24.11.2026).
+    """
+    if tabelle is None or not len(tabelle):
+        return tabelle
+    t = tabelle.assign(_ende=tabelle["ende"] if "ende" in tabelle.columns else tabelle.index,
+                       _accn=tabelle["accn"].fillna("").astype(str) if "accn" in tabelle.columns else "")
+    return t.sort_values(["filed", "_ende", "_accn", "wert"], kind="mergesort").drop(columns=["_ende", "_accn"])
+
+
+def reihe_bekannt_ab(tabelle: pd.DataFrame, werte: pd.Series | None = None) -> pd.Series:
+    """Werte als Reihe mit Index „bekannt ab“ = filed + 1 Tag, in der Ordnung von `gleichstand_ordnen` (der letzte Wert
+    je Tag gilt). `tabelle`: Index = Stichtag (eindeutig), Spalten wert, filed[, accn]; `werte`: andere Werte je Stichtag
+    (z.B. splitbereinigt), zugeordnet über den Stichtag, nicht über die Position."""
+    t = gleichstand_ordnen(tabelle)
+    if t is None or not len(t):
+        return pd.Series(dtype=float)
+    w = t["wert"] if werte is None else werte.reindex(t.index)
+    return pd.Series(w.to_numpy(dtype=float), index=pd.DatetimeIndex(t["filed"] + pd.Timedelta(days=1)))
 
 
 def abdeckung(erst: pd.DataFrame, kennzahlen: dict, stichtag, max_alter_tage: int = 460) -> dict[str, bool]:

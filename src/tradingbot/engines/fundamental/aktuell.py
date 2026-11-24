@@ -19,7 +19,7 @@ import pandas as pd
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle
 from tradingbot.daten.index_nachbau import aktien_splitbereinigt
 from tradingbot.daten.kurse import lade_kurse
-from tradingbot.daten.sec import cik10, kennzahl_jahreswerte, sec_cache
+from tradingbot.daten.sec import cik10, kennzahl_jahreswerte, reihe_bekannt_ab, sec_cache
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.daten.kapitalmassnahmen_historie import ereignisse_mit_flex, lade_ereignisse
@@ -170,8 +170,8 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
             if splits_flex and symbol_je_firma.get(firma) in splits_flex:
                 kurse = split_ereignisse_ergaenzen(kurse, splits_flex[symbol_je_firma[firma]])
             a = kennzahl_jahreswerte(erst, kennzahlen["aktien_ausstehend"], "2100-01-01") if len(erst) else pd.DataFrame()
-            aktien = (pd.Series(aktien_splitbereinigt(a["wert"], kurse["split"]).to_numpy(), index=(a["filed"] + pd.Timedelta(days=1)).to_numpy()).sort_index()
-                      if len(a) else pd.Series(dtype=float))
+            # sechste Datenkorrektur (24.11.2026): bei gleichem filed eindeutig, Zuordnung über den Stichtag
+            aktien = reihe_bekannt_ab(a, aktien_splitbereinigt(a["wert"], kurse["split"])) if len(a) else pd.Series(dtype=float)
             t, info = abschluesse_am(werte, tag, aktualitaet_monate=aktualitaet)
             if t.empty or info["veraltet"]:
                 sec_info["veraltet"].append(symbol_je_firma.get(firma) or firma)
@@ -181,7 +181,7 @@ def bewertung_am(tag, *, aktualisieren: bool = True, splits_flex: dict[str, list
             # Marktwert: beide Rechnungen immer (Anzeige, Prüfung), angewendet erst ab dem Stichtag der Korrektur
             ereignisse_firma = ereignisse_mit_flex(ereignisse.get(firma), kurse, (splits_flex or {}).get(symbol_je_firma.get(firma)))
             fakten_quartale = lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True)
-            mk = marktwert_korrigiert(tag, kurse, a[["wert", "filed"]] if len(a) else None, daten.streubesitz_gueltig.get(firma),
+            mk = marktwert_korrigiert(tag, kurse, a[["wert", "filed", "accn"]] if len(a) else None, daten.streubesitz_gueltig.get(firma),
                                       ereignisse=ereignisse_firma, ersatz_fakten=fakten_quartale,
                                       max_alter_monate=max_alter, automatisch_einordnen=True)
             mw = mk["marktwert"] if mw_korrektur else mw_alt

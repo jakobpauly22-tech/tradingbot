@@ -16,7 +16,7 @@ from tradingbot.daten.abdeckung import rebalancing_stichtage
 from tradingbot.daten.cache import standard_cache
 from tradingbot.daten.fehlerschwelle import Fehlerschwelle, FehlerschwelleUeberschritten, laut_melden
 from tradingbot.daten.index_nachbau import ABNAHME_ZEITRAUM, aktien_splitbereinigt
-from tradingbot.daten.sec import cik10, kennzahl_jahreswerte
+from tradingbot.daten.sec import cik10, kennzahl_jahreswerte, reihe_bekannt_ab
 from tradingbot.daten.sp500_nachbau import ciks_der_zeile, firmen_schluessel, lade_firmendaten
 from tradingbot.daten.universum import lade_sic_historien, lade_universum, mitglieder_am, sic_am
 from tradingbot.daten.kursstatus import lade_kursstatus
@@ -111,10 +111,10 @@ def main(argv=None) -> int:
             if mw_korrektur:
                 ersatz_fakten[firma] = lade_aktienfakten(ciks_der_zeile(zeile), cache=cache, mit_quartalen=True)
                 if len(a):
-                    aktien_roh[firma] = a[["wert", "filed"]]
+                    aktien_roh[firma] = a[["wert", "filed", "accn"]]
             if len(a):
-                bereinigt = aktien_splitbereinigt(a["wert"], kurse["split"])
-                aktien[firma] = pd.Series(bereinigt.to_numpy(), index=(a["filed"] + pd.Timedelta(days=1)).to_numpy()).sort_index()
+                # sechste Datenkorrektur (24.11.2026): bei gleichem filed eindeutig, Zuordnung über den Stichtag
+                aktien[firma] = reihe_bekannt_ab(a, aktien_splitbereinigt(a["wert"], kurse["split"]))
         except Exception as f:  # zählt gegen die Fehlerschwelle
             fehler = f"{firma}: {type(f).__name__} {str(f)[:60]}"
         schwelle.zaehle(fehler)
