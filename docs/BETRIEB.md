@@ -130,6 +130,12 @@ für alle Läufe ab dem 24.11.2026.
   nur einmal (auch bei mehreren Läufen am selben Abend).
 - Einstiege bleiben wie bisher: Einstiege verpasster Tage werden verworfen, gekauft wird nur mit Signal am aktuellen Tag.
 
+**Korrektur der alten Sperren (Jakob 24.11.2026):** Der Lauf vom 23.11. hatte nach der alten Regel im Crossover-Zustand die
+Wiedereinstiegssperren IUSA.DE und IUSP.DE (je `gesperrt` = 2026-11-20) gesetzt. Sie wurden am 24.11.2026 einmalig
+entfernt (`tools/journal_korrektur_20261124.py`, Sicherung vorher `journal_2026-11-24_103744.sqlite`, je Titel Ereignis
+`korrektur` mit altem Wert). Grund: Nach der Regel vom 23.11. ist der verpasste Stop vom 20.11. nicht mehr gültig. Positionen,
+Stops und alle übrigen Sperren bleiben unverändert.
+
 ## Entscheidungen Jakob 09.11.2026 (nach dem Nachtrag)
 
 - **Verpasste Tage im Technikbuch:** Der Tageslauf prüft die Schlusskurse seit dem letzten Lauf der Reihe nach (Signaltag
