@@ -883,6 +883,32 @@ Festgehalten am 24.11.2026 um 13:05, **vor** jeder Codeänderung.
     hineinkommen.
   - Danach wird die Referenz des Vergleichswerkzeugs neu geschrieben (alte gesichert, mit Vermerk).
 
+## c3 Schritt 1b: begrenzte Einordnung der Split-Ereignisse (Jakob 24.11.2026, festgehalten vor Code und Lauf)
+
+Festgehalten am 24.11.2026 um 14:27, **vor** jeder Codeänderung und vor dem Lauf. Anlass: docs/TRESOR_BEKANNT.md, Nr. 3
+(fünf Einträge aus 2024 – SMCI, ANET, ETR, PANW, TSCO – über SEC-Einreichungen aus Februar 2025 eingeordnet).
+
+- **Kandidatenliste statt direktes Schreiben:** `tools/split_ereignisse_einordnen.py` schreibt nicht mehr nach
+  `config/kapitalmassnahmen_historie.yaml` (die Liste liest auch der Tageslauf), sondern eine Kandidatenliste nach
+  `daten/fundamental/einordnung/<Zeit>_kandidat.yaml` und einen Vergleich mit der geltenden Liste. Übernahme nur mit
+  `--uebernehmen <kandidat>` nach Jakobs Okay; dabei wird die geltende Liste automatisch nach
+  `daten/fundamental/sicherung/kapitalmassnahmen_historie_<Zeit>.yaml` gesichert.
+- **Nur lesen:** Netzabrufe (SEC, Tiingo, Yahoo) sind im Lauf gesperrt; fehlt eine Datei im Cache, bricht der Lauf laut ab
+  statt nachzuladen. Versiegelung von `daten/cache/` vor und nach dem Lauf; erwartet: 0 Dateien geändert.
+- **Gleichstand in `sec_verhaeltnis` (gewichtete Aktienzahl):** nur messen, nichts ändern – Zahl der Fälle mit mehreren
+  verschiedenen Werten bei gleichem `filed` und ob sich dadurch die Art ändert. Nicht Teil der sechsten Datenkorrektur.
+- **Regel für „unklar“ (Variante b):** Ein Ereignis bis zur Tresorgrenze, das das begrenzte Werkzeug als „unklar“
+  einordnet, darf als geprüfter Split übernommen werden, wenn ein Beleg (8-K oder Pressemitteilung als Anlage zum 8-K) mit
+  `filed` ≤ 31.12.2024 Verhältnis und Wirksamkeitsdatum nennt. Quelle (accn, filed) steht im Eintrag (`geprueft: true`).
+  Jeder Fall einzeln an Jakob zur Freigabe, nicht pauschal. Die 8-K-Abrufe dafür hat Jakob freigegeben; sie gehen nicht in
+  den Entwicklungs-Cache, sondern in eine eigene Belegablage `daten/fundamental/einordnung/belege/`.
+- **Vor dem Übernehmen an Jakob:** Kurzfassung des Vergleichs, die fünf Fälle (und ggf. weitere „unklar“) mit Beleg,
+  Messung zum Gleichstand, Ergebnis der Versiegelung.
+- **Abnahme:** Versiegelung 0 Änderungen; kein Eintrag nach der Grenze und kein geprüfter Eintrag verändert; alle
+  Unterschiede gelistet; Ergebnis der fünf an Jakob; volle Testsuite grün; nach der Übernahme versiegelter
+  Bewertungsvergleich (`tools/bewertung_vergleich.py`), erwartet „identisch“.
+- **Zeit:** Code bis 17:30; kein Lauf parallel zum Tageslauf.
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt
@@ -902,7 +928,8 @@ zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrektur
    (`daten/fundamental/sicherung/kapitalmassnahmen_historie_<Zeit>.yaml`; das Werkzeug schreibt die Liste direkt), dann
    `.venv\Scripts\python tools\split_ereignisse_einordnen.py`. **Ergebnis zu den fünf Ereignissen aus 2024 (SMCI, ANET,
    ETR, PANW, TSCO) mit dem Unterschied zur gesicherten Liste an Jakob, bevor die Liste übernommen wird;** bis dahin die
-   gesicherte Liste zurückspielen. Grund: docs/TRESOR_BEKANNT.md, Nr. 3.
+   gesicherte Liste zurückspielen. Grund: docs/TRESOR_BEKANNT.md, Nr. 3. Seit 24.11.2026 gilt der Ablauf im Abschnitt
+   „c3 Schritt 1b“ oben (Kandidatenliste, `--uebernehmen` mit automatischer Sicherung, Netzsperre, Versiegelung).
 2. **Abnahme der Rohreihen:** `.venv\Scripts\python tools\pruefe_rohkurse.py` → `docs/berichte/<Datum>_rohkurse_abnahme.md`.
    Erwartet: „Für c3 noch offen: 0“. Seit 16.11.2026 mit dem zweiten Kriterium „Splitspalte“ (Befund 10, Spalte
    `split_abgleich`). Der Bericht nennt H ≠ 1 nur als Anzahl, ohne Namen und Faktor (Jakob 16.11.2026). Nicht bestandene
