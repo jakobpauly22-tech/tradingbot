@@ -69,7 +69,8 @@ def pruefe_erstmeldungen(alt: pd.DataFrame | None, neu: pd.DataFrame, grenze: pd
     weg = a - n
     neue = list((n - a).elements())
     if weg:
-        beispiele = "; ".join(f"{z[1]} {z[4]} filed {z[6]} accn {z[7]}" for z in list(weg.elements())[:3])
+        beispiele = "; ".join(f"{z[1]} {_datum(z[4]) if z[4] is not None else '–'} filed "
+                              f"{_datum(z[6]) if z[6] is not None else '–'} accn {z[7]}" for z in list(weg.elements())[:3])
         return False, f"{sum(weg.values())} bisherige Erstmeldungen geändert oder entfernt (z. B. {beispiele})", neue, []
     hinweise: dict[str, dict] = {}
     if grenze is not None:
@@ -83,8 +84,9 @@ def pruefe_erstmeldungen(alt: pd.DataFrame | None, neu: pd.DataFrame, grenze: pd
             else:
                 verletzt.append(z)
         if verletzt:
-            beispiele = "; ".join(f"{z[1]} {z[4]} filed {pd.Timestamp(z[6]).date()} accn {z[7]}" for z in verletzt[:3])
-            return False, (f"{len(verletzt)} neue Erstmeldungen mit filed vor {grenze.date()} ohne Beleg als nachgelieferte "
+            beispiele = "; ".join(f"{z[1]} {_datum(z[4]) if z[4] is not None else '–'} filed {_datum(z[6])} accn {z[7]}"
+                                  for z in verletzt[:3])
+            return False, (f"{len(verletzt)} neue Erstmeldungen mit filed vor {_datum(grenze)} ohne Beleg als nachgelieferte "
                            f"Einreichung (z. B. {beispiele})"), neue, []
     text = f"{len(neue)} neue Erstmeldungen"
     if hinweise:
@@ -112,11 +114,20 @@ def einreichungen_aus_submissions(subs: dict, seite_laden=None):
     return nachschlagen
 
 
+def _datum(d) -> str:
+    """Datum für Meldetexte als TT.MM.JJJJ (Jakob 24.11.2026)."""
+    return f"{pd.Timestamp(d):%d.%m.%Y}"
+
+
+def sic_text(liste: list) -> str:
+    return "[" + ", ".join(f"{_datum(d)}: {int(s)}" for d, s in liste) + "]"
+
+
 def pruefe_sic(alt: list, neu: list) -> tuple[bool, str]:
     """Bestehende SIC-Einträge unverändert, neue nur angehängt."""
     alt, neu = [(pd.Timestamp(d), int(s)) for d, s in alt], [(pd.Timestamp(d), int(s)) for d, s in neu]
     if neu[:len(alt)] != alt:
-        return False, f"SIC-Historie geändert: bisher {alt}, neu {neu}"
+        return False, f"SIC-Historie geändert: bisher {sic_text(alt)}, neu {sic_text(neu)}"
     return True, f"{len(neu) - len(alt)} neue SIC-Einträge"
 
 
@@ -157,6 +168,7 @@ class Ergebnis:
     abbruch: str | None = None
     meldungen: list = field(default_factory=list)
     hinweise: list = field(default_factory=list)       # nachgelieferte Einreichungen (Nachtrag 23.11.2026)
+    quittiert: list = field(default_factory=list)      # Verletzungen, die exakt einer Quittung entsprechen: nur Protokoll
 
     def zaehlen(self) -> Counter:
         return Counter(e["stand"] for e in self.je_cik.values())
@@ -213,12 +225,33 @@ def _sic(cik: int, client, bisher: list) -> tuple[dict, list | None]:
 
     neu = [(d, s) for d, s in sic_historie(cik, client) if s is not None]
     ok, text = pruefe_sic(bisher, neu)
-    return ({"sic": UEBERNOMMEN if ok else ALTER_STAND, "sic_text": text, "sic_neu": len(neu) - len(bisher) if ok else 0},
-            neu if ok else None)
+    eintrag = {"sic": UEBERNOMMEN if ok else ALTER_STAND, "sic_text": text, "sic_neu": len(neu) - len(bisher) if ok else 0}
+    if not ok:                                          # für die Quittung (Jakob 24.11.2026): genau der alte und neue Wert
+        eintrag["sic_bisher"] = [[str(pd.Timestamp(d).date()), int(s)] for d, s in bisher]
+        eintrag["sic_abgerufen"] = [[str(pd.Timestamp(d).date()), int(s)] for d, s in neu]
+    return eintrag, (neu if ok else None)
+
+
+def _sic_norm(liste) -> list:
+    return [(pd.Timestamp(str(d)).normalize(), int(s)) for d, s in (liste or [])]
+
+
+def quittung_fuer(cik: int, eintrag: dict, quittiert: list | None) -> dict | None:
+    """Quittierte Verletzung der Prüfregel (Jakob 24.11.2026, config/betrieb.yaml `sec_quittiert`): passt nur, wenn allein
+    die SIC-Historie den alten Stand behält (Fakten übernommen) und bisheriger wie abgerufener Wert exakt dem Eintrag
+    entsprechen. Jede andere oder abweichende Verletzung bleibt eine Meldung (Telegram)."""
+    if eintrag.get("stand") != ALTER_STAND or eintrag.get("fakten") == ALTER_STAND or eintrag.get("sic") != ALTER_STAND:
+        return None
+    for q in quittiert or []:
+        if (int(q.get("cik", -1)) == int(cik) and q.get("teil", "sic") == "sic"
+                and _sic_norm(q.get("alt")) == _sic_norm(eintrag.get("sic_bisher"))
+                and _sic_norm(q.get("neu")) == _sic_norm(eintrag.get("sic_abgerufen"))):
+            return q
+    return None
 
 
 def aktualisieren(ciks: list[int], *, client, client_frisch, sec_tabellen, jetzt=None,
-                  fortschritt=None) -> Ergebnis:
+                  fortschritt=None, quittiert: list | None = None) -> Ergebnis:
     """Ganzer Lauf über `ciks`. `client`: SecClient ohne Nachladen (Betriebs-Cache), `client_frisch`: derselbe Cache mit
     erzwungenem Nachladen (nur submissions), `sec_tabellen`: Parquet-Cache des Betriebs (SIC-Historie).
     Schreibt am Ende `STAND.json` (immer) und die SIC-Historie (geprüfte CIKs)."""
@@ -262,7 +295,13 @@ def aktualisieren(ciks: list[int], *, client, client_frisch, sec_tabellen, jetzt
                 erg.abbruch = str(f).replace(" Abbruch, keine Statusdatei geschrieben.", " Lauf abgebrochen.")
                 break
             if eintrag["stand"] == ALTER_STAND:
-                erg.meldungen.append(f"SEC-Prüfregel verletzt, CIK {cik} behält den alten Stand: {eintrag['text']}")
+                text = f"SEC-Prüfregel verletzt, CIK {cik} behält den alten Stand: {eintrag['text']}"
+                q = quittung_fuer(cik, eintrag, quittiert)
+                if q is not None:
+                    eintrag["quittiert"] = {"datum": str(q.get("datum")), "grund": q.get("grund")}
+                    erg.quittiert.append(f"{text} (quittiert {_datum(q.get('datum'))}: {q.get('grund')})")
+                else:
+                    erg.meldungen.append(text)
             if fortschritt:
                 fortschritt(nr, len(ciks), cik, eintrag)
             if netz_aus >= NETZ_AUSFAELLE_BIS_ABBRUCH:
@@ -307,7 +346,7 @@ def stand_schreiben(wurzel, erg: Ergebnis, *, ende: datetime, zusatz: dict | Non
         "abbruch": erg.abbruch,
         "zusammenfassung": {"ciks": len(erg.je_cik), **{k: zahl.get(k, 0) for k in (UEBERNOMMEN, ALTER_STAND, FEHLER, OHNE_DATEN)},
                             "neue_zeilen": sum(e.get("neue_zeilen", 0) for e in erg.je_cik.values()),
-                            "hinweise": len(erg.hinweise)},
+                            "hinweise": len(erg.hinweise), "quittiert": len(erg.quittiert)},
         "hinweise": erg.hinweise,
         **(zusatz or {}),
         "je_cik": erg.je_cik,

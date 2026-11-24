@@ -65,7 +65,7 @@ def test_pruefregel_geaenderte_erstmeldung_verletzt():
 
 def test_pruefregel_neue_zeile_mit_altem_filed_verletzt():
     ok, text, neue, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ALTES_FILED), pd.Timestamp("2026-10-30"))
-    assert not ok and "vor 2026-10-30" in text and "ohne Beleg" in text and len(neue) == 1
+    assert not ok and "vor 30.10.2026" in text and "ohne Beleg" in text and len(neue) == 1
     assert sa.pruefe_erstmeldungen(None, _erst(NEU_ALTES_FILED), None)[0]   # neue CIK ohne bisherigen Stand: alles erlaubt
 
 
@@ -196,7 +196,7 @@ def test_neues_filed_vor_der_grenze_behaelt_alten_stand(betrieb):
     with betriebsmodus("Test", protokoll=log):
         client, frisch = _clients(_SEC({1: NEU_ALTES_FILED}))
         erg = sa.aktualisieren([1], client=client, client_frisch=frisch, sec_tabellen=sec_cache())
-        assert erg.je_cik["1"]["stand"] == "alter Stand" and "vor 2026-10-30" in erg.je_cik["1"]["text"]
+        assert erg.je_cik["1"]["stand"] == "alter Stand" and "vor 30.10.2026" in erg.je_cik["1"]["text"]
         assert client.companyfacts_aus_cache(1)[0] == ALT
 
 
@@ -298,3 +298,50 @@ def test_lauf_mit_nachgelieferter_einreichung_uebernimmt_und_meldet_hinweis(betr
         assert erg.hinweise == [{"cik": 1, "firma": "Beispiel AG", "accn": JULI, "form": "10-Q", "filed": "2026-07-29", "zeilen": 2}]
         assert stand["hinweise"] == erg.hinweise and stand["zusammenfassung"]["hinweise"] == 1
         assert client.companyfacts_aus_cache(1)[0] == NEU_NACHGELIEFERT
+
+
+# --- Quittierte Verletzungen und lesbare Meldetexte (Jakob 24.11.2026) ------------------------------------------
+def test_sic_meldetext_mit_lesbaren_daten():
+    ok, text = sa.pruefe_sic([(pd.Timestamp("2016-02-11"), 7370)], [(pd.Timestamp("2010-02-12"), 7370)])
+    assert not ok and text == "SIC-Historie geändert: bisher [11.02.2016: 7370], neu [12.02.2010: 7370]"
+    assert "Timestamp" not in text
+
+
+def test_erstmeldung_meldetext_mit_lesbaren_daten():
+    ok, text, _, _ = sa.pruefe_erstmeldungen(_erst(ALT), _erst(NEU_ALTES_FILED), pd.Timestamp("2026-10-30"))
+    assert not ok and "vor 30.10.2026" in text and "Timestamp" not in text
+
+
+def _quittung(alt="2024-02-15", neu="2010-02-12", cik=1):
+    return [{"cik": cik, "teil": "sic", "alt": [[alt, 2911]], "neu": [[neu, 3711], ["2024-02-15", 2911]],
+             "datum": "2026-11-24", "grund": "Test"}]
+
+
+def test_quittierte_sic_verletzung_nur_protokoll(betrieb, monkeypatch):
+    _, log = betrieb
+    monkeypatch.setitem(ZEHN_K, 1, [("2010-02-12", "0000000001-10-000001", 3711)] + ZEHN_K[1])
+    with betriebsmodus("Test", protokoll=log):
+        client, frisch = _clients(_SEC({1: NEU_ANGEHAENGT}))
+        erg = sa.aktualisieren([1], client=client, client_frisch=frisch, sec_tabellen=sec_cache())
+        e = erg.je_cik["1"]
+        assert e["stand"] == "alter Stand" and erg.meldungen and not erg.quittiert   # ohne Quittung: Meldung
+        q = [{"cik": 1, "teil": "sic", "alt": e["sic_bisher"], "neu": e["sic_abgerufen"], "datum": "2026-11-24", "grund": "Test"}]
+        assert sa.quittung_fuer(1, e, q) is q[0]
+        erg2 = sa.aktualisieren([1], client=client, client_frisch=frisch, sec_tabellen=sec_cache(), quittiert=q)
+        assert erg2.meldungen == [] and len(erg2.quittiert) == 1 and "(quittiert 24.11.2026: Test)" in erg2.quittiert[0]
+        assert erg2.je_cik["1"]["quittiert"] == {"datum": "2026-11-24", "grund": "Test"}
+        assert erg2.je_cik["1"]["stand"] == "alter Stand"                               # der alte Stand bleibt
+        # abweichender Wert, andere CIK oder zusätzlich verletzte Fakten → wieder Meldung
+        anders = [{**q[0], "neu": [["2010-02-13", 3711]] + q[0]["neu"][1:]}]
+        assert sa.quittung_fuer(1, e, anders) is None
+        assert sa.quittung_fuer(2, e, q) is None
+        assert sa.quittung_fuer(1, {**e, "fakten": "alter Stand"}, q) is None
+
+
+def test_konfiguration_quittung_google():
+    from tradingbot.konfiguration import lade_konfiguration
+    q = lade_konfiguration("betrieb")["sec_quittiert"]
+    e = {"stand": "alter Stand", "fakten": "übernommen", "sic": "alter Stand",
+         "sic_bisher": [["2016-02-11", 7370]], "sic_abgerufen": [["2010-02-12", 7370]]}
+    assert sa.quittung_fuer(1288776, e, q)["grund"] == "Startdatum verschoben, Code unverändert, Jakob 23.11."
+    assert sa.quittung_fuer(1288776, {**e, "sic_abgerufen": [["2010-02-12", 7372]]}, q) is None

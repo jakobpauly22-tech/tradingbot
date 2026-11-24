@@ -663,6 +663,14 @@ im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
         Zeile vor der Grenze, die (a) oder (b) nicht erfüllt. Die SIC-Historie bleibt bei der alten Regel (nur
         anhängen), auch für Google Inc.
       - Festgehalten vor der Umsetzung im Code.
+    - **Quittierte Verletzungen (Jakob 24.11.2026):** `config/betrieb.yaml` `sec_quittiert` führt bekannte
+      Verletzungen je CIK mit genau dem alten und dem neuen Wert, Datum und Grund. Trifft eine Verletzung einen Eintrag
+      exakt (nur die SIC-Historie verletzt, Fakten übernommen, bisheriger und abgerufener Wert gleich), steht sie nur im
+      Protokoll (`QUITTIERT:`) und in `STAND.json` (`quittiert`); es gibt kein Telegram. Jede andere oder abweichende
+      Verletzung geht wie bisher per Telegram hinaus. Der alte Stand bleibt in beiden Fällen.
+      - Erster Eintrag: Google Inc. (1288776), SIC-Historie 11.02.2016: 7370 → 12.02.2010: 7370, quittiert am
+        24.11.2026, Grund „Startdatum verschoben, Code unverändert, Jakob 23.11.“.
+    - **Meldetexte:** Datumswerte stehen als TT.MM.JJJJ (24.11.2026), nicht als `Timestamp(...)`.
   - **Übernahme in den Betriebsstand:** jede Datei atomar. Am Ende schreibt das Werkzeug `STAND.json`:
     - Zeitpunkt des Laufs und `erfolgreich` (ja/nein),
     - je CIK Stand „übernommen“, „alter Stand“ (Prüfregel verletzt) oder „Fehler“, mit Abrufzeit und Text,

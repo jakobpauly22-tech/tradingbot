@@ -75,7 +75,9 @@ def main() -> int:
                         print(f"  {nr}/{gesamt} CIK {cik}: {eintrag['stand']} – {eintrag.get('text', '')[:160]}", flush=True)
 
                 t_lauf = time.perf_counter()
-                erg = aktualisieren(ciks, client=client, client_frisch=client_frisch, sec_tabellen=sec_cache(), fortschritt=fortschritt)
+                quittiert = lade_konfiguration("betrieb").get("sec_quittiert") or []
+                erg = aktualisieren(ciks, client=client, client_frisch=client_frisch, sec_tabellen=sec_cache(), fortschritt=fortschritt,
+                                    quittiert=quittiert)
                 dauer_lauf = time.perf_counter() - t_lauf
                 anfr = sitzung.anfragen
                 zusatz = {
@@ -105,6 +107,8 @@ def main() -> int:
     print(f"Hinweise (nachgelieferte Einreichungen vor der Grenze): {len(erg.hinweise)}")
     for h in erg.hinweise:
         print(f"  HINWEIS: {h['firma']} (CIK {h['cik']}), {h['accn']}, {h['form']}, filed {h['filed']}, {h['zeilen']} Erstmeldungen")
+    for m in erg.quittiert:                      # quittierte Verletzungen: nur Protokoll, kein Telegram (Jakob 24.11.2026)
+        print("QUITTIERT:", m)
     for m in erg.meldungen:
         print("MELDUNG:", m)
     if erg.meldungen and not probe:

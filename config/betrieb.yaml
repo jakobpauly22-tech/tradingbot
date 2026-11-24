@@ -182,3 +182,12 @@ sec_meldungen:                         # SEC-Aktualisierung Schritt 3 (Festlegun
     912595: Mid-America Apartment Communities
     34903: Federal Realty Investment Trust
     34088: Exxon Mobil (alte CIK)
+
+sec_quittiert:                         # quittierte Verletzungen der SEC-Prüfregel (Jakob 24.11.2026): trifft eine Verletzung genau
+                                       # einen Eintrag (CIK, Teil, alter und neuer Wert), nur Protokoll, kein Telegram; sonst Telegram
+  - cik: 1288776                       # Google Inc.
+    teil: sic
+    alt: [["2016-02-11", 7370]]
+    neu: [["2010-02-12", 7370]]
+    datum: "2026-11-24"
+    grund: "Startdatum verschoben, Code unverändert, Jakob 23.11."
