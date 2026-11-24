@@ -837,6 +837,52 @@ Tiingo-Faktor an einer Abspaltung der Liste (Hinweis). Ohne Marktwert nach Varia
 - **Delisting-Grund BMS:** geprüft. Nach der Kappung auf den 10.06.2019 (und mit dem alten Ende 28.06.2019) findet die
   Regel die 8-K Item 2.01 vom 11.06.2019, also „Übernahme“, ohne manuellen Eintrag. Test mit lokalem SEC-Cache.
 
+## Sechste Datenkorrektur: Gleichstand bei gleichem `filed` (Jakob 24.11.2026, festgehalten vor der Umsetzung)
+
+Festgehalten am 24.11.2026 um 13:05, **vor** jeder Codeänderung.
+
+- **Anlass:** Abnahme der SEC-Aktualisierung des Betriebs am 24.11.2026
+  (`docs/berichte/2026-11-24_sec_aktualisierung_abnahme_b.md`, Ausnahme INTU).
+  - Eine Einreichung meldet oft zwei Aktienzahlen mit demselben `filed`: das Deckblatt
+    (`dei:EntityCommonStockSharesOutstanding`, späterer Stichtag) und die Bilanz (`us-gaap:CommonStockSharesOutstanding`,
+    Bilanzstichtag).
+  - Der Code baut daraus eine Reihe mit „bekannt ab = filed + 1“, sortiert sie mit `sort_index()` bzw.
+    `sort_values("filed")` und nimmt den letzten Wert. Beide Sortierungen sind bei Gleichstand nicht stabil; welcher Wert
+    gilt, hängt von Länge und Zeilenfolge der Datei ab.
+  - Bei INTU wechselte die Wahl allein dadurch, dass neue Einreichungen dazukamen. Die SEC-Daten waren unverändert.
+- **Stellen:**
+  - `engines/fundamental/aktuell.py` (Marktwert im Betrieb, bisherige Rechnung);
+  - `tools/auswertung_scores.py` (Marktwert im Backtest);
+  - `daten/index_nachbau.py` (Aktienzahl in der Streubesitz-Prüfung, danach „keep last“; Streubesitz nach `filed`);
+  - `engines/fundamental/multiples.py` (Aktienzahl des Korrekturwegs).
+- **Tragweite im Entwicklungs-Cache** (gemessen 24.11.2026, nur lesend, Tresor: Einreichungen bis 31.12.2024; 782 Firmen):
+  - 18.640 Gleichstände bei der Aktienzahl in 589 Firmen. Das ist der Normalfall: fast jedes 10-Q/10-K meldet beide Zahlen.
+  - In 1.665 Fällen (300 Firmen) wählt der bisherige Code anders als die Regel unten, davon 1.608-mal die Bilanzzahl mit
+    dem früheren Stichtag.
+  - Im gewerteten Zeitraum betrifft das 984 Fälle an Rebalancing-Stichtagen (Quartale 10/2016 bis 12/2024), also 1.012
+    Firma-Stichtage; 768 davon fallen auf Mitglieder des S&P 500 am Stichtag. Alle Jahre 2016 bis 2024 sind betroffen.
+  - Abweichung zwischen gewähltem und Regelwert: Median 0,08 %, 129 Fälle über 1 %, 60 über 10 %. Die großen Fälle sind
+    Datenfehler oder Kapitalmaßnahmen, bei denen die bisherige Wahl danebenliegt: Bilanzzahl inklusive eigener Aktien
+    (CTXS), Zahl vor einem Reverse Split (EXE 2020), Einheitenfehler (PCG 2017).
+  - Streubesitz: 22 Gleichstände. Korrekturweg (`multiples.py`): an keinem Stichtag eine andere Wahl als die Regel.
+  - Jahreswerte der übrigen Kennzahlen: 423 Fälle mit mehreren Werten je Geschäftsjahresende, keiner mit gleichem
+    `filed`; dort gewinnt deterministisch der früheste `filed`. Nicht Teil dieser Korrektur.
+- **Regel (Entscheidung Jakob 24.11.2026):** Bei gleichem `filed` gewinnt das spätere Stichtagsdatum (`end`), bei
+  gleichem `end` die größere Einreichungsnummer (`accn`), danach der größere Wert. Sortiert wird stabil. Eine gemeinsame
+  Funktion gilt für alle Stellen oben.
+- **Bekannte Folge:** In Einzelfällen gewinnt eine unplausible Deckblattzahl, z. B. GAS 2016 mit 100 Aktien nach der
+  Übernahme. Solche Werte fängt die bestehende Plausibilitätsprüfung des Marktwerts ab; die Firma fällt dann an dem
+  Stichtag heraus. Die Prüfung wird nicht angepasst.
+- **Zusage:** Die Korrektur wird **unabhängig vom Ergebnis übernommen**, auch mit ihrer Wirkung auf Scores, Index-Nachbau,
+  Benchmark und Backtest. Sie ist umgesetzt, **bevor der c3-Neulauf beginnt**, und gilt im Betrieb ab dem Commit der
+  Umsetzung, ohne Stichtagsschalter. Der Grund ist Determinismus, keine neue Kennzahl.
+- **Abnahme (vor dem Commit an Jakob):**
+  - (a) Tests mit Gleichstandsfällen, darunter INTU, CTXS, EXE 2020, PCG 2017 und GAS 2016.
+  - (b) Betrieb, versiegelter Vergleich am 18.11.2026: abweichen dürfen nur Firmen mit Gleichstand; Liste mit alt und neu.
+  - (c) Zahl der Firma-Stichtage im Backtest-Zeitraum, die durch die Plausibilitätsprüfung neu herausfallen oder neu
+    hineinkommen.
+  - Danach wird die Referenz des Vergleichswerkzeugs neu geschrieben (alte gesichert, mit Vermerk).
+
 ## Checkliste c3: Neulauf ab 01.12.2026 (festgehalten 15.11.2026)
 
 Für eine neue Sitzung ohne Verlauf. Reihenfolge einhalten; jeder Schritt erst, wenn der vorige sauber ist. Tresor bleibt
@@ -845,6 +891,7 @@ zu. Ergebnisse werden dokumentiert, **nichts nachjustiert**; alle Datenkorrektur
 
 0. **Vorbereitung:** Datum per `date`; `git status` sauber, `git pull`; volle Testsuite grün
    (`.venv\Scripts\python -m pytest`). Nicht parallel zum Tageslauf rechnen.
+   Seit 24.11.2026: Die sechste Datenkorrektur (Gleichstand bei gleichem `filed`) muss im Code sein, sonst nicht starten.
 1. **Rohkurse nachladen:** `.venv\Scripts\python tools\tiingo_rohkurse_nachladen.py` (wiederaufnehmbar; hält an Tages-,
    Monats- oder Netzgrenze an, dann einfach erneut starten). Fertig, wenn „noch offen 0“ meldet oder nur Symbole bleiben,
    die der Nachlader als dauerhaft nicht verfügbar führt. META muss geladen sein (Metadaten-404 ist kein Hindernis);
