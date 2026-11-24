@@ -150,9 +150,32 @@ def test_1b_lauf_schreibt_nur_kandidat(tmp_path, monkeypatch):
     vergleich = next(ablage.glob("*_vergleich.md")).read_text(encoding="utf-8")
     assert "Versiegelung daten/cache/: 0 Dateien" in vergleich and "Netzversuche: 0" in vergleich
     assert "| AAA (1) 2024-12-04 | art | split | unklar |" in vergleich
-    assert "Geänderte Einträge nach der Grenze: 0" in vergleich and "Geänderte geprüfte Einträge: 0" in vergleich
+    assert "Geänderte Einträge nach der Grenze: 0" in vergleich and "Verletzungen bei geprüften Einträgen (geändert oder gestrichen): 0" in vergleich
     assert "AAA (1) 2024-12-04: Faktor Kursreihe 2.0; kein Periodenbericht danach" in vergleich
     assert list(ablage.glob("*_split_ereignisse.md"))
+
+
+def test_1b_nicht_gefundene_bleiben_und_verletzung_geprueft(tmp_path, monkeypatch):
+    """Jakob 24.11.2026: Einträge bis zur Grenze, die der Lauf nicht mehr findet, bleiben unverändert und werden eigens
+    gezählt; gestrichene oder geänderte geprüfte Einträge zählt die Abnahme als Verletzung."""
+    def einordnung(cache, bis):
+        return [bis[(1, "2024-12-04")]], _LEER                      # GEP (geprüft) nicht mehr gefunden
+
+    w, liste, cache, ablage = _lauf_umgebung(tmp_path, monkeypatch, einordnung)
+    kandidat = w.lauf(ablage=ablage, liste=liste, cache=cache, freigaben_pfad=tmp_path / "keine.yaml")
+    alt = w.eintraege_nach_schluessel(w.lies_liste(liste)["ereignisse"])
+    neu = w.eintraege_nach_schluessel(w.lies_liste(kandidat)["ereignisse"])
+    assert neu == alt
+    vergleich = next(ablage.glob("*_vergleich.md")).read_text(encoding="utf-8")
+    assert "unverändert behalten: 1." in vergleich and "- GEP (2) 2016-12-02 (geprüft)" in vergleich
+    assert "Verletzungen bei geprüften Einträgen (geändert oder gestrichen): 0" in vergleich
+    bericht = next(ablage.glob("*_split_ereignisse.md")).read_text(encoding="utf-8")
+    assert "1 Einträge bis zur Grenze stehen nicht mehr" in bericht and "## Messung Gleichstand" in bericht
+    # gestrichen und geändert geprüft → Verletzung
+    v = w.vergleich(alt, {k: e for k, e in alt.items() if k != (2, "2016-12-02")}, pd.Timestamp("2024-12-31"))
+    assert v["verletzung_geprueft"] == [(2, "2016-12-02")]
+    v = w.vergleich(alt, {**alt, (2, "2016-12-02"): dict(alt[(2, "2016-12-02")], art="split")}, pd.Timestamp("2024-12-31"))
+    assert v["verletzung_geprueft"] == [(2, "2016-12-02")]
 
 
 def test_1b_versiegelung_meldet_geaenderte_cache_datei(tmp_path, monkeypatch):

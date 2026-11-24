@@ -308,10 +308,14 @@ def vergleich(alt: dict, neu: dict, grenze: pd.Timestamp) -> dict:
             "entfernt": sorted((k for k in set(alt) - set(neu)), key=lambda k: (k[1], k[0])),
             "geaendert": geaendert,
             "geaendert_nach_grenze": [k for k, _ in geaendert if nach(k)],
-            "geaendert_geprueft": [k for k, _ in geaendert if alt[k].get("geprueft")]}
+            "geaendert_geprueft": [k for k, _ in geaendert if alt[k].get("geprueft")],
+            # Abnahme (Jakob 24.11.2026): gestrichene oder geänderte geprüfte Einträge sind eine Verletzung
+            "verletzung_geprueft": sorted({k for k, _ in geaendert if alt[k].get("geprueft")}
+                                          | {k for k in set(alt) - set(neu) if alt[k].get("geprueft")}, key=lambda k: (k[1], k[0]))}
 
 
-def vergleich_text(alt: dict, neu: dict, v: dict, messung: dict, siegel: dict, grenze, netz: list, zeit: str) -> str:
+def vergleich_text(alt: dict, neu: dict, v: dict, messung: dict, siegel: dict, grenze, netz: list, zeit: str,
+                   nicht_gefunden: list[dict] = ()) -> str:
     def name(k, quelle):
         return f"{quelle[k].get('ticker', '?')} ({k[0]}) {k[1]}"
     unklar = [k for k, e in neu.items() if e.get("art") == "unklar" and pd.Timestamp(k[1]) <= grenze]
@@ -322,11 +326,16 @@ def vergleich_text(alt: dict, neu: dict, v: dict, messung: dict, siegel: dict, g
          f"(neu {len(siegel['neu'])}, geändert {len(siegel['geaendert'])}, entfernt {len(siegel['entfernt'])}); erwartet 0.",
          f"- Netzversuche: {len(netz)}; erwartet 0.",
          f"- Geänderte Einträge nach der Grenze: {len(v['geaendert_nach_grenze'])}; erwartet 0.",
-         f"- Geänderte geprüfte Einträge: {len(v['geaendert_geprueft'])}; erwartet 0.",
-         f"- Neu: {len(v['neu'])}, entfernt: {len(v['entfernt'])}, geändert: {len(v['geaendert'])}.", ""]
+         f"- Verletzungen bei geprüften Einträgen (geändert oder gestrichen): {len(v['verletzung_geprueft'])}; erwartet 0.",
+         f"- Neu: {len(v['neu'])}, entfernt: {len(v['entfernt'])}, geändert: {len(v['geaendert'])}.",
+         f"- Bis zur Grenze nicht mehr in den Kursreihen gefunden, unverändert behalten: {len(nicht_gefunden)}.", ""]
     for titel, schl in (("Versiegelung: veränderte Dateien", [f"{a}: {p}" for a, ps in siegel.items() for p in ps]),
                         ("Neu im Kandidaten", [name(k, neu) for k in v["neu"]]),
-                        ("Nicht mehr im Kandidaten", [name(k, alt) for k in v["entfernt"]])):
+                        ("Nicht mehr im Kandidaten", [name(k, alt) for k in v["entfernt"]]),
+                        ("Verletzungen bei geprüften Einträgen", [name(k, alt) for k in v["verletzung_geprueft"]]),
+                        ("Nicht mehr gefunden, unverändert behalten (Jakob 24.11.2026)",
+                         [f"{e['ticker']} ({e['cik']}) {e['datum']}" + (" (geprüft)" if e.get("geprueft") else "")
+                          for e in nicht_gefunden])):
         if schl:
             z += [f"## {titel}", ""] + [f"- {s}" for s in schl] + [""]
     z += ["## Geänderte Einträge", "", "| Ereignis | Feld | geltend | Kandidat |", "| --- | --- | --- | --- |"]
@@ -335,7 +344,12 @@ def vergleich_text(alt: dict, neu: dict, v: dict, messung: dict, siegel: dict, g
             z.append(f"| {name(k, neu)} | {f} | {a} | {b} |")
     z += ["", f"## „unklar“ bis zur Grenze im Kandidaten ({len(unklar)})", ""]
     z += [f"- {name(k, neu)}: Faktor Kursreihe {neu[k].get('faktor_kursreihe')}; {neu[k].get('bemerkung')}" for k in sorted(unklar, key=lambda k: (k[1], k[0]))]
-    z += ["", "## Messung Gleichstand in sec_verhaeltnis (nur gemessen, nichts geändert)", "",
+    return "\n".join(z) + "\n\n" + gleichstand_text(messung)
+
+
+def gleichstand_text(messung: dict) -> str:
+    """Messergebnis Gleichstand (Jakob 24.11.2026: keine Änderung, Ergebnis in den Bericht)."""
+    z = ["## Messung Gleichstand in sec_verhaeltnis (nur gemessen, nichts geändert)", "",
           f"- Ereignisse mit SEC-Verhältnis: {messung['ereignisse_mit_r']}",
           f"- mit Gleichstand (gleicher Sortierschlüssel, verschiedene Werte): {len(messung['gleichstand'])}"
           + (": " + ", ".join(messung["gleichstand"]) if messung["gleichstand"] else ""),
@@ -346,7 +360,8 @@ def vergleich_text(alt: dict, neu: dict, v: dict, messung: dict, siegel: dict, g
     return "\n".join(z) + "\n"
 
 
-def bericht_text(eintraege: list[dict], grenze, neu_bis_grenze: int, nach_grenze: int, zeit: datetime) -> str:
+def bericht_text(eintraege: list[dict], grenze, neu_bis_grenze: int, nach_grenze: int, zeit: datetime,
+                 nicht_gefunden: int = 0, messung: dict | None = None) -> str:
     df = pd.DataFrame(eintraege)
     df = df[pd.to_datetime(df["datum"].astype(str)) <= grenze]           # Bericht nur bis zur Grenze
     zaehl = df.pivot_table(index="art", values="cik", aggfunc="count", fill_value=0)
@@ -357,7 +372,8 @@ def bericht_text(eintraege: list[dict], grenze, neu_bis_grenze: int, nach_grenze
             f"Erstellt {zeit:%d.%m.%Y %H:%M} mit `tools/split_ereignisse_einordnen.py`; Liste `config/kapitalmassnahmen_historie.yaml`. "
             f"{neu_bis_grenze} Ereignisse von 2012 bis zur Tresorgrenze ({grenze.date()}) in den Kursreihen des Universums, "
             f"Kurse und SEC-Einreichungen nur bis zur Grenze (Befund 8). {nach_grenze} Einträge nach der Grenze "
-            "unverändert übernommen (hier nicht genannt).", "",
+            f"unverändert übernommen (hier nicht genannt). {nicht_gefunden} Einträge bis zur Grenze stehen nicht mehr in den "
+            "Kursreihen (Firma erst nach der Grenze im Index oder Kursreihe gekappt) und bleiben unverändert (Jakob 24.11.2026).", "",
             "| Art | Ereignisse |", "| --- | --- |"]
     for art, z in zaehl.iterrows():
         text.append(f"| {art} | {int(z.iloc[0])} |")
@@ -380,7 +396,7 @@ def bericht_text(eintraege: list[dict], grenze, neu_bis_grenze: int, nach_grenze
     if len(einfach_aber_abs):
         text += [f"Achtung: {len(einfach_aber_abs)} davon haben ein glattes Verhältnis: "
                  + ", ".join(f"{z.ticker} {z.datum}" for z in einfach_aber_abs.itertuples()), ""]
-    return "\n".join(text) + "\n"
+    return "\n".join(text) + "\n" + (gleichstand_text(messung) if messung else "")
 
 
 # --- Abläufe ---------------------------------------------------------------------------------------------------------
@@ -412,7 +428,9 @@ def lauf(ablage: Path = ABLAGE, liste: Path = LISTE, cache: Path = CACHE, freiga
     if netz:
         raise Abbruch(f"Abbruch: {len(netz)} Netzversuche ({netz[:3]}) – Kandidat wird nicht geschrieben")
     neu_bis_grenze = len(eintraege)
-    alle = sorted(eintraege + nach_grenze, key=lambda e: (str(e["datum"]), e["ticker"]))
+    gefunden = {(int(e["cik"]), str(e["datum"])) for e in eintraege}
+    nicht_gefunden = [e for k, e in bis.items() if k not in gefunden]     # unverändert behalten (Jakob 24.11.2026)
+    alle = sorted(eintraege + nach_grenze + nicht_gefunden, key=lambda e: (str(e["datum"]), e["ticker"]))
     if sha256(liste) != grundlage:
         raise Abbruch("Die geltende Liste wurde während des Laufs geändert – Kandidat wird nicht geschrieben")
     ablage.mkdir(parents=True, exist_ok=True)
@@ -420,10 +438,11 @@ def lauf(ablage: Path = ABLAGE, liste: Path = LISTE, cache: Path = CACHE, freiga
     kandidat = ablage / f"{stempel}_kandidat.yaml"
     kandidat.write_text(listentext(alle, zeit.isoformat(timespec="seconds"), grundlage), encoding="utf-8")
     v = vergleich(geltend, eintraege_nach_schluessel(alle), grenze)
-    text = vergleich_text(geltend, eintraege_nach_schluessel(alle), v, messung, siegel, grenze, netz, f"{zeit:%d.%m.%Y %H:%M}")
+    text = vergleich_text(geltend, eintraege_nach_schluessel(alle), v, messung, siegel, grenze, netz, f"{zeit:%d.%m.%Y %H:%M}",
+                          nicht_gefunden)
     (ablage / f"{stempel}_vergleich.md").write_text(text, encoding="utf-8")
     (ablage / f"{stempel}_split_ereignisse.md").write_text(
-        bericht_text(alle, grenze, neu_bis_grenze, len(nach_grenze), zeit), encoding="utf-8")
+        bericht_text(alle, grenze, neu_bis_grenze, len(nach_grenze), zeit, len(nicht_gefunden), messung), encoding="utf-8")
     print(text)
     print(f"Kandidat: {kandidat}")
     return kandidat
