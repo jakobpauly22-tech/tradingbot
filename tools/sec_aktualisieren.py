@@ -6,7 +6,13 @@ Abendlauf; nimmt die Laufsperre des Tageslaufs (Probe: die der Probe), läuft al
 
   .venv\Scripts\python tools\sec_aktualisieren.py --probe   komplett in der Probe-Schicht (Betriebs- und Entwicklungsdaten
                                                              bleiben byteweise unverändert), keine Sofortmeldung
-  .venv\Scripts\python tools\sec_aktualisieren.py           echter Lauf (Zeitplan: Samstag 10:00)
+  .venv\Scripts\python tools\sec_aktualisieren.py           echter Lauf
+  .venv\Scripts\pythonw tools\sec_aktualisieren.py --protokoll   Zeitplan (Samstag 10:00, tools\sec_aktualisierung_einrichten.ps1):
+                                                             Ausgabe angehängt an daten/betrieb/sec_aktualisierung.log
+
+Healthchecks (Schritt 4, Jakob 23.11.2026): Nach jedem echten Lauf ein Ping an HEALTHCHECKS_SEC_PING_URL (.env): Erfolg
+= Ping, Fehlschlag (nicht erfolgreich: Abbruch, Fehlerschwelle, HTTP 403; Laufsperre; unerwarteter Fehler) = …/fail.
+Die Probe pingt nie.
 
 SEC-Regeln: höchstens 8 Anfragen je Sekunde (eine gemeinsame Drossel, config/fundamental.yaml), User-Agent aus
 SEC_USER_AGENT in .env, HTTP 429/5xx mit Pause wiederholt, HTTP 403 bricht sofort ab. Ausgang 0 nur bei Erfolg.
@@ -36,12 +42,40 @@ def mb(b: int) -> str:
     return f"{b / 1e6:,.1f} MB".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def main() -> int:
+PROTOKOLL = PROJEKT_WURZEL / "daten" / "betrieb" / "sec_aktualisierung.log"
+
+
+def main(argv=None, *, lauf=None) -> int:
+    """Rahmen: Protokolldatei (`--protokoll`), Lauf, danach Healthchecks-Ping (nur echter Lauf). `lauf` austauschbar (Tests)."""
+    import contextlib
+    import traceback
+
     load_dotenv(PROJEKT_WURZEL / ".env")
     a = argparse.ArgumentParser()
     a.add_argument("--probe", action="store_true", help="nur in der Probe-Schicht, ohne Sofortmeldung")
-    arg = a.parse_args()
-    probe = arg.probe
+    a.add_argument("--protokoll", action="store_true", help="Ausgabe an daten/betrieb/sec_aktualisierung.log anhängen (Zeitplan)")
+    arg = a.parse_args(argv)
+    with contextlib.ExitStack() as stapel:
+        if arg.protokoll:
+            PROTOKOLL.parent.mkdir(parents=True, exist_ok=True)
+            datei = stapel.enter_context(PROTOKOLL.open("a", encoding="utf-8"))
+            stapel.enter_context(contextlib.redirect_stdout(datei))
+            stapel.enter_context(contextlib.redirect_stderr(datei))
+        print(f"\n=== SEC-Aktualisierung {datetime.now():%d.%m.%Y %H:%M:%S}" + (" (Probe)" if arg.probe else "") + " ===", flush=True)
+        try:
+            code = (lauf or _lauf)(arg.probe)
+        except Exception:  # noqa: BLE001 – unerwarteter Fehler: Protokoll und …/fail
+            traceback.print_exc()
+            code = 2
+        if not arg.probe:
+            from tradingbot.betrieb.benachrichtigung import sec_lebenszeichen, sec_melder_aus_env
+
+            print(sec_lebenszeichen(sec_melder_aus_env(lade_konfiguration("betrieb")), code == 0), flush=True)
+        print(f"Ausgang {code}", flush=True)
+    return code
+
+
+def _lauf(probe: bool) -> int:
 
     from tradingbot.backtest.tresor import betriebsmodus
     from tradingbot.betrieb import seccache
@@ -112,9 +146,9 @@ def main() -> int:
     for m in erg.meldungen:
         print("MELDUNG:", m)
     if erg.meldungen and not probe:
-        from tradingbot.betrieb.benachrichtigung import melder_aus_env
+        from tradingbot.betrieb.benachrichtigung import sec_melder_aus_env
 
-        print(melder_aus_env(lade_konfiguration("betrieb")).melden("\n".join(erg.meldungen[:10])))
+        print(sec_melder_aus_env(lade_konfiguration("betrieb")).melden("\n".join(erg.meldungen[:10])))
     return 0 if stand["erfolgreich"] else 1
 
 

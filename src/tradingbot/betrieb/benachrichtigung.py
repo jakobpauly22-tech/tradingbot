@@ -321,6 +321,23 @@ def melder_aus_env(betrieb: dict, umgebung: dict | None = None) -> Melder:
     return Melder(kanaele, url or None, bool(k.get("eurobetraege", True)), zeitlimit)
 
 
+def sec_melder_aus_env(betrieb: dict, umgebung: dict | None = None) -> Melder:
+    """Melder für tools/sec_aktualisieren.py (SEC-Aktualisierung Schritt 4, Jakob 23.11.2026): Telegram wie der Tageslauf,
+    aber eigener Healthchecks-Check `HEALTHCHECKS_SEC_PING_URL` (Erfolg = Ping, Fehlschlag = …/fail)."""
+    umgebung = os.environ if umgebung is None else umgebung
+    m = melder_aus_env(betrieb, umgebung)
+    k = betrieb.get("benachrichtigung", {}) or {}
+    url = (umgebung.get("HEALTHCHECKS_SEC_PING_URL") or "").strip() if k.get("healthchecks", False) else ""
+    return Melder(m.kanaele, url or None, m.eurobetraege, m.zeitlimit)
+
+
+def sec_lebenszeichen(melder: Melder, erfolgreich: bool) -> str:
+    """Ping des SEC-Checks; Text ohne URL. Fehlt die Variable: Hinweis statt Ping."""
+    if not melder.lebenszeichen_url:
+        return "Lebenszeichen SEC: nicht eingerichtet (HEALTHCHECKS_SEC_PING_URL in .env)"
+    return melder.lebenszeichen(fehler=not erfolgreich).replace("Lebenszeichen", "Lebenszeichen SEC", 1)
+
+
 VERBINDUNG_OK = "Verbindung ok"
 
 

@@ -883,6 +883,20 @@ gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder
   - Veraltet: 3 (FERG, OKTA, SKYD).
   - Ohne `STAND.json` (vor dem ersten Lauf am 05.12.) gibt es die Sofortmeldung „STAND.json fehlt“.
 
+### Stand Schritt 4 (24.11.2026): Zeitplan und Healthchecks
+
+- **Einrichtung:** `tools/sec_aktualisierung_einrichten.ps1` einmal von Hand ausführen:
+  - Windows-Aufgabe „TradingBot SEC-Aktualisierung“, samstags 10:00, `pythonw tools\sec_aktualisieren.py --protokoll`;
+  - verpasster Start wird nachgeholt (`StartWhenAvailable`), auch im Akkubetrieb, höchstens 2 Stunden;
+  - der Laptop wird nicht aufgeweckt; dafür gibt es Healthchecks.
+- **Protokoll:** `--protokoll` hängt die Ausgabe an `daten/betrieb/sec_aktualisierung.log` an, weil die Aufgabe ohne
+  Konsolenfenster läuft.
+- **Healthchecks:** eigener Check mit `HEALTHCHECKS_SEC_PING_URL` in `.env`. Nach jedem echten Lauf kommt ein Ping:
+  - Erfolg: Ping;
+  - Fehlschlag (`/fail`): nicht erfolgreich (Abbruch, Fehlerschwelle, HTTP 403), Laufsperre oder unerwarteter Fehler;
+  - die Probe pingt nie.
+- **Telegram:** Meldungen der Prüfregel wie bisher, quittierte Verletzungen nur im Protokoll.
+
 ### Stand Schritt 5 (24.11.2026, vorgezogen)
 
 - Der erste echte Lauf war am 24.11.2026, auf Jakobs Entscheidung vom selben Tag vorgezogen.
