@@ -77,7 +77,7 @@ def test_split_einordnung_nur_bis_zur_tresorgrenze(monkeypatch, tmp_path):
     assert list(bis) == [(1, "2024-06-03")] and nach == [alt[(2, "2025-03-03")]]
     with betriebsmodus("Test", protokoll=tmp_path / "betriebsfreigaben.log"):
         with pytest.raises(TresorGesperrt):
-            w.main()
+            w.main([])
     # Einreichungen nach der Grenze fallen weg (Aktienfakten aus dem Cache)
     fakten = pd.DataFrame([_fakt("2023-01-01", "2023-12-31", 1e8, "2024-02-20"), _fakt("2024-01-01", "2024-12-31", 2e8, "2025-02-20")])
     monkeypatch.setattr(w, "aktienfakten", lambda roh, d, dauer: fakten)
@@ -93,6 +93,183 @@ def test_split_einordnung_nur_bis_zur_tresorgrenze(monkeypatch, tmp_path):
     monkeypatch.setattr(sec, "SecClient", _Client)
     assert list(w.aktienfakten_mit_quartalen([1])["filed"]) == [pd.Timestamp("2024-02-20")]
     assert "liest ALLE Einträge, ohne" in w.KOPF and "Backtests lesen nur Ereignisse bis zur Datumsgrenze" not in w.KOPF
+
+
+# --- c3 Schritt 1b (Jakob 24.11.2026): Kandidatenliste, Netzsperre, Versiegelung, Übernahme, Freigaben -----------------
+def _liste(pfad, eintraege):
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    puffer = StringIO()
+    YAML().dump({"stand": "2026-11-13T12:54:11", "ereignisse": eintraege}, puffer)
+    pfad.write_text("# Kopf\n" + puffer.getvalue(), encoding="utf-8")
+    return pfad
+
+
+def _e(cik, ticker, datum, art="split", faktor=2.0, geprueft=False, **mehr):
+    eintrag = {"cik": cik, "ticker": ticker, "datum": datum, "faktor_kursreihe": faktor, "sec_verhaeltnis": faktor,
+               "sec_einreichungen": "2024-02-01 → 2025-02-01", "art": art, "split_faktor": faktor,
+               "quelle": "SEC-Vergleich automatisch", "geprueft": geprueft, "bemerkung": "SEC-Verhältnis = Faktor"}
+    eintrag.update(mehr)
+    return eintrag
+
+
+_LEER = {"ereignisse_mit_r": 0, "gleichstand": [], "r_anders": [], "art_anders": []}
+
+
+def _lauf_umgebung(tmp_path, monkeypatch, einordnung):
+    w = _werkzeug("split_ereignisse_einordnen")
+    liste = _liste(tmp_path / "liste.yaml", [_e(1, "AAA", "2024-12-04"), _e(2, "GEP", "2016-12-02", art="unklar", geprueft=True),
+                                             _e(3, "NACH", "2026-11-20", faktor=8.0)])
+    cache = tmp_path / "cache"
+    (cache / "sec").mkdir(parents=True)
+    (cache / "sec" / "a.json").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(w, "einordnung", lambda grenze, bis, freigaben: einordnung(cache, bis))
+    return w, liste, cache, tmp_path / "ablage"
+
+
+def test_1b_lauf_schreibt_nur_kandidat(tmp_path, monkeypatch):
+    """Der Lauf schreibt nicht in die geltende Liste, sondern Kandidat, Vergleich und Bericht in die Ablage; Einträge nach
+    der Grenze und geprüfte bleiben gleich, der Vergleich nennt die Änderung und die Versiegelung 0 Dateien."""
+    def einordnung(cache, bis):
+        assert (3, "2026-11-20") not in bis                       # nach der Grenze nicht neu eingeordnet
+        neu = dict(bis[(1, "2024-12-04")], art="unklar", split_faktor=None, sec_verhaeltnis=None, sec_einreichungen=None,
+                   bemerkung="kein Periodenbericht danach")
+        return [neu, bis[(2, "2016-12-02")]], _LEER
+
+    w, liste, cache, ablage = _lauf_umgebung(tmp_path, monkeypatch, einordnung)
+    vorher = liste.read_bytes()
+    kandidat = w.lauf(ablage=ablage, liste=liste, cache=cache, freigaben_pfad=tmp_path / "keine.yaml")
+    assert liste.read_bytes() == vorher
+    daten = w.lies_liste(kandidat)
+    assert daten["grundlage_sha256"] == w.sha256(liste)
+    neu = w.eintraege_nach_schluessel(daten["ereignisse"])
+    assert neu[(3, "2026-11-20")] == w.eintraege_nach_schluessel(w.lies_liste(liste)["ereignisse"])[(3, "2026-11-20")]
+    assert neu[(1, "2024-12-04")]["art"] == "unklar"
+    vergleich = next(ablage.glob("*_vergleich.md")).read_text(encoding="utf-8")
+    assert "Versiegelung daten/cache/: 0 Dateien" in vergleich and "Netzversuche: 0" in vergleich
+    assert "| AAA (1) 2024-12-04 | art | split | unklar |" in vergleich
+    assert "Geänderte Einträge nach der Grenze: 0" in vergleich and "Geänderte geprüfte Einträge: 0" in vergleich
+    assert "AAA (1) 2024-12-04: Faktor Kursreihe 2.0; kein Periodenbericht danach" in vergleich
+    assert list(ablage.glob("*_split_ereignisse.md"))
+
+
+def test_1b_versiegelung_meldet_geaenderte_cache_datei(tmp_path, monkeypatch):
+    def einordnung(cache, bis):
+        (cache / "sec" / "a.json").write_text("y", encoding="utf-8")   # der Lauf verändert den Cache
+        return list(bis.values()), _LEER
+
+    w, liste, cache, ablage = _lauf_umgebung(tmp_path, monkeypatch, einordnung)
+    w.lauf(ablage=ablage, liste=liste, cache=cache, freigaben_pfad=tmp_path / "keine.yaml")
+    vergleich = next(ablage.glob("*_vergleich.md")).read_text(encoding="utf-8")
+    assert "Versiegelung daten/cache/: 1 Dateien verändert" in vergleich and "geaendert: sec/a.json" in vergleich
+
+
+def test_1b_netzsperre_bricht_ab_auch_wenn_abgefangen(tmp_path, monkeypatch):
+    """Fehlende Datei → Abbruch statt Abruf: Der Netzversuch ist keine Exception, die `except Exception` still zählt."""
+    import socket
+
+    import pytest
+
+    def einordnung(cache, bis):
+        try:
+            socket.getaddrinfo("api.tiingo.com", 443)
+        except Exception:                                          # wie die Fehlerschwelle in lade_firmendaten
+            pass
+        return list(bis.values()), _LEER
+
+    w, liste, cache, ablage = _lauf_umgebung(tmp_path, monkeypatch, einordnung)
+    alt = socket.getaddrinfo
+    with pytest.raises(SystemExit, match="Netzzugriff gesperrt"):
+        w.lauf(ablage=ablage, liste=liste, cache=cache, freigaben_pfad=tmp_path / "keine.yaml")
+    assert socket.getaddrinfo is alt                               # Sperre wieder aufgehoben
+    assert not list(ablage.glob("*_kandidat.yaml"))
+
+
+def test_1b_uebernehmen_sichert_und_prueft_grundlage(tmp_path, monkeypatch):
+    import pytest
+
+    def einordnung(cache, bis):
+        return [dict(bis[(1, "2024-12-04")], art="unklar"), bis[(2, "2016-12-02")]], _LEER
+
+    w, liste, cache, ablage = _lauf_umgebung(tmp_path, monkeypatch, einordnung)
+    kandidat = w.lauf(ablage=ablage, liste=liste, cache=cache, freigaben_pfad=tmp_path / "keine.yaml")
+    vorher = liste.read_bytes()
+    sicherung, berichte = tmp_path / "sicherung", tmp_path / "berichte"
+    gesichert = w.uebernehmen(kandidat, liste=liste, sicherung=sicherung, berichte=berichte)
+    assert gesichert.read_bytes() == vorher
+    text = liste.read_text(encoding="utf-8")
+    assert "grundlage_sha256" not in text and text.startswith(w.KOPF)
+    assert w.lies_liste(liste)["ereignisse"] == w.lies_liste(kandidat)["ereignisse"]
+    assert list(berichte.glob("*_split_ereignisse.md"))
+    with pytest.raises(SystemExit, match="nicht mehr die Grundlage"):       # Liste inzwischen geändert
+        w.uebernehmen(kandidat, liste=liste, sicherung=sicherung, berichte=berichte)
+
+
+def test_1b_freigabe_nur_unklar_bis_grenze_mit_beleg(tmp_path):
+    import pytest
+
+    w = _werkzeug("split_ereignisse_einordnen")
+    grenze = pd.Timestamp("2024-12-31")
+    (tmp_path / "ANET_2024-12-04").mkdir()
+    (tmp_path / "ANET_2024-12-04" / "0001596532-24-000123.txt.gz").write_bytes(b"")
+    eintrag = _e(1596532, "ANET", "2024-12-04", art="unklar", faktor=4.0, split_faktor=None)
+    freigabe = {"split_faktor": 4, "accn": "0001596532-24-000123", "filed": "2024-11-07", "beleg": "4-for-1, wirksam 03.12.2024",
+                "freigegeben": "Jakob 24.11.2026"}
+    neu = w.freigabe_anwenden(eintrag, freigabe, grenze, belege=tmp_path)
+    assert neu["art"] == "split" and neu["split_faktor"] == 4.0 and neu["geprueft"] is True
+    assert "0001596532-24-000123" in neu["quelle"] and "2024-11-07" in neu["quelle"] and w.REGEL_UNKLAR in neu["quelle"]
+    with pytest.raises(SystemExit, match="nach der Tresorgrenze"):
+        w.freigabe_anwenden(eintrag, dict(freigabe, filed="2025-02-19"), grenze, belege=tmp_path)
+    with pytest.raises(SystemExit, match="nicht „unklar“"):
+        w.freigabe_anwenden(dict(eintrag, art="split"), freigabe, grenze, belege=tmp_path)
+    with pytest.raises(SystemExit, match="fehlt in der Belegablage"):
+        w.freigabe_anwenden(eintrag, dict(freigabe, accn="0001596532-24-999999"), grenze, belege=tmp_path)
+
+
+def test_1b_gleichstand_nur_gemessen():
+    """Zwei Werte derselben Periode mit gleichem filed: gemeldet; r bei umgekehrter Zeilenfolge wird mitgemessen."""
+    w = _werkzeug("split_ereignisse_einordnen")
+    f = pd.DataFrame([_fakt("2023-01-01", "2023-12-31", 100e6, "2024-02-20"),
+                      _fakt("2023-01-01", "2023-12-31", 101e6, "2024-02-20"),
+                      _fakt("2023-01-01", "2023-12-31", 200e6, "2024-08-01", form="10-Q")])
+    g = w.gleichstand(f, pd.Timestamp("2024-06-03"))
+    assert g["gleichstand"] is True and g["r_umgekehrt"] is not None
+    ohne = w.gleichstand(f.iloc[[0, 2]].reset_index(drop=True), pd.Timestamp("2024-06-03"))
+    assert ohne["gleichstand"] is False and abs(ohne["r_umgekehrt"] - 2.0) < 1e-9
+
+
+def test_1b_belege_nur_in_ablage_und_bis_grenze(tmp_path):
+    import gzip
+
+    w = _werkzeug("split_ereignisse_einordnen")
+    kandidat = _liste(tmp_path / "kandidat.yaml", [_e(1596532, "ANET", "2024-12-04", art="unklar", split_faktor=None),
+                                                   _e(9, "SPL", "2024-06-03")])
+
+    class _Lesen:
+        cache_wurzel = tmp_path / "devcache"
+
+        def _cache_lesen(self, datei):
+            return {"filings": {"recent": {"form": ["8-K", "8-K", "10-Q", "8-K"],
+                                           "filingDate": ["2024-11-07", "2025-01-05", "2024-11-01", "2024-01-02"],
+                                           "accessionNumber": ["0001-24-1", "0001-25-1", "0001-24-2", "0001-24-0"],
+                                           "items": ["2.02,9.01", "8.01", "", "8.01"]}}}, None
+
+    class _Client:
+        def __init__(self):
+            self.urls = []
+
+        def text_holen(self, url):
+            self.urls.append(url)
+            return "4-for-1 stock split"
+
+    client, belege = _Client(), tmp_path / "belege"
+    w.belege_holen(kandidat, belege=belege, client=client, lesen=_Lesen())
+    assert client.urls == ["https://www.sec.gov/Archives/edgar/data/1596532/0001241/0001-24-1.txt"]   # nur 8-K im Fenster ≤ Grenze
+    with gzip.open(belege / "ANET_2024-12-04" / "0001-24-1.txt.gz", "rt", encoding="utf-8") as f:
+        assert "stock split" in f.read()
+    assert not (tmp_path / "devcache").exists()
 
 
 # --- tools/pruefe_abspaltungen_tiingo.py (Teil c1, S2 nach der zweiten Änderung, Jakob 13.11.2026) ------------------------
