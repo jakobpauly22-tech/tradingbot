@@ -21,6 +21,11 @@ Schicht las darauf durch und die Referenz war nicht mehr erreichbar):
   SEC-Daten unter `betrieb/cache/` statt `cache/`. Die Laufkopie bildet deshalb jede eingefrorene Datei der SEC-Bereiche
   (`betrieb/seccache.BEREICHE`) zusätzlich auf den Pfad des Betriebs ab (byteweise Kopie, SHA geprüft) und legt die Marke
   der Übernahme an; als fehlend erfasste Pfade gelten auch am neuen Ort als fehlend. Die Referenz bleibt unverändert.
+- **`--sec-betrieb` (Abnahme B, Jakob 24.11.2026):** Wie oben, aber die SEC-Dateien kommen aus dem echten SEC-Cache des
+  Betriebs (`daten/betrieb/cache/<Bereich>`, Stand nach der SEC-Aktualisierung) statt aus den eingefrorenen Eingaben; alle
+  übrigen Eingaben (Kurse, Universum, Kursstatus) bleiben eingefroren. Jede eingefrorene SEC-Datei muss dort vorhanden
+  sein (sonst Abbruch). Abweichungen zur Referenz sind hier erwartet; das Werkzeug listet die abweichenden Firmen und
+  speichert das Ergebnis (`vergleich_sec_betrieb.pkl`) für den Bericht.
 
 Betriebs- und Entwicklungsdaten bleiben unverändert (alles Schreiben geht in die Schicht).
 
@@ -164,9 +169,11 @@ def laufkopie(schicht: Path, lauf: Path) -> str | None:
     return alt
 
 
-def sec_abbilden(lauf: Path, fehlend) -> tuple[int, list[str]]:
+def sec_abbilden(lauf: Path, fehlend, quelle: Path | None = None) -> tuple[int, list[str]]:
     """Eingefrorene Dateien der SEC-Bereiche (`cache/<Bereich>`) zusätzlich unter `betrieb/cache/<Bereich>` ablegen,
-    byteweise mit SHA-Prüfung, und die Marke der Übernahme schreiben. Gibt (Zahl der Dateien, fehlende Pfade am neuen Ort)."""
+    byteweise mit SHA-Prüfung, und die Marke der Übernahme schreiben. Gibt (Zahl der Dateien, fehlende Pfade am neuen Ort).
+    `quelle` (Abnahme B): Wurzel des echten Betriebsbereichs (`daten/betrieb`); dann wird je eingefrorener SEC-Datei die
+    Datei `quelle/<cache/…>` (neuer SEC-Stand) abgelegt statt der eingefrorenen."""
     from tradingbot.betrieb.seccache import BEREICHE, MARKE
 
     def sec_pfad(rel: str) -> bool:
@@ -181,14 +188,18 @@ def sec_abbilden(lauf: Path, fehlend) -> tuple[int, list[str]]:
         if ziel.exists():
             raise Abbruch(f"{ziel.relative_to(lauf).as_posix()} liegt schon in den eingefrorenen Eingaben – Abbildung nicht eindeutig")
         ziel.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(datei, ziel)
-        if sha256(ziel) != sha256(datei):
+        herkunft = datei if quelle is None else Path(quelle) / rel
+        if not herkunft.exists():
+            raise Abbruch(f"{rel} fehlt im SEC-Cache des Betriebs ({herkunft})")
+        shutil.copy2(herkunft, ziel)
+        if sha256(ziel) != sha256(herkunft):
             raise Abbruch(f"Abbildung {rel} nicht byteweise gleich")
         zahl += 1
     marke = lauf / "betrieb" / "cache" / MARKE
     marke.parent.mkdir(parents=True, exist_ok=True)
     marke.write_text(json.dumps({"uebernommen_am": datetime.now().isoformat(timespec="seconds"), "dateien": zahl,
-                                 "grund": "bewertung_vergleich: Abbildung der eingefrorenen SEC-Dateien (Abnahme A)"},
+                                 "grund": "bewertung_vergleich: Abbildung der eingefrorenen SEC-Dateien (Abnahme A)" if quelle is None
+                                 else f"bewertung_vergleich --sec-betrieb: SEC-Dateien aus {quelle} (Abnahme B)"},
                                 ensure_ascii=False), encoding="utf-8")
     return zahl, [f"betrieb/{rel}" for rel in fehlend if sec_pfad(rel)]
 
@@ -263,7 +274,32 @@ def git_stand() -> str:
     return r.stdout.strip()
 
 
-def vergleichen(stichtag: str) -> int:
+def firmen_abweichend(alt: pd.DataFrame, neu: pd.DataFrame) -> pd.DataFrame:
+    """Je Firma (Spalte `firma`): neu/weg oder Spalten mit anderem Wert. Spalten: firma, symbol, art, spalten."""
+    a, n = alt.set_index("firma"), neu.set_index("firma")
+    zeilen = []
+    for f in sorted(set(a.index) | set(n.index), key=str):
+        if f not in a.index or f not in n.index:
+            z = n.loc[f] if f in n.index else a.loc[f]
+            zeilen.append({"firma": f, "symbol": z.get("symbol"), "art": "neu" if f in n.index else "weg", "spalten": []})
+            continue
+        verschieden = []
+        for s in a.columns:
+            x, y = a.at[f, s], n.at[f, s] if s in n.columns else None
+            gleich = (pd.isna(x) and pd.isna(y)) if (pd.api.types.is_scalar(x) and pd.api.types.is_scalar(y)) else False
+            if not gleich:
+                try:
+                    gleich = bool(x == y)
+                except (TypeError, ValueError):
+                    gleich = str(x) == str(y)
+            if not gleich:
+                verschieden.append(s)
+        if verschieden:
+            zeilen.append({"firma": f, "symbol": a.at[f, "symbol"], "art": "geändert", "spalten": verschieden})
+    return pd.DataFrame(zeilen, columns=["firma", "symbol", "art", "spalten"])
+
+
+def vergleichen(stichtag: str, sec_betrieb: bool = False) -> int:
     from tradingbot.daten.schicht import SchichtLuecke
 
     if not VERZEICHNIS.exists() or not REFERENZ.exists():
@@ -281,12 +317,13 @@ def vergleichen(stichtag: str) -> int:
         return 2
     stempel = laufkopie(EINGEFROREN, LAUF)
     try:
-        abgebildet, fehlend_neu = sec_abbilden(LAUF, verzeichnis["fehlend"])
+        abgebildet, fehlend_neu = sec_abbilden(LAUF, verzeichnis["fehlend"], quelle=DATEN / "betrieb" if sec_betrieb else None)
     except Abbruch as f:
         print(f"ABBRUCH – {f}")
         return 2
     verzeichnis = {**verzeichnis, "fehlend": list(verzeichnis["fehlend"]) + fehlend_neu}
-    print(f"SEC-Dateien auf den Betriebs-Cache abgebildet: {abgebildet} (byteweise, SHA gleich)")
+    print(f"SEC-Dateien auf den Betriebs-Cache abgebildet: {abgebildet} (byteweise, SHA gleich"
+          + (", Quelle: echter SEC-Cache des Betriebs)" if sec_betrieb else ")"))
     print(f"Eingaben: {len(verzeichnis['dateien'])} eingefrorene Dateien, {len(verzeichnis['direkt'])} direkt gelesen (Prüfsumme gleich)"
           + (f"; Betriebsuniversum vom {stempel[:10]} (Tagesstempel in der Laufkopie auf heute)" if stempel else ""))
     try:
@@ -302,6 +339,15 @@ def vergleichen(stichtag: str) -> int:
     if list(ref["meldungen"]) != list(ergebnis["meldungen"]):
         abw.append(f"Meldungen verschieden: {ref['meldungen']} gegen {ergebnis['meldungen']}")
     print(f"Referenz: Git {ref['stand']['git']}, {ref['stand']['dauer_s']} s; jetzt: Git {git_stand()}, {round(dauer, 1)} s")
+    if sec_betrieb:
+        firmen = firmen_abweichend(ref["bewertung"], ergebnis["bewertung"])
+        with (ORDNER / "vergleich_sec_betrieb.pkl").open("wb") as f:
+            pickle.dump({"ergebnis": ergebnis, "firmen": firmen, "stand": {"stichtag": stichtag, "git": git_stand(),
+                         "gerechnet_um": datetime.now().isoformat(timespec="seconds")}}, f)
+        print(f"Mit dem SEC-Stand des Betriebs: {len(firmen)} Firmen abweichend ({len(ergebnis['bewertung'])} bewertet)")
+        for z in firmen.itertuples():
+            print(f"  {z.symbol or z.firma}: {z.art}" + (f" ({', '.join(z.spalten[:8])}{', …' if len(z.spalten) > 8 else ''})" if z.spalten else ""))
+        return 0
     if abw:
         print("NICHT identisch:")
         print("\n".join(f"  {z}" for z in abw))
@@ -337,8 +383,9 @@ def main() -> int:
     a.add_argument("--referenz", action="store_true", help="Referenz schreiben statt vergleichen")
     a.add_argument("--grund", help="Grund für das Ersetzen einer vorhandenen Referenz (Vermerk)")
     a.add_argument("--stichtag", default=STICHTAG)
+    a.add_argument("--sec-betrieb", action="store_true", help="SEC-Dateien aus dem echten SEC-Cache des Betriebs (Abnahme B)")
     arg = a.parse_args()
-    return referenz_schreiben(arg.stichtag, arg.grund) if arg.referenz else vergleichen(arg.stichtag)
+    return referenz_schreiben(arg.stichtag, arg.grund) if arg.referenz else vergleichen(arg.stichtag, arg.sec_betrieb)
 
 
 if __name__ == "__main__":

@@ -875,6 +875,13 @@ gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder
   - Veraltet: 3 (FERG, OKTA, SKYD).
   - Ohne `STAND.json` (vor dem ersten Lauf am 05.12.) gibt es die Sofortmeldung „STAND.json fehlt“.
 
+### Stand Schritt 5 (24.11.2026, vorgezogen)
+
+- Der erste echte Lauf war am 24.11.2026, auf Jakobs Entscheidung vom selben Tag vorgezogen.
+- **Abnahme nach Jakobs Kriterien (a) bis (c): bestanden mit erklärter Ausnahme INTU** (gleicher `filed`, Auswahl
+  nach Zeilenfolge). Bericht: `docs/berichte/2026-11-24_sec_aktualisierung_abnahme_b.md`.
+- `tools/bewertung_vergleich.py --sec-betrieb`: eingefrorene Eingaben, SEC-Dateien aus dem echten Betriebs-Cache.
+
 ### Abnahme B (Schritt 5, erster echter Lauf am 05.12.2026, Bericht in `docs/berichte/`)
 
 - **B1 Bestand:** Je CIK sind alle Erstmeldungen des Entwicklungs-Caches (Stand 02.11.2026) im Betriebs-Cache

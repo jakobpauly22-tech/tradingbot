@@ -111,3 +111,32 @@ def test_sec_abbildung_auf_den_betriebs_cache(tmp_path):
     (lauf / "betrieb/cache/sec/UEBERNAHME.json").unlink()
     with pytest.raises(bv.Abbruch, match="nicht eindeutig"):
         bv.sec_abbilden(lauf, [])
+
+
+def test_sec_abbildung_aus_dem_betriebs_cache(tmp_path):
+    """Abnahme B (Jakob 24.11.2026, --sec-betrieb): SEC-Dateien aus dem echten Betriebs-Cache, übrige Eingaben eingefroren."""
+    lauf, quelle = tmp_path / "lauf", tmp_path / "betrieb"
+    for rel, inhalt in (("cache/sec_erstmeldungen/0000000001.parquet", b"alt"), ("cache/kurse/A.parquet", b"k")):
+        (lauf / rel).parent.mkdir(parents=True, exist_ok=True)
+        (lauf / rel).write_bytes(inhalt)
+    (quelle / "cache/sec_erstmeldungen").mkdir(parents=True)
+    (quelle / "cache/sec_erstmeldungen/0000000001.parquet").write_bytes(b"neu")
+    (quelle / "cache/kurse").mkdir(parents=True)
+    (quelle / "cache/kurse/A.parquet").write_bytes(b"anders")
+    zahl, _ = bv.sec_abbilden(lauf, [], quelle=quelle)
+    assert zahl == 1 and (lauf / "betrieb/cache/sec_erstmeldungen/0000000001.parquet").read_bytes() == b"neu"
+    assert (lauf / "cache/kurse/A.parquet").read_bytes() == b"k" and not (lauf / "betrieb/cache/kurse").exists()
+    # fehlt eine eingefrorene SEC-Datei im Betriebs-Cache → Abbruch, nie still die alte nehmen
+    lauf2 = tmp_path / "lauf2"
+    (lauf2 / "cache/sec_erstmeldungen").mkdir(parents=True)
+    (lauf2 / "cache/sec_erstmeldungen/0000000002.parquet").write_bytes(b"x")
+    with pytest.raises(bv.Abbruch, match="fehlt im SEC-Cache des Betriebs"):
+        bv.sec_abbilden(lauf2, [], quelle=quelle)
+
+
+def test_firmen_abweichend():
+    import pandas as pd
+    alt = pd.DataFrame({"firma": [1, 2, 3], "symbol": ["A", "B", "C"], "ep": [0.1, float("nan"), 0.3], "gruende": [[], ["x"], []]})
+    neu = pd.DataFrame({"firma": [1, 2, 4], "symbol": ["A", "B", "D"], "ep": [0.1, float("nan"), 0.5], "gruende": [[], ["y"], []]})
+    f = bv.firmen_abweichend(alt, neu)
+    assert [(z.symbol, z.art, z.spalten) for z in f.itertuples()] == [("B", "geändert", ["gruende"]), ("C", "weg", []), ("D", "neu", [])]
