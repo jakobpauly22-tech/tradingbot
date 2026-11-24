@@ -2974,3 +2974,15 @@ ereignisse:
   quelle: SEC-Vergleich automatisch
   geprueft: false
   bemerkung: kein Periodenbericht danach
+- cik: 2023554
+  ticker: SNDK
+  datum: '2026-11-20'
+  faktor_kursreihe: 8.0
+  sec_verhaeltnis:
+  sec_einreichungen:
+  art: split
+  split_faktor: 8.0
+  quelle: 'SEC 8-K 29.10.2026 (0001628280-26-068243): Aktiensplit 8:1, wirksam 20.11.2026'
+  geprueft: true
+  bemerkung: 'bestätigt Jakob 24.11.2026 (https://www.sec.gov/Archives/edgar/data/0002023554/000162828026068243/sndk-20261029.htm);
+    vorher im Betrieb „unklar“ (kein Periodenbericht nach dem Split)'
