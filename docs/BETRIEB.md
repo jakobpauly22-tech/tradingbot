@@ -1047,7 +1047,12 @@ anzugleichen.
      - Tabelle `buchwerte`: Spalte `kasse` in der neuen Konvention, neue Spalte `fx` mit dem Laufkurs (D4).
      - Historie korrigiert statt Bruch (D3): `tools/buchwert_korrektur_20261125.py`, Bericht
        `docs/berichte/2026-11-25_buchwert_fremdwaehrungskasse.md` mit Vorher/Nachher je Buch und Tag.
-     - Risk-Manager und Fundamental-Sizing (`kasse_frei`) ziehen nach (D2), eigener Commit.
+     - Risk-Manager und Fundamental-Sizing ziehen nach (D2, Schritt C, 25.11.2026): `kasse_frei` gesamt in EUR und
+       `reserviert` mit `kasse_bewertet`; die Sizing-Basis (Kasse + Reserviert + Positionen) ist damit genau der Buchwert.
+       Die zweite Prüfung beim Senden bekommt jetzt den Laufkurs (vorher ohne Kurs: ein Tausch unterwegs zählte 1:1).
+       Probe-Vergleich 25.11.2026 (Journal-Kopie, alter gegen neuen Code): Vorschläge und Buchwerte aller Bücher gleich;
+       an diesem Tag lief kein Fundamental-Sizing, die Rechnung ist per Test abgedeckt. Wirkung ab dem nächsten Sizing:
+       Basis fundamental_a rund +91 €, fundamental_b rund +71 € (je knapp 1 %).
      - Risiko-Übersicht: Zeile „Unterschied USD-Kasse“ bleibt als Kontrollzeile, erwartet 0,00 € (D5).
      - **Einstand und Steuer (D1):** Der Einstand einer USD-Aktie bleibt der Kurs des Anschaffungstags (`preis_eur`,
        § 20 Abs. 4 S. 1 EStG: Anschaffungskosten zum Devisenkurs im Zeitpunkt der Anschaffung). Der Unterschied zum

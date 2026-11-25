@@ -685,3 +685,45 @@ def test_buchwert_fremdwaehrungskasse_zum_laufkurs(umgebung):
         r = j.db.execute("SELECT kasse FROM buchwerte WHERE buch=? AND tag='2026-11-03'", (buch,)).fetchone()
         if r is not None:
             assert r["kasse"] == j.kasse(buch), buch                                                  # ohne Fremdwährung byte-gleich
+
+
+def test_kasse_frei_fremdwaehrung_zum_laufkurs(umgebung):
+    """Befund 1 Schritt C (Jakob 25.11.2026): freie Kasse in EUR wie der Buchwert (USD zum Laufkurs); EUR-Bücher unverändert."""
+    from tradingbot.betrieb.tageslauf import kasse_frei
+    j, _ = umgebung
+    j.buch_anlegen("fundamental_b", 10_000.0)
+    j.buch_anlegen("real", 500.0)
+    j.tausch("t1", "fundamental_b:x", "EUR", "USD", 9000.0, 10_098.0, 2.0, "2026-11-03T09:00")          # 1,122
+    j.ausfuehrung("k1", "fundamental_b:y", "US1", 1, 100, 80.0 / 1.11, 1.0 / 1.11, "2026-11-03T15:00", waehrung="USD", preis=80.0,
+                  gebuehr=1.0, gebuehr_waehrung="USD")
+    frei, kassen = kasse_frei(j, "fundamental_b", {"USD": 1.25})
+    assert frei == pytest.approx(998.0 + (10_098.0 - 8_001.0) / 1.25) and kassen["USD"] == pytest.approx(2_097.0)
+    assert frei == pytest.approx(j.kasse_bewertet("fundamental_b", {"USD": 1.25}))
+    assert kasse_frei(j, "real", {"USD": 1.25})[0] == j.kasse("real") == kasse_frei(j, "real")[0]
+    with pytest.raises(ValueError, match="kein Kurs für USD"):
+        kasse_frei(j, "fundamental_b")                                   # Buch mit Fremdwährung braucht den Kurs
+
+
+def test_fundamental_sizing_basis_gleich_buchwert_konvention(umgebung, monkeypatch):
+    """Schritt C: Kasse + Reserviert, die das Fundamental-Sizing bekommt, ist die Kasse des Buchwerts (USD zum Laufkurs)."""
+    import tradingbot.betrieb.tageslauf as tl
+    j, rm = umgebung
+    lauf(j, rm)
+    j.tausch("t1", "fundamental_b:x", "EUR", "USD", 9000.0, 10_098.0, 2.0, "2026-11-03T09:00")
+    j.ausfuehrung("k1", "fundamental_b:y", "US1", 1, 100, 80.0 / 1.11, 1.0 / 1.11, "2026-11-03T15:00", waehrung="USD", preis=80.0,
+                  gebuehr=1.0, gebuehr_waehrung="USD")
+    aufrufe = []
+    original = tl.fundamentalbuch
+
+    def mitschreiben(n, *a, **kw):
+        aufrufe.append((n, a[4], a[5], kw["reserviert"]))           # eurusd, kasse (frei), reserviert
+        return original(n, *a, **kw)
+
+    monkeypatch.setattr(tl, "fundamentalbuch", mitschreiben)
+    monkeypatch.setattr(tl, "quartalsstichtag", lambda d: True)            # Sizing erzwingen (wie am 04.01.2027)
+    lauf(j, rm, jetzt=datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin")))
+    b = [x for x in aufrufe if x[0] == "fundamental_b"]
+    assert b, "Fundamental-Sizing für fundamental_b nicht gelaufen"
+    for _, eurusd, frei, reserviert in b:
+        assert frei + reserviert == pytest.approx(j.kasse_bewertet("fundamental_b", {"USD": eurusd}), abs=1e-9)
+        assert frei + reserviert != pytest.approx(j.kasse("fundamental_b"))

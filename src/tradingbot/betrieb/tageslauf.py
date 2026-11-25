@@ -433,7 +433,8 @@ def _bestand_text(journal, b) -> str:
 # --- Risiko-Kontext je Buch -----------------------------------------------------------------------------------------
 def kasse_frei(journal, buch: str, fx: dict[str, float] | None = None) -> tuple[float, dict[str, float]]:
     """Kasse des Buchs abzüglich Orders unterwegs (gesamt in EUR und je Währung); ein Tausch unterwegs zählt als
-    abgehende EUR und zugehende Fremdwährung."""
+    abgehende EUR und zugehende Fremdwährung. Gesamt in EUR mit Fremdwährung zum Kurs `fx` wie der Buchwert
+    (`Journal.kasse_bewertet`, Befund 1 Schritt C, Jakob 25.11.2026); ein Buch mit Fremdwährung braucht `fx`."""
     res = journal.reserviert(buch)
     kassen = journal.kasse_je_waehrung(buch)
     for w, betrag in res.items():
@@ -442,7 +443,7 @@ def kasse_frei(journal, buch: str, fx: dict[str, float] | None = None) -> tuple[
     for z in journal.unterwegs(buch):
         if z["art"] == "fx":
             kassen[z["waehrung"]] = kassen.get(z["waehrung"], 0.0) + z["stueck"] * (fx or {}).get(z["waehrung"], 1.0)
-    return journal.kasse(buch) - res["EUR_gesamt"], kassen
+    return journal.kasse_bewertet(buch, fx or {}) - res["EUR_gesamt"], kassen
 
 
 def kontext(journal, buch: str, tag, wert: float, *, offene=(), fundamental=None, fx=None) -> Kontext:
@@ -701,7 +702,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         verworfen: list[dict] = []
         v, z = technikbuch(buch, buch, tag, k_tech, orderkurs, waehrung, fx, frei_buch, bestand, vor, kt,
                            aufschlag, gebuehr_fuer("EUR"), gesperrt_titel={u["ticker"] for u in journal.unterwegs(buch)},
-                           reserviert=journal.kasse(buch) - frei_buch,
+                           reserviert=journal.kasse_bewertet(buch, fx) - frei_buch,
                            nachkauf=journal.nachkauf_kandidaten(buch, tag - pd.Timedelta(days=45)), verpasste_tage=verpasst,
                            verworfen=verworfen)
         for f in verworfen:                          # Jakob 23.11.2026: verpasster Ausstieg, Bedingung nicht mehr erfüllt
@@ -794,7 +795,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             v, z, grund = fundamentalbuch(n, fb[n], pd.Timestamp(nyse), rl, preise, eurusd, frei_n, bestand,
                                           journal.zustand(n), kf, aufschlag, gebuehr_fuer("USD", eurusd),
                                           gesperrt_titel={u["ticker"] for u in journal.unterwegs(n)} | ohne_conid,
-                                          reserviert=journal.kasse(n) - frei_n, nachkauf=nachkauf_fb[n])
+                                          reserviert=journal.kasse_bewertet(n, fx) - frei_n, nachkauf=nachkauf_fb[n])
             z = verkauf_gesperrt_merken(z, ohne_conid, bestand, grund)
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
@@ -1144,13 +1145,13 @@ def _senden(journal, b, broker, jetzt, risk, kurse_laden, meldungen, fortschritt
             meldungen.append(text)
             continue
         letzte = journal.buchwerte(z["buch"])
-        wert = float(letzte.iloc[-1]) if len(letzte) else journal.kasse(z["buch"])
+        wert = float(letzte.iloc[-1]) if len(letzte) else journal.kasse_bewertet(z["buch"], fx)
         fremd = z["waehrung"] != "EUR"
         v = OrderVorschlag(z["id"], pd.Timestamp(z["signaltag"]), z["buch"], z["ticker"], z["richtung"], z["stueck"], z["letzter_kurs_eur"],
                            z["art"], limit=(z["limit_preis"] / fx.get(z["waehrung"], 1.0) if fremd else z["limit_preis"]) if z["limit_preis"] else None,
                            stop=z["stop"], gebuehrenplan="USD" if z["art"] == "aktie" and z["waehrung"] == "USD" else "EUR",
                            eur_kurs=fx.get(z["waehrung"], 1.0) if fremd else 1.0, waehrung=z["waehrung"], these=z["these"])
-        k = kontext(journal, z["buch"], pd.Timestamp(z["signaltag"]), wert, offene=offene)
+        k = kontext(journal, z["buch"], pd.Timestamp(z["signaltag"]), wert, offene=offene, fx=fx)
         k.orders_heute -= 1                                          # die eigene Freigabe nicht doppelt zählen
         if z["buch"] in stand:                                       # Orders desselben Durchgangs verbrauchen die Kasse
             k.kasse, k.kasse_je_waehrung = stand[z["buch"]]

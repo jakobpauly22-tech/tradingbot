@@ -58,7 +58,7 @@ def bericht(erg, journal, betrieb: dict) -> str:
                    + f", festgehalten {konto.get('festgehalten', '–')}"]
     for buch, bk in betrieb["buecher"].items():
         vs = [(bv, u) for bv, u in erg.vorschlaege if bv.vorschlag.buch == buch]
-        zeilen += ["", f"== {buch} ({bk['art']}, Budget {bk['budget_eur']:,.0f} €, Kasse {journal.kasse(buch):,.2f} €, "
+        zeilen += ["", f"== {buch} ({bk['art']}, Budget {bk['budget_eur']:,.0f} €, Kasse {_kasse_eur(journal, buch, erg):,.2f} €, "
                        f"Freigabe {'einzeln' if bk['freigabe'] == 'einzeln' else 'als Sammelfreigabe'}) =="]
         bestand = journal.bestand(buch)
         zeilen.append("  Bestand: " + (", ".join(f"{t} {s:g}" for t, s in sorted(bestand.items())) if bestand else "–")
@@ -113,6 +113,14 @@ def senden_melden(journal, ids, start: datetime, meldungen: list[str], betrieb: 
     except Exception as f:  # noqa: BLE001
         return meldungen + [f"Benachrichtigung nach dem Senden fehlgeschlagen ({type(f).__name__})"]
     return meldungen
+
+
+def _kasse_eur(journal, buch: str, erg) -> float:
+    """Kasse in EUR wie im Buchwert (Fremdwährung zum Laufkurs, Befund 1, 25.11.2026); ohne Laufkurs alte Konvention."""
+    try:
+        return journal.kasse_bewertet(buch, getattr(erg, "fx", None) or {})
+    except ValueError:
+        return journal.kasse(buch)
 
 
 def rechnen(probe: bool, kopie: bool = False):
