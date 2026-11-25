@@ -931,3 +931,90 @@ gerechnet wurden. Sie werden hier nur festgehalten; nichts wird nachgeladen oder
   - Die Probe davor (`--probe`) hat 0 Dateien außerhalb der Schicht geändert.
 - **B7 Tageslauf:** Der Tageslauf nach dem 05.12.2026 zeigt den SEC-Stand, die Liste über 120 Tage und die Zahl der
   wegen `veraltet` herausfallenden Firmen.
+
+## SEC-Lücke bei gemeinsamen Einreichungen (Befund A2; Festlegung Jakob 25.11.2026)
+
+**Status: festgelegt, Umsetzung ab Anfang Dezember 2026, noch kein Code.** Ziel: scharf vor den ersten 10-Ks der
+Versorger (ab etwa 10.02.2027). Festgelegt vor dem Code; Regeln und Abnahmekriterien werden nach einem Lauf nicht
+geändert. Eine Verfehlung bleibt im Bericht stehen, die Ursache wird gesucht und mit Jakob besprochen.
+
+### Befund (Probe 25.11.2026, nur gelesen, Abrufe in eigener Ablage außerhalb der Caches)
+
+- **Bild:** Geprüft wurden DTE, Southern, Exelon und NextEra. Bei allen fehlen in den eigenen companyfacts genau die
+  10-Qs vom Juli und Oktober 2026; das 10-K vom Februar 2026 und das 10-Q aus dem 1. Quartal sind vorhanden.
+- **Ursache:** Seit Juli 2026 führt die SEC die Konzernwerte gemeinsamer Einreichungen unter der CIK eines
+  Mitanmelders, nicht immer desselben:
+  - DTE, 10-Q Juli: unter DTE Electric (CIK 28385);
+  - Southern, 10-Q Juli: unter Southern Company Gas (CIK 1004155), dort als „The Southern Company“ benannt;
+  - Southern, 10-Q Oktober: unter Mississippi Power (CIK 66904), ebenfalls als „The Southern Company“ benannt.
+- **Es sind die Konzernwerte.** Beispiel DTE: Jahresüberschuss im 1. Halbjahr 2026 = 529 Mio. USD, gleich in der
+  XBRL-Instanz (Kontext ohne Rechtsträger-Achse), in den Financial Statement Data Sets (FSDS) und in den companyfacts
+  von DTE Electric.
+- **FSDS 2026q3:** Die Einreichungen stehen dort unter der Mutter-CIK (Mitanmelder in `aciks`). Die Werte sind gleich
+  der Instanz. Das Periodenende ist aufs Monatsende gerundet, Startdaten fehlen (Probe: P mit 52/53-Wochen-Jahr
+  0 Treffer, Abbott 248 von 248 gleich). Die Quartalsdatei erscheint etwa eine Woche nach Quartalsende.
+- **Wirkung ohne Abhilfe:** Heute gering, weil die Engine mit Geschäftsjahren rechnet und die 10-Qs vor allem über die
+  Aktienzahl wirken. Landet auch das 10-K für 2026 beim Mitanmelder, wären rund 12 Versorger ab dem 31.03.2027
+  (15 Monate nach Geschäftsjahresende) `veraltet` und fielen aus der Bewertung. Die REITs der Gruppe sind Finanzwerte
+  und nicht im Universum.
+
+### Entscheidung
+
+- **Option (b):** Fehlende Einreichungen werden aus der XBRL-Instanz der Einreichung selbst ergänzt.
+- **Option (a) als Gegenprobe:** Die FSDS prüfen die ergänzten Werte, sobald das jeweilige Quartal erscheint.
+- Verworfen:
+  - (c) hinnehmen: ab April 2027 stille Sektorverzerrung in den Schattenportfolios, Abweichung vom Backtest.
+  - companyfacts der Mitanmelder nach Einreichungsnummer: Die Zuordnung springt zwischen den Töchtern, die Namen sind
+    falsch, die SEC kann es jederzeit ändern. Höchstens als Diagnose.
+
+### Regeln
+
+- **Nur Betrieb.** Backtest, Entwicklungs-Cache und Tresorgrenze bleiben unberührt; die Lücken bis 2024 (Gruppe B)
+  bleiben Teil der Datenbasis.
+- **Erkennung, ohne Sonderliste:** Ergänzt wird eine Einreichung, wenn sie in den submissions der aktuellen CIK
+  einer Firma des Betriebsuniversums (oder eines Vorgängers wie bisher) steht und
+  - ein Formular 10-K, 10-Q, 10-K/A, 10-Q/A oder 10-KT mit XBRL ist,
+  - und ihre Einreichungsnummer in keinem Fakt der eigenen companyfacts vorkommt.
+  Die Gruppe „bekannt“ (`sec_meldungen.bekannt`) bleibt nur für Meldungen; sie steuert die Ergänzung nicht. Für
+  Exxon gibt es keine Ausnahme: Es entscheiden die submissions der aktuellen CIK (Jakob 25.11.2026).
+- **Quelle:** die Instanz (`*_htm.xml`) aus dem Archiv der Einreichung, gefunden über `index.json`. Abruf im
+  Samstagslauf `tools/sec_aktualisieren.py` mit denselben Regeln (Drossel ≤ 8/s, User-Agent, Fehlerschwelle),
+  Ablage im Betriebs-Cache in einem eigenen Bereich.
+- **Gelesen werden:**
+  - nur Fakten im Konzernkontext: ohne Dimension, Identifier = CIK der Firma, `dei:EntityCentralIndexKey` ohne Achse
+    gleich dieser CIK (sonst keine Ergänzung, Meldung);
+  - nur die Begriffe aus `config/fundamental.yaml` und die Aktienzahlen, die die Bewertung heute nutzt;
+  - Werte wie in der Instanz, Einheiten und Perioden (Start, Ende) exakt.
+- **Format und Markierung:** Die Zeilen haben das Format von `fakten_tabelle` (Taxonomie, Konzept, Einheit, Start,
+  Ende, Wert, `filed`, Formular, `accn`) und die Quelle „XBRL-Instanz“. Danach gelten die Regeln wie für alle
+  SEC-Zeilen: `erstmeldungen` (Erstmeldung zählt), `verfuegbar_ab` (Handelstag nach `filed`), Prüfregel der
+  SEC-Aktualisierung.
+- **Point-in-Time:** `filed` aus den submissions der Firma, wie bei den companyfacts.
+- **Spätere Nachlieferung durch die SEC (Jakob 25.11.2026):**
+  - Die Werte aus der Instanz bleiben; nichts wird überschrieben oder ersetzt.
+  - Die Nachlieferung dient nur als Bestätigung: gleich → vermerken, abweichend → Meldung.
+- **Gegenprobe mit FSDS:** Erscheint das Quartal, werden die ergänzten Einreichungen gegen `num.txt` geprüft
+  (Mutter-CIK, ohne `segments` und `coreg`, Periodenende nach Monatsende-Rundung, Dauer über `qtrs`). Gleich →
+  vermerken, abweichend → Meldung, nichts überschreiben.
+- **Meldungen:** Im Protokoll der SEC-Aktualisierung steht jede ergänzte Einreichung. Im Tageslauf zeigt die Gruppe
+  „bekannt“, welche Firmen ergänzt sind; Telegram nur bei Sofortmeldung wie bisher.
+
+### Abnahme (vor dem Scharfschalten)
+
+- **C1 Reproduktion:** Für mindestens 20 Einreichungen der betroffenen CIKs, die in den eigenen companyfacts stehen
+  (zum Beispiel 10-K Februar 2026, 10-Q 1. Quartal 2026), liefert der Leser für alle genutzten Begriffe dieselben
+  Werte, Einheiten, Start- und Enddaten. Kriterium: 100 %, jede Abweichung einzeln im Bericht.
+- **C2 Gegenprobe FSDS:** Die ergänzten 10-Qs vom Juli 2026 stimmen mit FSDS 2026q3 überein, die vom Oktober mit
+  2026q4, sobald es erscheint. Kriterium: 100 %.
+- **C3 Bewertung:** Im versiegelten Vergleich sind alle Firmen ohne ergänzte Einreichung identisch. Firmen mit
+  Ergänzung stehen einzeln mit Einreichung und geänderten Kennzahlen im Bericht.
+- **C4 Trennung:** Entwicklungs-Cache vor und nach dem Lauf byteweise gleich (SHA-Liste); die Probe ändert 0 Dateien
+  außerhalb der Schicht.
+- **C5 Erkennung:** Die Liste der ergänzten Einreichungen enthält die A2-Fälle der Firmen im Universum und keine
+  Einreichung, die schon in den eigenen companyfacts steht.
+
+### Ablauf
+
+1. Leser und Tests; Testdaten aus den Einreichungen der Probe, neu abgerufen.
+2. Abnahme C1–C5 mit Bericht in `docs/berichte/`.
+3. Einbau in den Samstagslauf und in die Meldungen, nach Jakobs Okay.
