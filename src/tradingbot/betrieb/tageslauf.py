@@ -618,7 +618,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     werte_buch = {}
     if "real" not in gest and pruefen("real", k_real, xetra):
         kurs = float(k_real[etf]["close"].iloc[-1])
-        werte_buch["real"] = journal.kasse("real") + sum(s * kurs for t, s in journal.bestand("real").items())
+        werte_buch["real"] = journal.kasse_bewertet("real", fx) + sum(s * kurs for t, s in journal.bestand("real").items())
         frei_real, _ = kasse_frei(journal, "real", fx)
         if not any(z["ticker"] == etf for z in journal.unterwegs("real")):
             roh += realbuch(tag, etf, kurs, frei_real, aufschlag, gebuehr_fuer("EUR"))
@@ -681,7 +681,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         if fremd:
             erg.meldungen.append(f"{buch}: Fremdtitel aus Kapitalmaßnahme {', '.join(sorted(fremd))} – Ausstiegsvorschlag")
         bestand = {t: s for t, s in bestand.items() if t in k_tech}
-        werte_buch[buch] = (journal.kasse(buch) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
+        werte_buch[buch] = (journal.kasse_bewertet(buch, fx) + sum(s * float(k_tech[t]["close"].iloc[-1]) for t, s in bestand.items())
                             + sum(s * fremd_kurse[t] for t, s in fremd.items() if t in fremd_kurse))
         roh += fremd_v
         vor = journal.zustand_fuer_signaltag(buch, tag)
@@ -733,11 +733,11 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
     for n in fb:
         bestand = journal.bestand(n)
         if not bestand and n not in braucht:
-            werte_buch[n] = journal.kasse(n)                 # nur Kasse (Orders unterwegs), Buchwert trotzdem speichern
+            werte_buch[n] = journal.kasse_bewertet(n, fx)     # nur Kasse (Orders unterwegs), Buchwert trotzdem speichern
         if bestand and n not in braucht:
             k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
             kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
-            werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
+            werte_buch[n] = journal.kasse_bewertet(n, fx) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
             erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
     uhr.abschnitt("S&P-500-Liste")
     if fundamental_bewertung is None and fb:
@@ -769,7 +769,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
                 bestand = journal.bestand(n)
                 k_b = {t: kurse_laden(t, nyse, "aktie_usd") for t in bestand}
                 kurse_usd.update({t: float(k["close"].iloc[-1]) for t, k in k_b.items()})
-                werte_buch[n] = journal.kasse(n) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
+                werte_buch[n] = journal.kasse_bewertet(n, fx) + sum(s * kurse_usd[t] / eurusd for t, s in bestand.items())
                 erg.kurse_eur.update({t: kurse_usd[t] / eurusd for t in bestand})
             braucht = []
     uhr.abschnitt("Fundamental-Bücher (ohne Bewertung)")
@@ -799,7 +799,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
             tickers = sorted({x.vorschlag.ticker for x in v} | set(bestand))
             if not pruefen(n, {t: kurse_laden(t, nyse, "aktie_usd") for t in tickers}, nyse):
                 continue
-            werte_buch[n] = journal.kasse(n) + sum(s * preise[t] / eurusd for t, s in bestand.items())
+            werte_buch[n] = journal.kasse_bewertet(n, fx) + sum(s * preise[t] / eurusd for t, s in bestand.items())
             erg.kurse_eur.update({t: preise[t] / eurusd for t in bestand})
             journal.zustand_speichern(n, z)
             erg.meldungen.append(f"{n}: {grund}, {len(v)} Vorschläge")
@@ -839,7 +839,7 @@ def tageslauf(jetzt: datetime, journal, *, broker=None, kurse_laden=None, fundam
         erg.vorschlaege.append((bv, u))
     for n, w in werte_buch.items():
         w_modell = w + journal.gebuehren_differenz(n)
-        journal.buchwert_speichern(n, tag, w, journal.kasse(n), w_modell)
+        journal.buchwert_speichern(n, tag, w, journal.kasse_bewertet(n, fx), w_modell, fx)
         erg.meldungen.append(f"{n}: Buchwert wie gebucht (Paper, Festpreis) {w:,.2f} €, mit Modellgebühr (Tiered, 1,25 € Minimum) "
                              f"{w_modell:,.2f} € (maßgeblich für den Echtbetrieb)")
     us_fx = [bv.vorschlag for bv, u in erg.vorschlaege if u.frei and (bv.vorschlag.art == "fx" or
@@ -872,7 +872,7 @@ def _regimebuch(journal, b: dict, tag, xetra, kurse_laden, k_real: dict, regime_
     kurs = float(kurse[ticker]["close"].iloc[-1])
     erg.kurse_eur[ticker] = kurs
     bestand = journal.bestand(buch).get(ticker, 0.0)
-    werte_buch[buch] = journal.kasse(buch) + bestand * kurs
+    werte_buch[buch] = journal.kasse_bewertet(buch, fx) + bestand * kurs
     zustand = journal.zustand(buch)
     try:
         schluss, makro_laden = (regime_daten or regimebuch.daten_betrieb)(tag, ticker)

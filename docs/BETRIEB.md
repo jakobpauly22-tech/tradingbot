@@ -1019,12 +1019,13 @@ geändert. Eine Verfehlung bleibt im Bericht stehen, die Ursache wird gesucht un
 2. Abnahme C1–C5 mit Bericht in `docs/berichte/`.
 3. Einbau in den Samstagslauf und in die Meldungen, nach Jakobs Okay.
 
-## Offene Punkte zum Buchwert (aufgenommen 25.11.2026, Entscheidung Jakob später)
+## Punkte zum Buchwert (aufgenommen 25.11.2026)
 
-Gefunden beim Plan der Risiko-Übersicht (`docs/RISIKO_UEBERSICHT.md`). Bis zur Entscheidung bleibt der Buchwert
-unverändert; die Risiko-Übersicht übernimmt seine Konvention und weist Unterschiede sichtbar aus, ohne still anzugleichen.
+Gefunden beim Plan der Risiko-Übersicht (`docs/RISIKO_UEBERSICHT.md`). Punkt 1 ist entschieden und umgesetzt (siehe
+„Entscheidung“ unter Punkt 1), Punkt 2 bleibt offen; die Risiko-Übersicht weist Unterschiede sichtbar aus, ohne still
+anzugleichen.
 
-1. **USD-Kasse zum Tageskurs bewerten?** `Journal.kasse()` rechnet Fremdwährungskasse zum Kurs der jeweiligen Ausführung
+1. **USD-Kasse zum Tageskurs bewerten?** (Befund 1, entschieden 25.11.2026) `Journal.kasse()` rechnet Fremdwährungskasse zum Kurs der jeweiligen Ausführung
    bzw. des Tauschs, nicht zum EURUSD des Bewertungstags. Der gespeicherte Buchwert enthält damit keine Wechselkursänderung
    auf die USD-Kasse. Die Risiko-Übersicht zeigt die USD-Kasse zusätzlich zum Tageskurs und den Unterschied als eigene Zeile.
    - **Nachmessung 24.11.2026 (Journal-Kopie, nur gelesen):** Der Unterschied ist größer als die Kursbewegung der
@@ -1039,6 +1040,20 @@ unverändert; die Risiko-Übersicht übernimmt seine Konvention und weist Unters
      (9.854,75 $ / 1,1220 = 8.783,21 €), rund 6,3 € aus der Kursänderung der Restkasse seit dem Tausch, Rest Gebühren
      und Zinsen. Der gespeicherte Buchwert liegt also um diese Beträge unter dem Wert zum Tageskurs. Die übrigen Bücher
      haben keine Fremdwährungskasse (Unterschied 0,00 €).
+   - **Entscheidung Jakob 25.11.2026:**
+     - Buchwert = Σ Positionen zum Tageskurs (USD-Titel / EURUSD des Laufs) + EUR-Kasse + Σ Fremdwährungskasse /
+       Kurs des Laufs (`Journal.kasse_bewertet`). Die Beträge je Währung sind dieselben, die der Kassenabgleich gegen
+       IBKR prüft; so bewertet auch der Backtest. Bücher ohne Fremdwährung behalten genau `Journal.kasse`.
+     - Tabelle `buchwerte`: Spalte `kasse` in der neuen Konvention, neue Spalte `fx` mit dem Laufkurs (D4).
+     - Historie korrigiert statt Bruch (D3): `tools/buchwert_korrektur_20261125.py`, Bericht
+       `docs/berichte/2026-11-25_buchwert_fremdwaehrungskasse.md` mit Vorher/Nachher je Buch und Tag.
+     - Risk-Manager und Fundamental-Sizing (`kasse_frei`) ziehen nach (D2), eigener Commit.
+     - Risiko-Übersicht: Zeile „Unterschied USD-Kasse“ bleibt als Kontrollzeile, erwartet 0,00 € (D5).
+     - **Einstand und Steuer (D1):** Der Einstand einer USD-Aktie bleibt der Kurs des Anschaffungstags (`preis_eur`,
+       § 20 Abs. 4 S. 1 EStG: Anschaffungskosten zum Devisenkurs im Zeitpunkt der Anschaffung). Der Unterschied zum
+       Tauschkurs ist ein Währungsergebnis der USD-Tranchen (§ 23 Abs. 1 S. 1 Nr. 2 EStG, FIFO der Fremdwährungsbeträge);
+       es wird mit dem Steuerbericht (Roadmap Punkt 9) aus dem Journal ausgewertet, ohne neue Speicherung.
+       **Vor Echtgeld steuerlich prüfen** (Lesart Claude, auch Sonderfälle wie Zinsen auf USD-Guthaben).
 2. **Kurse je Buch statt gemeinsamem Verzeichnis?** Die Fundamental-Bücher bewerten auf zwei Wegen: ohne Bewertungsbedarf
    mit dem Schluss aus `kurse_laden` (`kurse_usd`), mit Bewertungsbedarf mit `schluss_usd` aus der Fundamental-Bewertung
    (`preise`). Beide schreiben in das gemeinsame `Laufergebnis.kurse_eur`; ein Titel in beiden Büchern kann so den Kurs des

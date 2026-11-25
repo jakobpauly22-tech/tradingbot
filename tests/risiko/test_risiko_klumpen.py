@@ -21,6 +21,14 @@ class JournalAttrappe:
     def kasse_je_waehrung(self, buch):
         return dict(self._kw[buch])
 
+    def kasse_bewertet(self, buch, fx):
+        fremd = {w: b for w, b in self._kw[buch].items() if w != "EUR"}
+        if not fremd:
+            return self._k[buch]
+        if any(not fx.get(w) for w in fremd):
+            raise ValueError(f"{buch}: kein Kurs")
+        return self._kw[buch].get("EUR", 0.0) + sum(b / fx[w] for w, b in fremd.items())
+
 
 def _aktie(t, land="USA", sektor="D Verarbeitendes Gewerbe"):
     return Zuordnung(t, "Einzelaktie", "Aktie", land, sektor, waehrung_notierung="USD", waehrung_wirtschaftlich="USD", kennzeichen="exakt")
@@ -74,16 +82,21 @@ def test_etf_wird_nie_aufgeteilt(journal):
     assert set(k["anteile"]["sektor"].index) == {"breit gestreut", "Kasse"}
 
 
-def test_usd_kasse_in_beiden_konventionen(journal):
-    # Journal.kasse = 1.000 € (davon EUR 600, USD-Kasse 540 $ zum Ausführungskurs = 400 €); Tageskurs 1,25 → 432 €
+def test_usd_kasse_zum_laufkurs_kontrollzeile_null(journal):
+    # Befund 1 (25.11.2026): EUR 600 + 540 $ / 1,25 = 432 € → Kasse 1.032 € statt 1.000 € (alte Konvention)
     b = _basis(journal, "u", {"A": 100.0})
     k = kl.kennzahlen(b)
-    assert b.wert_eur == pytest.approx(1100.0)                           # Konvention des Buchwerts
-    assert k["kasse_fremd_buchwert_eur"] == pytest.approx(400.0)
+    assert b.wert_eur == pytest.approx(1132.0)                           # Konvention des Buchwerts
+    assert k["kasse_fremd_buchwert_eur"] == pytest.approx(432.0)
     assert k["kasse_fremd_tageskurs_eur"] == pytest.approx(432.0)
-    assert k["kasse_fremd_unterschied_eur"] == pytest.approx(32.0)
+    assert k["kasse_fremd_unterschied_eur"] == pytest.approx(0.0)        # Kontrollzeile (D5)
     w = k["anteile"]["waehrung_notierung"]
-    assert w.sum() == pytest.approx(1.0) and w["USD"] == pytest.approx(500 / 1100) and w["EUR"] == pytest.approx(600 / 1100)
+    assert w.sum() == pytest.approx(1.0) and w["USD"] == pytest.approx(532 / 1132) and w["EUR"] == pytest.approx(600 / 1132)
+
+
+def test_fehlender_fx_kurs_alte_konvention_mit_hinweis(journal):
+    b = kl.buchbasis(journal, "u", {"A": 100.0}, {}, "core", ZUORDNUNG.__getitem__)
+    assert b.kasse_eur == pytest.approx(1000.0) and any("alten Konvention" in h for h in b.hinweise)
 
 
 def test_drift_core_ueber_und_unter_7_5_prozent():

@@ -238,7 +238,7 @@ EINHEITEN: dict[str, dict[str, str]] = {
     "buecher": {s: "neutral" for s in ("buch", "startkapital", "messbeginn")},
     "ereignisse": {s: "neutral" for s in ("zeit", "art", "buch", "text")},
     "zustand": {"buch": "neutral", "json": "zustand", "aktualisiert": "neutral"},     # Inhalt: Abschnitte *_zustand unten
-    "buchwerte": {s: "neutral" for s in ("buch", "tag", "wert", "kasse", "wert_modell")},
+    "buchwerte": {s: "neutral" for s in ("buch", "tag", "wert", "kasse", "wert_modell", "fx")},   # fx: Laufkurs EURUSD
     "conid_vorschlaege": {s: "neutral" for s in ("conid", "symbol", "isin", "waehrung", "ticker_vorschlag", "beleg_id", "status", "erstellt")},
     "tausche": {s: "neutral" for s in ("exec_id", "order_ref", "buch", "von", "nach", "betrag_von", "betrag_nach", "gebuehr_eur", "zeit",
                                        "gebuehr_ibkr", "gebuehr_ibkr_waehrung", "gebuehr_modell_eur", "quelle")},

@@ -273,9 +273,12 @@ def positionen_je_buch(journal, buch: str, erg, *, technik: bool) -> list[Positi
         gv = None if wert is None or einstand is None else wert - einstand
         roh.append(Position(t, s, info.get("kaufkurs"), w, k_eur, wert, anzeigename(t), kurs, einstand, gv,
                             None if gv is None or not einstand else gv / einstand, None, info.get("erst"), stops.get(t)))
-    buchwert = journal.kasse(buch) + sum(p.wert_eur or 0.0 for p in roh)
+    try:                                                     # Fremdwährungskasse zum Laufkurs wie der Buchwert (25.11.2026)
+        buchwert = journal.kasse_bewertet(buch, getattr(erg, "fx", {}) or {}) + sum(p.wert_eur or 0.0 for p in roh)
+    except ValueError:
+        buchwert = None                                      # Kurs fehlt: kein Anteil statt eines falschen
     for p in roh:
-        p.anteil = None if p.wert_eur is None or buchwert <= 0 else p.wert_eur / buchwert
+        p.anteil = None if p.wert_eur is None or buchwert is None or buchwert <= 0 else p.wert_eur / buchwert
     return sorted(roh, key=lambda p: -(p.wert_eur if p.wert_eur is not None else float("-inf")))
 
 

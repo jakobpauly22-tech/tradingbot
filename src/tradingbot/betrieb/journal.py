@@ -83,6 +83,8 @@ class Journal:
             self.db.execute("ALTER TABLE kapitalmassnahmen_posten ADD COLUMN art TEXT")
         if "wert_modell" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
             self.db.execute("ALTER TABLE buchwerte ADD COLUMN wert_modell REAL")
+        if "fx" not in {z["name"] for z in self.db.execute("PRAGMA table_info(buchwerte)")}:
+            self.db.execute("ALTER TABLE buchwerte ADD COLUMN fx TEXT")   # Laufkurs je Währung als JSON (Befund 1, 25.11.2026)
         k_spalten = {z["name"] for z in self.db.execute("PRAGMA table_info(kassenbuchungen)")}
         for name in ("gutschrift", "satz_quelle"):        # Gutschriftstag (Flex reportDate) und Herkunft des Satzes (23.11.2026)
             if name not in k_spalten:
@@ -145,6 +147,23 @@ class Journal:
     def kasse_modell(self, buch: str) -> float:
         """Kasse mit Modellgebühr (Tiered) statt der gebuchten Paper-Gebühr – zweite Kennzahl im Bericht (04.11.2026)."""
         return self.kasse(buch) + self.gebuehren_differenz(buch)
+
+    def kasse_bewertet(self, buch: str, fx: dict[str, float]) -> float:
+        """Kasse des Buchs in EUR mit Fremdwährung zum Kurs des Laufs (Buchwert-Konvention seit Befund 1, Jakob 25.11.2026).
+
+        Kasse = EUR-Kasse + Σ_w Kasse_w / fx_w, mit fx_w = Einheiten der Währung w je 1 EUR (EURUSD).
+        Die Beträge je Währung sind dieselben, die der Kassenabgleich gegen IBKR prüft (`kasse_je_waehrung`);
+        so bewertet auch der Backtest die Fremdwährungskasse (`backtest/portfolio.py`). Hat das Buch nie Fremdwährung
+        geführt, ist das Ergebnis genau `kasse(buch)` (byte-gleich zur alten Konvention).
+        Der Einstand der Aktien bleibt beim Kurs des Anschaffungstags (`preis_eur`, § 20 Abs. 4 S. 1 EStG, D1)."""
+        kassen = self.kasse_je_waehrung(buch)
+        fremd = {w: b for w, b in kassen.items() if w != "EUR"}
+        if not fremd:
+            return self.kasse(buch)
+        fehlt = sorted(w for w in fremd if not (fx or {}).get(w))
+        if fehlt:
+            raise ValueError(f"{buch}: kein Kurs für {', '.join(fehlt)} – Kasse nicht bewertbar")
+        return kassen.get("EUR", 0.0) + sum(b / fx[w] for w, b in fremd.items())
 
     def kasse_je_waehrung(self, buch: str) -> dict[str, float]:
         """Kasse des Buchs je Währung (keine darf negativ werden, Risk-Manager Regel 10)."""
@@ -504,9 +523,12 @@ class Journal:
         self.db.commit()
         return neu
 
-    def buchwert_speichern(self, buch: str, tag, wert: float, kasse: float, wert_modell: float | None = None):
-        self.db.execute("INSERT OR REPLACE INTO buchwerte (buch, tag, wert, kasse, wert_modell) VALUES (?,?,?,?,?)",
-                        (buch, str(pd.Timestamp(tag).date()), wert, kasse, wert_modell))
+    def buchwert_speichern(self, buch: str, tag, wert: float, kasse: float, wert_modell: float | None = None,
+                           fx: dict[str, float] | None = None):
+        """`kasse` in der Konvention von `kasse_bewertet`, `fx` der Laufkurs (seit 25.11.2026)."""
+        self.db.execute("INSERT OR REPLACE INTO buchwerte (buch, tag, wert, kasse, wert_modell, fx) VALUES (?,?,?,?,?,?)",
+                        (buch, str(pd.Timestamp(tag).date()), wert, kasse, wert_modell,
+                         json.dumps(fx, sort_keys=True) if fx is not None else None))
         self.db.commit()
 
     def buchwerte(self, buch: str) -> pd.Series:

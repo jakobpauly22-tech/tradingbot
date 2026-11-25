@@ -663,3 +663,25 @@ def test_sec_firmen_aus_der_bewertung_nur_protokoll(umgebung):
     assert any(m.startswith("SEC bekannt") and "DTE 150 Tage" in m for m in e.meldungen)
     assert "SEC: 1 Firma(en) wegen veraltetem Abschluss nicht bewertet (ALT)" in e.meldungen
     assert not any(s.startswith("SEC") for s in e.sofort)                    # Telegram nur bei Sofortmeldung
+
+
+def test_buchwert_fremdwaehrungskasse_zum_laufkurs(umgebung):
+    """Befund 1 (Jakob 25.11.2026): Buchwert = Positionen zum Tageskurs + EUR-Kasse + USD-Kasse / EURUSD des Laufs;
+    Bücher ohne Fremdwährung behalten genau Journal.kasse; der Laufkurs wird mitgespeichert."""
+    j, rm = umgebung
+    lauf(j, rm)
+    j.tausch("t1", "fundamental_b:x", "EUR", "USD", 9000.0, 10_098.0, 2.0, "2026-11-03T09:00")          # Tausch zu 1,122
+    j.ausfuehrung("k1", "fundamental_b:y", "US1", 1, 100, 80.0 / 1.11, 1.0 / 1.11, "2026-11-03T15:00", waehrung="USD", preis=80.0,
+                  gebuehr=1.0, gebuehr_waehrung="USD")                                               # Kauf zum Tageskurs 1,11
+    e = lauf(j, rm, jetzt=datetime(2026, 11, 3, 23, 30, tzinfo=ZoneInfo("Europe/Berlin")))
+    assert e.gestoppt is None, e.gestoppt
+    z = j.db.execute("SELECT wert, kasse, fx FROM buchwerte WHERE buch='fundamental_b' AND tag='2026-11-03'").fetchone()
+    usd = 10_098.0 - 8_000.0 - 1.0
+    assert z["kasse"] == pytest.approx(10_000 - 9000 - 2.0 + usd / 1.10, abs=1e-9)                     # Laufkurs der Attrappe 1,10
+    kurs_usd = float(kurse_attrappe()("US1", "2026-11-03", "aktie_usd")["close"].iloc[-1])
+    assert z["wert"] == pytest.approx(z["kasse"] + 100 * kurs_usd / 1.10, abs=1e-9) and z["fx"] == '{"USD": 1.1}'
+    assert z["kasse"] != pytest.approx(j.kasse("fundamental_b"))                                      # alte Konvention weicht ab
+    for buch in ("real", "crossover", "momentum", "regime", "fundamental_a"):
+        r = j.db.execute("SELECT kasse FROM buchwerte WHERE buch=? AND tag='2026-11-03'", (buch,)).fetchone()
+        if r is not None:
+            assert r["kasse"] == j.kasse(buch), buch                                                  # ohne Fremdwährung byte-gleich

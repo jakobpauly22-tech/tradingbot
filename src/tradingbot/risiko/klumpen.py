@@ -4,9 +4,9 @@ Festlegungen Jakob 25.11.2026). Reine Auswertung: liest das Journal nur und hat 
 Bewertungsbasis je Buch (Abschnitt 3):
 - Stückzahl aus `Journal.bestand`, Kurse in EUR je Buch als Eingabe (im Tageslauf die Schlusskurse, mit denen er den
   Buchwert gerechnet hat).
-- Kasse in der **Konvention des Buchwerts**: `Journal.kasse` (Fremdwährung zum Kurs der Ausführung bzw. des Tauschs).
-  Zusätzlich die Fremdwährungskasse zum Tageskurs (`Journal.kasse_je_waehrung` / Kurs); der Unterschied wird als eigene
-  Zeile ausgewiesen, nie still angeglichen (offener Punkt, docs/BETRIEB.md „Offene Punkte zum Buchwert“).
+- Kasse in der **Konvention des Buchwerts**: `Journal.kasse_bewertet` (Fremdwährung zum Kurs des Laufs, seit Befund 1,
+  Jakob 25.11.2026). Zusätzlich die Fremdwährungskasse zum Tageskurs (`Journal.kasse_je_waehrung` / Kurs); der
+  Unterschied bleibt als Kontrollzeile stehen (D5, erwartet 0,00 €), nie still angeglichen.
 
 Kennzahlen (Abschnitt 5; Quelle Klumpenrisiko: wissen/04_Finanzielles_Risikomanagement.md, docs/ROADMAP.md
 „Was Risiko im Bot bedeutet“):
@@ -50,7 +50,7 @@ class Basis:
     name: str
     rolle: str | None
     posten: list[Posten]
-    kasse_eur: float                                  # Konvention des Buchwerts (Journal.kasse)
+    kasse_eur: float                                  # Konvention des Buchwerts (Journal.kasse_bewertet)
     kasse_je_waehrung: dict[str, float]               # Originalbeträge (Journal.kasse_je_waehrung)
     fx: dict[str, float]                              # Währung → Einheiten je EUR (z. B. {"USD": 1,0967})
     buecher: tuple[str, ...] = ()
@@ -67,12 +67,12 @@ class Basis:
 
     @property
     def wert_eur(self) -> float:
-        """Buchwert in der Konvention des Tageslaufs: Positionen zum Kurs + Journal.kasse."""
+        """Buchwert in der Konvention des Tageslaufs: Positionen zum Kurs + Journal.kasse_bewertet."""
         return self.positionen_eur + self.kasse_eur
 
     @property
     def kasse_fremd_buchwert(self) -> float:
-        """Fremdwährungskasse in EUR, wie sie im Buchwert steckt (Kurs der Ausführung bzw. des Tauschs)."""
+        """Fremdwährungskasse in EUR, wie sie im Buchwert steckt (seit 25.11.2026 zum Kurs des Laufs)."""
         return self.kasse_eur - self.kasse_je_waehrung.get("EUR", 0.0)
 
     @property
@@ -108,8 +108,12 @@ def buchbasis(journal, buch: str, kurse_eur: dict[str, float], fx: dict[str, flo
         posten.append(Posten(ticker, float(stueck), None if kurs is None else float(kurs), z, (buch,)))
     if rolle is None:
         hinweise.append(f"{buch}: Rolle unbekannt (config/betrieb.yaml buecher.{buch}.rolle fehlt) – keine Drift-Schwelle")
-    return Basis(buch, rolle, posten, float(journal.kasse(buch)), dict(journal.kasse_je_waehrung(buch)), dict(fx), (buch,),
-                 hinweise=hinweise)
+    try:
+        kasse = float(journal.kasse_bewertet(buch, fx))
+    except ValueError as e:                                          # Kurs einer Fremdwährung fehlt
+        hinweise.append(f"{e} – Kasse in der alten Konvention (Kurs der Ausführung) ausgewiesen")
+        kasse = float(journal.kasse(buch))
+    return Basis(buch, rolle, posten, kasse, dict(journal.kasse_je_waehrung(buch)), dict(fx), (buch,), hinweise=hinweise)
 
 
 def gesamtblock(name: str, basen: list[Basis]) -> Basis:

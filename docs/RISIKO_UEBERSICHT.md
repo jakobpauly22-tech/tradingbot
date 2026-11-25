@@ -42,9 +42,9 @@ Ein neues Buch ohne `rolle` wird in der Übersicht als „Rolle unbekannt“ gem
 - Abnahmebedingung: Die Summe aus Positionen und Kasse je Buch ist gleich dem Buchwert, den der Tageslauf für denselben
   Tag speichert und die Oberfläche zeigt.
 - Konvention des Buchwerts (Jakob 25.11.2026): Die Übersicht übernimmt sie, weist Unterschiede sichtbar aus und gleicht
-  nichts still an. Die USD-Kasse steht im Buchwert zum Kurs der Ausführung bzw. des Tauschs; die Übersicht zeigt sie
-  zusätzlich zum Tageskurs, mit dem Unterschied als eigener Zeile. Kurse kommen je Buch herein. Offene Punkte dazu:
-  `docs/BETRIEB.md`, Abschnitt „Offene Punkte zum Buchwert“.
+  nichts still an. Seit Befund 1 (25.11.2026) steht die USD-Kasse im Buchwert zum Kurs des Laufs
+  (`Journal.kasse_bewertet`); die Zeile „Unterschied USD-Kasse“ bleibt als Kontrollzeile (erwartet 0,00 €, D5). Kurse
+  kommen je Buch herein. Hintergrund und offener Punkt 2: `docs/BETRIEB.md`, Abschnitt „Punkte zum Buchwert“.
 
 ## 4. Zuordnung der Titel (Land, Sektor, Anlageklasse, Währung)
 
