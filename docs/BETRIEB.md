@@ -597,6 +597,13 @@ A4 bucht Abspaltungen (SO, Spin-off) nach Jakobs Bestätigung in der Oberfläche
   Sicherung), beim Senden „Dauer je Abschnitt (Senden): …“. Gespeichert in `Laufergebnis.dauer`; am Ablauf ändert sich
   nichts (`betrieb/zeitmessung.py`).
 
+### Laufzeit der Fundamental-Bewertung (Plan vom 19.11.2026)
+
+- Umgesetzt: Schritte 0–3 und 5b (a05903b, 332dfaa, 0ea8d05), jeweils mit „identisch“ im versiegelten Vergleich.
+- **Schritt 4 (doppeltes Lesen der SEC-Dateien je Lauf): geparkt (Jakob 25.11.2026). Grund: Der Lauf passt bequem
+  ins Fenster.** Messung im Abendlauf am 24.11.2026 am Netzteil: gesamt 275 s und 291 s, davon Fundamental-Bewertung
+  239 s und 223 s. Wieder aufnehmen nur, wenn die Laufzeit das Freigabefenster spürbar verkürzt.
+
 ## SEC-Aktualisierung im Betrieb (Festlegung Schritt 0, Jakob 23.11.2026)
 
 Festgelegt vor dem Code. Schwellen und Abnahmekriterien werden nach einem Lauf nicht geändert; eine Verfehlung bleibt
