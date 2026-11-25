@@ -41,6 +41,10 @@ Ein neues Buch ohne `rolle` wird in der Übersicht als „Rolle unbekannt“ gem
   mit EURUSD (`EURUSD=X`) aus demselben Cache.
 - Abnahmebedingung: Die Summe aus Positionen und Kasse je Buch ist gleich dem Buchwert, den der Tageslauf für denselben
   Tag speichert und die Oberfläche zeigt.
+- Konvention des Buchwerts (Jakob 25.11.2026): Die Übersicht übernimmt sie, weist Unterschiede sichtbar aus und gleicht
+  nichts still an. Die USD-Kasse steht im Buchwert zum Kurs der Ausführung bzw. des Tauschs; die Übersicht zeigt sie
+  zusätzlich zum Tageskurs, mit dem Unterschied als eigener Zeile. Kurse kommen je Buch herein. Offene Punkte dazu:
+  `docs/BETRIEB.md`, Abschnitt „Offene Punkte zum Buchwert“.
 
 ## 4. Zuordnung der Titel (Land, Sektor, Anlageklasse, Währung)
 
@@ -49,7 +53,8 @@ Jede Angabe trägt ein Kennzeichen: **exakt**, **Näherung** oder **unbekannt**.
 ### 4a. Einzelaktien (exakt, aus dem SEC-Cache des Betriebs)
 
 - **Land:** Geschäftsadresse aus den SEC-`submissions` (`addresses.business`); US-Bundesstaaten zählen als USA.
-  Zusatzspalte: Land der Inkorporation (`stateOfIncorporation`), z. B. Sitz in Ohio, inkorporiert in Irland.
+  Zusatzspalte: Land der Inkorporation (`stateOfIncorporation`), z. B. PNR: Geschäftsadresse Vereinigtes Königreich,
+  inkorporiert in Irland (SEC-Stand November 2026).
 - **Sektor:** SIC-Division (A–J, amtliche Bereiche) und als zweite Ebene die zweistellige Major Group. Ausgewiesen als
   „SIC“, nicht als GICS.
 - **Anlageklasse:** Aktie. **Währung:** USD (Notierung und wirtschaftlich).
@@ -76,7 +81,7 @@ Zuordnung steht von Hand in `config/risiko_uebersicht.yaml` mit Index und Quelle
 | IUSP.DE | Anleihen Staaten, Lokalwährung | Schwellenländer | – | Schwellenländer gemischt |
 | 4GLD.DE | Gold (ETC) | – | – | Gold |
 
-Ein ETF oder ETC, der nicht in der Tabelle steht, gilt als „unbekannt“ und wird gemeldet. Schlüssel ist immer der
+„–“ in der Spalte Sektor wird als „kein Sektor (Anleihen, Gold)“ ausgewiesen. Ein ETF oder ETC, der nicht in der Tabelle steht, gilt als „unbekannt“ und wird gemeldet. Schlüssel ist immer der
 Yahoo-Ticker; IBKR-Symbole sind nur andere Namen desselben Titels (z. B. SEML = IUSP.DE, IJPA = EUNN.DE, laut
 `config/kontrakte.yaml`).
 

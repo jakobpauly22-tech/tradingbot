@@ -1,0 +1,29 @@
+# Risiko-Übersicht über alle Bücher (Festlegungen Jakob 25.11.2026, docs/RISIKO_UEBERSICHT.md).
+# Reine Auswertung: keine Wirkung auf Vorschläge, Urteile, Freigaben, Orders oder Journal. Getrennt von config/risiko.yaml,
+# damit die Veto-Konfiguration unberührt bleibt. VaR- und Stress-Parameter folgen in Schritt 2 und 3.
+
+# Abschnitt 4b: ETFs und ETCs nur nach Indexregion („Näherung: Indexregion“). Kein ETF wird anteilig auf Länder oder
+# Sektoren aufgeteilt. Schlüssel ist der Yahoo-Ticker; IBKR-Symbole (z. B. SEML = IUSP.DE) sind nur andere Namen.
+# Namen aus config/technik.yaml (Satellite-Universum) bzw. config/betrieb.yaml (core.name); sektor null = Anleihen/Gold.
+etfs:
+  SPYI.DE: {anlageklasse: Aktien,                         region: "Welt (ACWI IMI)", sektor: breit gestreut, waehrung_wirtschaftlich: Welt gemischt,            name: "SPDR MSCI All Country World Investable Market", quelle: config/betrieb.yaml core}
+  IUSA.DE: {anlageklasse: Aktien,                         region: USA,               sektor: breit gestreut, waehrung_wirtschaftlich: USD,                      name: "iShares Core S&P 500 (Dist)",                   quelle: config/technik.yaml}
+  EUNK.DE: {anlageklasse: Aktien,                         region: Europa,            sektor: breit gestreut, waehrung_wirtschaftlich: Europa gemischt,          name: "iShares Core MSCI Europe (Acc)",                quelle: config/technik.yaml}
+  EUNN.DE: {anlageklasse: Aktien,                         region: Japan,             sektor: breit gestreut, waehrung_wirtschaftlich: JPY,                      name: "iShares Core MSCI Japan IMI (Acc)",             quelle: config/technik.yaml}
+  SXR1.DE: {anlageklasse: Aktien,                         region: Pazifik ex Japan,  sektor: breit gestreut, waehrung_wirtschaftlich: Pazifik gemischt,         name: "iShares Core MSCI Pacific ex Japan (Acc)",      quelle: config/technik.yaml}
+  EUNM.DE: {anlageklasse: Aktien,                         region: Schwellenländer,   sektor: breit gestreut, waehrung_wirtschaftlich: Schwellenländer gemischt, name: "iShares MSCI EM (Acc)",                         quelle: config/technik.yaml}
+  EUNH.DE: {anlageklasse: Anleihen Staaten,               region: Eurozone,          sektor: null,           waehrung_wirtschaftlich: EUR,                      name: "iShares Core Euro Government Bond (Dist)",      quelle: config/technik.yaml}
+  EUN5.DE: {anlageklasse: Anleihen Unternehmen,           region: Eurozone,          sektor: null,           waehrung_wirtschaftlich: EUR,                      name: "iShares Core EUR Corporate Bond (Dist)",        quelle: config/technik.yaml}
+  IBCI.DE: {anlageklasse: Anleihen inflationsindexiert,   region: Eurozone,          sektor: null,           waehrung_wirtschaftlich: EUR,                      name: "iShares Euro Inflation Linked Govt Bond (Acc)", quelle: config/technik.yaml}
+  IUSM.DE: {anlageklasse: Anleihen Staaten,               region: USA,               sektor: null,           waehrung_wirtschaftlich: USD,                      name: "iShares $ Treasury Bond 7-10yr (Dist)",         quelle: config/technik.yaml}
+  IUSP.DE: {anlageklasse: "Anleihen Staaten, Lokalwährung", region: Schwellenländer, sektor: null,           waehrung_wirtschaftlich: Schwellenländer gemischt, name: "iShares J.P. Morgan EM Local Government Bond (Dist)", quelle: config/technik.yaml}
+  4GLD.DE: {anlageklasse: Gold (ETC),                     region: null,              sektor: null,           waehrung_wirtschaftlich: Gold,                     name: "Xetra-Gold",                                    quelle: config/technik.yaml}
+
+# Abschnitt 8: Drift-Hinweise je Rolle (nur Anzeige, kein Zwangsverkauf; die 5-%-Regel im Core gilt beim Kauf).
+# Gilt nur für Einzelaktien; die ETF-Grenze von 25 % im Satellite wird nur angezeigt, ohne eigene Drift-Schwelle.
+drift:
+  core_einzelaktie: 0.075
+  satellite_einzelaktie: 0.125
+
+# Abgleich mit dem gespeicherten Buchwert (Abschnitt 3): Abweichung darüber wird gemeldet, nie still angeglichen.
+buchwert_toleranz_eur: 0.005

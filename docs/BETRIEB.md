@@ -1018,3 +1018,35 @@ geändert. Eine Verfehlung bleibt im Bericht stehen, die Ursache wird gesucht un
 1. Leser und Tests; Testdaten aus den Einreichungen der Probe, neu abgerufen.
 2. Abnahme C1–C5 mit Bericht in `docs/berichte/`.
 3. Einbau in den Samstagslauf und in die Meldungen, nach Jakobs Okay.
+
+## Offene Punkte zum Buchwert (aufgenommen 25.11.2026, Entscheidung Jakob später)
+
+Gefunden beim Plan der Risiko-Übersicht (`docs/RISIKO_UEBERSICHT.md`). Bis zur Entscheidung bleibt der Buchwert
+unverändert; die Risiko-Übersicht übernimmt seine Konvention und weist Unterschiede sichtbar aus, ohne still anzugleichen.
+
+1. **USD-Kasse zum Tageskurs bewerten?** `Journal.kasse()` rechnet Fremdwährungskasse zum Kurs der jeweiligen Ausführung
+   bzw. des Tauschs, nicht zum EURUSD des Bewertungstags. Der gespeicherte Buchwert enthält damit keine Wechselkursänderung
+   auf die USD-Kasse. Die Risiko-Übersicht zeigt die USD-Kasse zusätzlich zum Tageskurs und den Unterschied als eigene Zeile.
+   - **Nachmessung 24.11.2026 (Journal-Kopie, nur gelesen):** Der Unterschied ist größer als die Kursbewegung der
+     Restkasse, weil `Journal.kasse()` den Tausch nur mit der Gebühr bucht und jeden USD-Kauf mit `preis_eur` (Kurs des
+     Ausführungstags), während die Dollar tatsächlich zum Tauschkurs gekauft wurden. Die Fremdwährungskasse im Buchwert ist
+     damit ein Rest, der alle Kursunterschiede zwischen Tausch und Käufen enthält.
+     | Buch | Tausch 09.11. | Käufe in USD / in EUR laut Journal (Kurs) | Fremdkasse im Buchwert | USD-Kasse zum Tageskurs 1,09673 | Unterschied |
+     | --- | --- | --- | --- | --- | --- |
+     | fundamental_a | 9.067,00 € → 10.173,17 $ (1,1220) | 9.854,75 $ / 8.868,06 € (1,1113) | 186,31 € | 277,44 € (304,27 $) | +91,13 € (0,92 % des Buchwerts) |
+     | fundamental_b | 7.831,00 € → 8.786,38 $ (1,1220) | 8.038,32 $ / 7.219,71 € (1,1134) | 600,51 € | 671,02 € | +70,51 € (0,71 % des Buchwerts) |
+     Zerlegung fundamental_a: rund 84,8 € aus der Bewertung der Käufe zu 1,1113 statt zum Tauschkurs 1,1220
+     (9.854,75 $ / 1,1220 = 8.783,21 €), rund 6,3 € aus der Kursänderung der Restkasse seit dem Tausch, Rest Gebühren
+     und Zinsen. Der gespeicherte Buchwert liegt also um diese Beträge unter dem Wert zum Tageskurs. Die übrigen Bücher
+     haben keine Fremdwährungskasse (Unterschied 0,00 €).
+2. **Kurse je Buch statt gemeinsamem Verzeichnis?** Die Fundamental-Bücher bewerten auf zwei Wegen: ohne Bewertungsbedarf
+   mit dem Schluss aus `kurse_laden` (`kurse_usd`), mit Bewertungsbedarf mit `schluss_usd` aus der Fundamental-Bewertung
+   (`preise`). Beide schreiben in das gemeinsame `Laufergebnis.kurse_eur`; ein Titel in beiden Büchern kann so den Kurs des
+   anderen Wegs überschreiben.
+   - **Nachmessung 24.11.2026 (nur gelesen):** fundamental_b lief über `preise` (Vorschlag P), fundamental_a ohne
+     Vorschlag. Beide gespeicherten Buchwerte lassen sich mit dem Schluss vom 24.11. aus dem Betriebs-Kurs-Cache und
+     EURUSD 1,09673 (Cache, 24.11.) auf den Cent nachrechnen (fundamental_a 9.900,07 €, fundamental_b 9.869,66 €,
+     Differenz je 0,00 €). Die fünf gemeinsamen Titel BBY (5/5 Stück), DPZ (1/1), DVA (2/2), LVS (13/13) und NEM (4/4)
+     hatten in beiden Büchern denselben Kurs. Wirkung an diesem Tag: keine.
+   - Möglich bleibt eine Abweichung, wenn Yahoo einen Schluss zwischen dem Laden für die Bewertung und dem späteren
+     `kurse_laden` korrigiert (Beispiel MDLZ, 18.11.2026). Die Risiko-Übersicht meldet dann die Abweichung zum Buchwert.
