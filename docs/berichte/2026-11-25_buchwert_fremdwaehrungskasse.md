@@ -1,6 +1,6 @@
 # Datenkorrektur Buchwert: Fremdwährungskasse zum Laufkurs (25.11.2026)
 
-Stand: **Probelauf**, Journal nur gelesen
+Stand: **ausgeführt** 25.11.2026 13:14; Sicherung vorher: `journal_2026-11-25_131458.sqlite`
 
 Grundlage: Befund 1, Entscheidungen Jakob 25.11.2026 (D3 korrigieren, D4 Spalte `kasse` neu plus `fx`). Werkzeug `tools/buchwert_korrektur_20261125.py`, Regeln im Kopf des Werkzeugs.
 
@@ -57,3 +57,7 @@ Wert am 2026-11-24: alt 9.869,66 €, neu 9.940,17 € (gegen 10.000 €: -1,30 
 - Andere Bücher (real, crossover, momentum, regime): nicht angefasst.
 - Querprüfung mit dem Code des Tageslaufs: fundamental_a 2026-11-24: Kasse neu 1.208,6417 €, Journal.kasse_bewertet 1.208,6417 € – gleich
 - Querprüfung mit dem Code des Tageslaufs: fundamental_b 2026-11-24: Kasse neu 2.838,2277 €, Journal.kasse_bewertet 2.838,2277 € – gleich
+
+## Nach der Ausführung
+
+- Zweiter Durchgang am echten Journal: zu korrigieren 0, bereits korrigiert 20, unverändert 6, Brüche 0.

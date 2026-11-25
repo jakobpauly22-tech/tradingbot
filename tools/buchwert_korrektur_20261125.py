@@ -403,7 +403,8 @@ def main() -> int:
                 quer = abgleich_mit_journal(db, zeilen)
                 db.close()
                 text = bericht(zeilen, ausgefuehrt=False, jetzt=jetzt, querpruefung=quer)
-                (PROJEKT_WURZEL / BERICHT).write_text(text, encoding="utf-8")
+                if any(z.status == "korrigieren" for z in zeilen):   # nach der Ausführung den Bericht nicht überschreiben
+                    (PROJEKT_WURZEL / BERICHT).write_text(text, encoding="utf-8")
                 print(text)
                 print(f"\nProbelauf – nichts geändert. Bericht: {BERICHT}. Mit --ausfuehren korrigieren.")
                 return 0
