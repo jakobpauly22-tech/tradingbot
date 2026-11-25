@@ -119,6 +119,37 @@ def var_cvar_historisch(renditen: pd.Series, niveau: float = 0.95) -> tuple[floa
     return -grenze, -float(renditen[renditen <= grenze].mean())
 
 
+def k_schlechteste(n: int, niveau: float) -> int:
+    """Rang der VaR-Beobachtung: k = ⌈n · (1 − α)⌉, mindestens 1.
+
+    Gleitkomma: 500 · (1 − 0,95) ergibt 25,000000000000004; deshalb wird vor dem Aufrunden auf 9 Stellen gerundet.
+    Quelle: docs/RISIKO_UEBERSICHT.md, Abschnitt 6 (Quantil-Konvention, Jakob 25.11.2026)."""
+    return max(1, math.ceil(round(n * (1 - niveau), 9)))
+
+
+def var_es_kte_schlechteste(guv, niveau: float = 0.95) -> dict:
+    """Historischer VaR und ES aus Szenario-GuV (in EUR), k-te schlechteste Beobachtung ohne Interpolation.
+
+    Formel: GuV aufsteigend sortiert, k = ⌈n · (1 − α)⌉;
+            VaR = −GuV₍ₖ₎ (Verlust positiv), ES = −(1/k) · Σ_{j ≤ k} GuV₍ⱼ₎ (einschließlich der k-ten).
+    Annahmen: alle Szenarien gleich gewichtet; bei gleichen Werten stabile Sortierung (frühere Beobachtung zuerst).
+    Unterschied zu `var_cvar_historisch` (Renditen, numpy-Quantil mit Interpolation, für Backtests): hier Beträge
+    und keine Interpolation.
+    Quelle: wissen/04_Finanzielles_Risikomanagement.md, Abschnitte 1 und 3 (historische Simulation);
+    docs/RISIKO_UEBERSICHT.md, Abschnitt 6.
+    Rückgabe: var, es, k, n und `schlechteste` (Positionen der k schlechtesten Szenarien in der Eingabe).
+    """
+    werte = np.asarray(guv, dtype=float)
+    if werte.ndim != 1 or len(werte) == 0 or np.isnan(werte).any():
+        raise ValueError("Szenario-GuV leer oder mit fehlenden Werten")
+    n = len(werte)
+    k = k_schlechteste(n, niveau)
+    ordnung = np.argsort(werte, kind="stable")
+    schlechteste = ordnung[:k]
+    return {"var": -float(werte[ordnung[k - 1]]), "es": -float(werte[schlechteste].mean()), "k": k, "n": n,
+            "schlechteste": schlechteste}
+
+
 def sortino_ratio(renditen: pd.Series, rf_tag: pd.Series) -> float:
     """Sortino = (μ_p − r_f) / Downside-Abweichung, Downside = √(Mittel(min(r − r_f, 0)²)) · √252.
 

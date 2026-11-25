@@ -120,6 +120,17 @@ Positionen ohne Kasse und die effektive Titelzahl 1/HHI.
   (ohne Tage mit Ausführungen, Ein- oder Auszahlungen) werden ab dem ersten Lauf gezählt. Nur Anzeige; ein
   statistischer Test (Kupiec) frühestens nach 250 Tagen und nur nach Entscheidung von Jakob.
 
+- **Umsetzung (Schritt 2, 25.11.2026):** `kennzahlen/performance.var_es_kte_schlechteste` und `risiko/var.py`.
+  Festlegungen im Code, die das Dokument offen ließ:
+  - Renditen aus dem Gesamtrendite-Index (Kurs plus Dividende am Ex-Tag), damit ein Ex-Tag kein Scheinverlust ist.
+    Lesart von „Pᵢ“ durch Claude, Jakob kann auf reine Kurse umstellen.
+  - k = ⌈n · (1 − α)⌉ wird vor dem Aufrunden auf 9 Stellen gerundet (500 · 0,05 ergibt sonst 25,000…04 und k = 26).
+  - Bei gleicher GuV gilt eine stabile Sortierung (frühere Beobachtung zuerst).
+  - Ein Kurs gilt bis zu 7 Kalendertage vor dem Stichtag noch als aktuell.
+  - Bewertungsbasis ist `klumpen.buchbasis` mit `Journal.kasse_bewertet`.
+  - Erste Probe am 24.11.2026 (Journal-Kopie, nur gelesen): alle Bücher „ok“, kein Ersatz nötig, Laufzeit 0,6 s.
+    Buch real: VaR(1 Tag, 95 %) 6,13 € gegen 1,65 · σ · V = 7,20 €.
+
 ### 6a. Kurze Historie: Ersatzreihen
 
 Feste Rangfolge, je Titel offen gekennzeichnet:
